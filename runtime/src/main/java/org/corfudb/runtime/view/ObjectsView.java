@@ -18,6 +18,7 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -26,10 +27,12 @@ import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -70,8 +73,13 @@ public class ObjectsView extends AbstractView {
      *
      * @return An object builder to open an object with.
      */
-    public <T extends ICorfuSMR<?>> SMRObject.Builder<T> build() {
-        return new SMRObject.Builder<T>().setCorfuRuntime(runtime);
+    public <T extends ICorfuSMR<?>> SMRObject.Builder<T, ?> build() {
+        return new SMRObject.Builder().setCorfuRuntime(runtime);
+    }
+
+    public <T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView>
+    T open(SmrObjectConfig<T, S> smrConfig) {
+        return SMRObject.open(runtime, smrConfig);
     }
 
     /**

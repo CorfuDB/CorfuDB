@@ -32,6 +32,7 @@ import org.corfudb.runtime.collections.corfutable.TxnSpec;
 import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -256,17 +257,22 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
                     UUID streamA = UUID.randomUUID();
                     UUID streamB = UUID.randomUUID();
 
+                    try (PersistentCorfuTable<String, String> we = rt.getObjectsView().open(null)) {
+                        System.out.println("qwe");
+                    }
+
                     try (PersistentCorfuTable<String, String> tableA = rt.getObjectsView()
-                            .build()
+                            .<PersistentCorfuTable<String, String>>build()
                             .setStreamID(streamA)
-                            .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
+                            .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                             .addOpenOption(ObjectOpenOption.CACHE)
-                            .open()) {
+                            .open()
+                    ) {
 
                         try (PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
-                                .build()
+                                .<PersistentCorfuTable<String, String>>build()
                                 .setStreamID(streamB)
-                                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
+                                .setTypeToken(PersistentCorfuTable.getTypeToken())
                                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                                 .open()) {
 

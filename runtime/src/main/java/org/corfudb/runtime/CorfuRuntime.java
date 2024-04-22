@@ -15,6 +15,10 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.ClassUtils;
+import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
+import org.corfudb.runtime.object.MVOCache;
+import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
@@ -853,6 +857,22 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
                 return corfuRuntimeParameters;
             }
+        }
+    }
+
+    public <S extends SnapshotGenerator<S>> MVOCache<S> getMvoCache(CorfuTableType tableType) {
+        switch (tableType) {
+            case PERSISTENT:
+                return ClassUtils.cast(getObjectsView().getMvoCache());
+            case PERSISTED:
+                // In the context of PersistedCorfuTable, there is one-to-one mapping between
+                // the cache and the underlying table/stream. In this case the cache is used to
+                // store the underlying Snapshot references and not the data itself. Since
+                // there is no contention for the underlying resource (memory), there is no
+                // good reason to enforce a global cache.
+                return new MVOCache<>(getParameters().getMvoCacheExpiry());
+            default:
+                throw new UnsupportedOperationException(tableType + " not supported.");
         }
     }
 

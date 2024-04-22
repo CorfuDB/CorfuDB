@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Sets;
 import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.Descriptor;
@@ -28,6 +29,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.ImmutableCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -36,10 +38,13 @@ import org.corfudb.runtime.collections.streaming.StreamingManager;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView.StreamTagInfo;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.runtime.view.StreamsView.StreamId;
+import org.corfudb.runtime.view.StreamsView.StreamName;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
@@ -157,6 +162,15 @@ public class TableRegistry {
             runtime.getSerializers().registerSerializer(protoSerializer);
         }
         this.protobufSerializer = protoSerializer;
+
+        var cfg = SmrObjectConfig.builder()
+                .streamName(StreamName.build(FQ_REGISTRY_TABLE_NAME.toFqdn()))
+                .serializer(this.protobufSerializer)
+                .streamTags(Set.of(LOG_REPLICATOR_STREAM_INFO.getStreamId()))
+                .build();
+
+        this.registryTable = this.runtime.getObjectsView().open(cfg);
+
         this.registryTable = this.runtime.getObjectsView().build()
             .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
             .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
