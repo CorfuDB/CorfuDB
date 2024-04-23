@@ -233,7 +233,7 @@ class CompactorRunner(object):
             compactor_config = yaml.load(config, yaml.FullLoader)
         corfu_paths = compactor_config["CorfuPaths"]
         log_replicator_paths = None
-        if "LogReplicator" in compactor_config:
+        if "LogReplicatorPaths" in compactor_config:
             log_replicator_paths = compactor_config["LogReplicatorPaths"]
 
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
@@ -242,7 +242,7 @@ class CompactorRunner(object):
         # Copy Corfu and LogReplicator(if running) jvm gc log files to disk
         try:
             self._rsync_log(corfu_paths["CorfuMemLogPrefix"], corfu_paths["CorfuDiskLogDir"])
-            if log_replicator_paths is not None and os.path.isdir(corfu_paths["LogReplicatorDiskLogDir"]):
+            if log_replicator_paths is not None and os.path.isdir(log_replicator_paths["LogReplicatorDiskLogDir"]):
                 self._rsync_log(log_replicator_paths["LogReplicatorMemLogPrefix"],
                                 log_replicator_paths["LogReplicatorDiskLogDir"])
         except Exception as ex:
