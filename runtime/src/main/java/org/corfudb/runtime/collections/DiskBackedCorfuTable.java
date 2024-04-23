@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -104,19 +105,24 @@ public class DiskBackedCorfuTable<K, V> implements
     private static final int BOUND = 100;
     private static final int SAMPLING_RATE = 40;
 
+    static {
+        RocksDB.loadLibrary();
+    }
+
     // Optimization: We never perform crash-recovery, so we can disable
     // Write Ahead Log and disable explicit calls to sync().
     private static final WriteOptions writeOptions = new WriteOptions()
                     .setDisableWAL(true)
                     .setSync(false);
 
-    static {
-        RocksDB.loadLibrary();
-    }
-
     @Getter
     private final Statistics statistics;
+
+    @Getter
+    @VisibleForTesting
     private final RocksDbApi rocksApi;
+    private final Options rocksDbOptions;
+
     private final RocksDbSnapshotGenerator<DiskBackedCorfuTable<K, V>> rocksDbSnapshotGenerator;
     private final ColumnFamilyRegistry columnFamilyRegistry;
     private final ISerializer serializer;
@@ -139,6 +145,7 @@ public class DiskBackedCorfuTable<K, V> implements
         this.secondaryIndexesPath = new HashMap<>();
         this.indexToId = new HashMap<>();
         this.indexSpec = new HashSet<>();
+        this.rocksDbOptions = new Options(rocksDbOptions);
 
         byte indexId = 0;
         for (Index.Spec<K, V, ?> index : indices) {
@@ -152,11 +159,20 @@ public class DiskBackedCorfuTable<K, V> implements
         try {
             this.statistics = new Statistics();
             this.statistics.setStatsLevel(StatsLevel.ALL);
-            rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+            this.rocksDbOptions.setStatistics(statistics);
+            persistenceOptions.getWriteBufferSize().map(this.rocksDbOptions::setWriteBufferSize);
+
+            final BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
+            if (persistenceOptions.isDisableBlockCache()) {
+                tableConfig.setNoBlockCache(true);
+            } else {
+                // If not set, the default behaviour is 64MB block cache per table.
+                persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
+            }
+            this.rocksDbOptions.setTableFormatConfig(tableConfig);
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
-                    persistenceOptions.getDataPath(), rocksDbOptions, writeOptions);
+                    persistenceOptions.getDataPath(), this.rocksDbOptions, writeOptions);
 
             this.rocksApi = rocksDbStore;
             this.columnFamilyRegistry = rocksDbStore;
@@ -484,19 +500,22 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Override
     public void close() {
-
-        // Do not call close on WriteOptions and Options, as they are
-        // either statically defined or owned by the client.
+        if (!rocksDbOptions.isOwningHandle()) {
+            log.warn("RocksDB instance already closed.");
+            return;
+        }
 
         try {
+            // Do not call close on WriteOptions as it is not owned by this instance.
             this.rocksApi.close();
-        } catch (RocksDBException e) {
-            throw new UnrecoverableCorfuError(e);
-        } finally {
+
             if (isRoot()) {
                 MeterRegistryProvider.unregisterExternalSupplier(metricsId);
                 this.statistics.close();
+                this.rocksDbOptions.close();
             }
+        } catch (RocksDBException e) {
+            throw new UnrecoverableCorfuError(e);
         }
     }
 
