@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -32,6 +33,7 @@ import java.util.concurrent.ConcurrentMap;
 @Slf4j
 public class ProtobufSerializer implements ISerializer {
 
+    @Getter
     private final byte type;
 
     public static final byte PROTOBUF_SERIALIZER_CODE = SerializerType.PROTOBUF.toByte();
@@ -67,9 +69,23 @@ public class ProtobufSerializer implements ISerializer {
         }
     }
 
-    @Override
-    public byte getType() {
-        return type;
+    /**
+     * Adds the schema to the class map to enable serialization of this table data.
+     */
+    public void addTypeToClassMap(Message msg) {
+        String typeUrl = getTypeUrl(msg.getDescriptorForType());
+        getClassMap().put(typeUrl, msg.getClass());
+    }
+
+    /**
+     * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
+     * Note: This is same as used in Any.proto.
+     *
+     * @param descriptor Descriptor of the protobuf.
+     * @return Type url string.
+     */
+    public static String getTypeUrl(Descriptor descriptor) {
+        return "type.googleapis.com/" + descriptor.getFullName();
     }
 
     /**
@@ -122,7 +138,7 @@ public class ProtobufSerializer implements ISerializer {
                     }
                     metadata = anyMetadata.unpack(metadataClass);
                 }
-                return new CorfuRecord(value, metadata);
+                return new CorfuRecord<>(value, metadata);
             }
         } catch (IOException ie) {
             log.error("Exception during deserialization!", ie);

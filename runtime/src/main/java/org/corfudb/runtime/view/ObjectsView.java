@@ -73,12 +73,11 @@ public class ObjectsView extends AbstractView {
      *
      * @return An object builder to open an object with.
      */
-    public <T extends ICorfuSMR<?>> SMRObject.Builder<T, ?> build() {
+    public <T extends ICorfuSMR<?>> SMRObject.Builder<T> build() {
         return new SMRObject.Builder().setCorfuRuntime(runtime);
     }
 
-    public <T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView>
-    T open(SmrObjectConfig<T, S> smrConfig) {
+    public <T extends ICorfuSMR<?>> T open(SmrObjectConfig<T> smrConfig) {
         return SMRObject.open(runtime, smrConfig);
     }
 

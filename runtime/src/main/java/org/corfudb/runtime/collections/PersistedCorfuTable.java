@@ -27,7 +27,8 @@ public class PersistedCorfuTable<K, V> implements GenericCorfuTable<DiskBackedCo
             .build();
 
     public static <K, V> TypeToken<PersistedCorfuTable<K, V>> getTypeToken() {
-        return new TypeToken<PersistedCorfuTable<K, V>>() {};
+        return new TypeToken<>() {
+        };
     }
 
     public PersistedCorfuTable() {}

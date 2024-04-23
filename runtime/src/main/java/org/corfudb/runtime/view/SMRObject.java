@@ -22,7 +22,6 @@ import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject.SmrObjectConfig.SmrObjectConfigBuilder;
 import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.runtime.view.StreamsView.StreamName;
-import org.corfudb.runtime.view.StreamsView.StreamName.StreamNameBuilder;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -43,21 +42,20 @@ import java.util.function.Function;
 @Slf4j
 @Getter
 @AllArgsConstructor
-public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> {
+public class SMRObject<T extends ICorfuSMR<?>> {
 
     @NonNull
     private final CorfuRuntime runtime;
 
     @NonNull
-    private final SmrObjectConfig<T, S> smrConfig;
+    private final SmrObjectConfig<T> smrConfig;
 
 
-    public static <T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> Builder<T, S> builder() {
+    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
         return new Builder<>();
     }
 
-    public static <T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> T
-    open(CorfuRuntime rt, SmrObjectConfig<T, S> smrConfig) {
+    public static <T extends ICorfuSMR<?>> T open(CorfuRuntime rt, SmrObjectConfig<T> smrConfig) {
         return new SMRObject<>(rt, smrConfig).open();
     }
 
@@ -102,7 +100,7 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
 
     private T getWrapper() {
         try {
-            return new CorfuCompileWrapperBuilder<T, S>()
+            return new CorfuCompileWrapperBuilder<T>()
                     .getWrapper(this);
         } catch (Exception ex) {
             var errMsg = "Runtime instrumentation no longer supported and no compiled class found for {}";
@@ -111,9 +109,9 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
         }
     }
 
-    public static class Builder<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> {
+    public static class Builder<T extends ICorfuSMR<?>> {
 
-        private final SmrObjectConfigBuilder<T, S> configBuilder;
+        private final SmrObjectConfigBuilder<T> configBuilder;
         private CorfuRuntime corfuRuntime;
 
         public Builder() {
@@ -124,61 +122,57 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
             this(corfuRuntime, SmrObjectConfig.builder());
         }
 
-        public Builder(CorfuRuntime corfuRuntime, SmrObjectConfigBuilder<T, S> configBuilder) {
+        public Builder(CorfuRuntime corfuRuntime, SmrObjectConfigBuilder<T> configBuilder) {
             this.configBuilder = configBuilder;
             this.corfuRuntime = corfuRuntime;
         }
 
-        public SMRObject.Builder<T, S> setCorfuRuntime(CorfuRuntime corfuRuntime) {
+        public SMRObject.Builder<T> setCorfuRuntime(CorfuRuntime corfuRuntime) {
             this.corfuRuntime = corfuRuntime;
             return ClassUtils.cast(this);
         }
 
-        public SMRObject.Builder<T, S> setType(Class<T> type) {
-            configBuilder.type(type);
+        public SMRObject.Builder<T> setTypeToken(TypeToken<T> typeToken) {
+            configBuilder.type(typeToken);
             return this;
         }
 
-        public SMRObject.Builder<T, S> setTypeToken(TypeToken<T> typeToken) {
-            return setType(ClassUtils.cast(typeToken.getRawType()));
-        }
-
-        public SMRObject.Builder<T, S> setArguments(Object ... arguments) {
+        public SMRObject.Builder<T> setArguments(Object ... arguments) {
             configBuilder.arguments(arguments);
             return this;
         }
 
-        public SMRObject.Builder<T, S> setStreamName(String streamName) {
+        public SMRObject.Builder<T> setStreamName(String streamName) {
             configBuilder.streamName = StreamName.build(streamName);
             return this;
         }
 
-        public SMRObject.Builder<T, S> setStreamID(UUID streamId) {
+        public SMRObject.Builder<T> setStreamID(UUID streamId) {
             configBuilder.streamName.withId(new StreamId(streamId));
             return this;
         }
 
-        public SMRObject.Builder<T, S> setSerializer(ISerializer serializer) {
+        public SMRObject.Builder<T> setSerializer(ISerializer serializer) {
             configBuilder.serializer(serializer);
             return this;
         }
 
-        public SMRObject.Builder<T, S> addOpenOption(ObjectOpenOption openOption) {
+        public SMRObject.Builder<T> addOpenOption(ObjectOpenOption openOption) {
             configBuilder.openOption(openOption);
             return this;
         }
 
-        public SMRObject.Builder<T, S> setStreamTags(Set<UUID> tags) {
+        public SMRObject.Builder<T> setStreamTags(Set<UUID> tags) {
             configBuilder.streamTags(new HashSet<>(tags));
             return this;
         }
 
-        public SMRObject.Builder<T, S> setStreamTags(UUID... tags) {
+        public SMRObject.Builder<T> setStreamTags(UUID... tags) {
             configBuilder.streamTags(new HashSet<>(Arrays.asList(tags)));
             return this;
         }
 
-        public SMRObject<T, S> build() {
+        public SMRObject<T> build() {
             var config = configBuilder.build();
             return new SMRObject<>(corfuRuntime, config);
         }
@@ -191,9 +185,9 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
     @lombok.Builder
     @AllArgsConstructor
     @Getter
-    public static class SmrObjectConfig<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> {
+    public static class SmrObjectConfig<T extends ICorfuSMR<?>> {
         @NonNull
-        private final Class<T> type;
+        private final TypeToken<T> type;
 
         @NonNull
         @With
@@ -216,7 +210,7 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
         private final Set<UUID> streamTags = new HashSet<>();
 
         public ObjectID getObjectId() {
-            return new ObjectID(streamName.getId().getId(), type);
+            return new ObjectID(streamName.getId().getId(), type.getRawType());
         }
 
         public boolean isCacheDisabled() {
@@ -227,7 +221,7 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
             return CorfuTableType.parse(type);
         }
 
-        public Class<S> tableImplementationType() {
+        public <S extends SnapshotGenerator<S> & ConsistencyView> Class<S> tableImplementationType() {
             switch (getTableType()) {
                 case PERSISTENT:
                     return ClassUtils.cast(ImmutableCorfuTable.class);
@@ -240,8 +234,9 @@ public class SMRObject<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & 
 
         public T newSmrTableInstance() throws InvocationTargetException, IllegalAccessException, InstantiationException {
             var rawInstance = ReflectionUtils.
-                    findMatchingConstructor(type.getDeclaredConstructors(), new Object[0]);
+                    findMatchingConstructor(type.getRawType().getDeclaredConstructors(), new Object[0]);
             return ClassUtils.cast(rawInstance);
         }
     }
 }
+

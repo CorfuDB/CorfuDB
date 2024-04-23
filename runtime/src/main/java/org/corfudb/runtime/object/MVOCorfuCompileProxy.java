@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -25,6 +26,7 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Slf4j
 public class MVOCorfuCompileProxy<
@@ -36,17 +38,19 @@ public class MVOCorfuCompileProxy<
 
     private final CorfuRuntime rt;
 
-    private final SmrObjectConfig<? extends ICorfuSMR<S>, S> config;
+    private final SmrObjectConfig<? extends ICorfuSMR<?>> config;
 
     public MVOCorfuCompileProxy(
-            CorfuRuntime rt, SmrObjectConfig<? extends ICorfuSMR<S>, S> cfg,
-            ICorfuSMR<S> smrTableInstance, MVOCache<S> mvoCache
+            CorfuRuntime rt, SmrObjectConfig<? extends ICorfuSMR<?>> cfg,
+            ICorfuSMR<?> smrTableInstance, MVOCache<S> mvoCache
     ) {
         this.rt = rt;
         this.config = cfg;
+        Supplier<S> newInstanceAction = () -> ClassUtils.cast(getNewInstance());
+
         this.underlyingMVO = new MultiVersionObject<>(
                 rt,
-                this::getNewInstance,
+                newInstanceAction,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(getStreamID())),
                 smrTableInstance,
                 mvoCache,
@@ -132,9 +136,9 @@ public class MVOCorfuCompileProxy<
 
     private S getNewInstance() {
         try {
-            S ret = (S) ReflectionUtils
-                    .findMatchingConstructor(config.tableImplementationType().getDeclaredConstructors(), config.getArguments());
-            return ret;
+            var constructors = config.tableImplementationType().getDeclaredConstructors();
+            Object ret = ReflectionUtils.findMatchingConstructor(constructors, config.getArguments());
+            return ClassUtils.cast(ret);
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
@@ -205,3 +209,4 @@ public class MVOCorfuCompileProxy<
         getUnderlyingMVO().close();
     }
 }
+

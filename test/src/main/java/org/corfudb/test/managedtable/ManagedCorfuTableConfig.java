@@ -18,11 +18,12 @@ import org.corfudb.runtime.ExampleSchemas.Office;
 import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import org.corfudb.runtime.collections.ProtobufIndexer;
+import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.CPSerializer;
 import org.corfudb.test.TestSchema.Uuid;
-import org.corfudb.test.managedtable.ManagedCorfuTable.ManagedCorfuTableType;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetupType;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -162,13 +163,13 @@ public interface ManagedCorfuTableConfig {
 
             ProtobufSerializer serializer = getSerializer(rt);
             K defaultKeyMessage = tableDescriptor.getDefaultKeyMessage();
-            addTypeToClassMap(serializer, defaultKeyMessage);
+            serializer.addTypeToClassMap(defaultKeyMessage);
 
             V defaultValueMessage = tableDescriptor.getDefaultValueMessage();
-            addTypeToClassMap(serializer, defaultValueMessage);
+            serializer.addTypeToClassMap(defaultValueMessage);
 
             M defaultMetadataMessage = tableDescriptor.getDefaultMetadataMessage();
-            addTypeToClassMap(serializer, defaultMetadataMessage);
+            serializer.addTypeToClassMap(defaultMetadataMessage);
         }
 
         @Override
@@ -190,22 +191,6 @@ public interface ManagedCorfuTableConfig {
             SchemaOptions schemaOptions = tableDescriptor.getSchemaOptions();
             V msg = tableDescriptor.getDefaultValueMessage();
             return new ProtobufIndexer(msg, schemaOptions);
-        }
-
-        /**
-         * Adds the schema to the class map to enable serialization of this table data.
-         */
-        private <T extends Message> void addTypeToClassMap(ProtobufSerializer serializer, T msg) {
-            String typeUrl = getTypeUrl(msg.getDescriptorForType());
-            serializer.getClassMap().put(typeUrl, msg.getClass());
-        }
-
-        /**
-         * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
-         * Note: This is same as used in Any.proto.
-         */
-        private String getTypeUrl(Descriptor descriptor) {
-            return "type.googleapis.com/" + descriptor.getFullName();
         }
     }
 
@@ -278,22 +263,22 @@ public interface ManagedCorfuTableConfig {
     @Getter
     class ManagedCorfuTableConfigParams {
         public static final ManagedCorfuTableConfigParams PERSISTED_PROTOBUF_TABLE = new ManagedCorfuTableConfigParams(
-                ManagedCorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PROTOBUF_TABLE
+                CorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PROTOBUF_TABLE
         );
 
         public static final ManagedCorfuTableConfigParams PERSISTENT_PROTOBUF_TABLE = new ManagedCorfuTableConfigParams(
-                ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PROTOBUF_TABLE
+                CorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PROTOBUF_TABLE
         );
 
         public static final ManagedCorfuTableConfigParams PERSISTENT_PLAIN_TABLE = new ManagedCorfuTableConfigParams(
-                ManagedCorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PLAIN_TABLE
+                CorfuTableType.PERSISTENT, ManagedCorfuTableSetupType.PLAIN_TABLE
         );
 
         public static final ManagedCorfuTableConfigParams PERSISTED_PLAIN_TABLE = new ManagedCorfuTableConfigParams(
-                ManagedCorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PLAIN_TABLE
+                CorfuTableType.PERSISTED, ManagedCorfuTableSetupType.PLAIN_TABLE
         );
 
-        private final ManagedCorfuTableType tableType;
+        private final CorfuTableType tableType;
         private final ManagedCorfuTableSetupType setupType;
     }
 }

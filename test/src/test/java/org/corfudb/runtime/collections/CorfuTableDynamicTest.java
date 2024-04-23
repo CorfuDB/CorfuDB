@@ -39,6 +39,8 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.CorfuTableSpec;
 import org.corfudb.test.TestSchema.Uuid;
@@ -257,7 +259,12 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
                     UUID streamA = UUID.randomUUID();
                     UUID streamB = UUID.randomUUID();
 
-                    try (PersistentCorfuTable<String, String> we = rt.getObjectsView().open(null)) {
+                    var cfg = SmrObjectConfig
+                            .<PersistentCorfuTable<String, String>>builder()
+                            .type(PersistentCorfuTable.getTypeToken())
+                            .build();
+
+                    try (PersistentCorfuTable<String, String> we = rt.getObjectsView().open(cfg)) {
                         System.out.println("qwe");
                     }
 

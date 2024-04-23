@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object;
 
+import com.google.common.reflect.TypeToken;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -10,17 +12,17 @@ import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 /**
  * Builds a wrapper for the underlying SMR Object.
  */
-public class CorfuCompileWrapperBuilder<T extends ICorfuSMR<S>, S extends SnapshotGenerator<S> & ConsistencyView> {
+public class CorfuCompileWrapperBuilder<T extends ICorfuSMR<?>> {
 
     public enum CorfuTableType {
         PERSISTENT, PERSISTED;
 
-        public static <T extends ICorfuSMR<?>> CorfuTableType parse(Class<T> tableType) {
-            if (tableType.isAssignableFrom(PersistentCorfuTable.class)) {
+        public static <T extends ICorfuSMR<?>> CorfuTableType parse(TypeToken<T> tableType) {
+            if (tableType.getRawType().isAssignableFrom(PersistentCorfuTable.class)) {
                 return CorfuTableType.PERSISTENT;
             }
 
-            if (tableType.isAssignableFrom(PersistedCorfuTable.class)) {
+            if (tableType.getRawType().isAssignableFrom(PersistedCorfuTable.class)) {
                 return CorfuTableType.PERSISTED;
             }
 
@@ -37,17 +39,18 @@ public class CorfuCompileWrapperBuilder<T extends ICorfuSMR<S>, S extends Snapsh
      * @throws IllegalAccessException Illegal Access to the Object.
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
-    private T getWrapper(CorfuRuntime rt, SmrObjectConfig<T, S> smrConfig) throws Exception {
-        MVOCache<S> mvoCache = rt.getMvoCache(smrConfig.getTableType());
+    private T getWrapper(CorfuRuntime rt, SmrObjectConfig<T> smrConfig) throws Exception {
+        MVOCache<?> mvoCache = rt.getMvoCache(smrConfig.getTableType());
         var smrInstance = smrConfig.newSmrTableInstance();
-        MVOCorfuCompileProxy<S> proxy = new MVOCorfuCompileProxy<>(rt, smrConfig, smrInstance, mvoCache);
+        MVOCorfuCompileProxy<?> proxy = new MVOCorfuCompileProxy<>(rt, smrConfig, smrInstance, ClassUtils.cast(mvoCache));
 
-        smrInstance.setCorfuSMRProxy(proxy);
+        smrInstance.setCorfuSMRProxy(ClassUtils.cast(proxy));
         return smrInstance;
     }
 
-    public T getWrapper(SMRObject<T, S> smrObject) throws Exception {
+    public T getWrapper(SMRObject<T> smrObject) throws Exception {
         var smrConfig = smrObject.getSmrConfig();
         return getWrapper(smrObject.getRuntime(), smrConfig);
     }
 }
+

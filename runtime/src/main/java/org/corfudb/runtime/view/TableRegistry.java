@@ -527,17 +527,6 @@ public class TableRegistry {
     }
 
     /**
-     * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
-     * Note: This is same as used in Any.proto.
-     *
-     * @param descriptor Descriptor of the protobuf.
-     * @return Type url string.
-     */
-    public static String getTypeUrl(Descriptor descriptor) {
-        return "type.googleapis.com/" + descriptor.getFullName();
-    }
-
-    /**
      * Return the stream Id for the provided stream tag.
      *
      * @param namespace namespace of the stream
@@ -559,10 +548,10 @@ public class TableRegistry {
      * @param <T> Type of message.
      */
     public <T extends Message> void addTypeToClassMap(T msg) {
-        String typeUrl = getTypeUrl(msg.getDescriptorForType());
-        // Register the schemas to schema table.
-        ((ProtobufSerializer)runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
-                .getClassMap().put(typeUrl, msg.getClass());
+        ProtobufSerializer serializer = (ProtobufSerializer) runtime
+                .getSerializers()
+                .getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+        serializer.addTypeToClassMap(msg);
     }
 
     @Deprecated
