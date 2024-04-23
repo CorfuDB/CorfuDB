@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
 import org.corfudb.infrastructure.health.Issue;
@@ -202,6 +203,9 @@ public class RemoteMonitoringService implements ManagementService {
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        if (MicroMeterUtils.anomalyDetector != null && !MicroMeterUtils.anomalyDetector.pingLatencyMap.isEmpty()) {
+            MicroMeterUtils.anomalyDetector.anomalyDetection();
+        }
         HealthMonitor.resolveIssue(Issue.createInitIssue(Component.FAILURE_DETECTOR));
     }
 

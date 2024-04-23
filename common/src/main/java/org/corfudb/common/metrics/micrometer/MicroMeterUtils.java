@@ -13,6 +13,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MetricType;
 import org.corfudb.common.util.Tuple;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -63,6 +64,8 @@ public class MicroMeterUtils {
             "logdata.compress",
             "logdata.decompress"
     );
+
+    public static AnomalyDetector anomalyDetector = null;
 
 
     private MicroMeterUtils() {
@@ -233,11 +236,18 @@ public class MicroMeterUtils {
             Timer.Sample sample = maybeSample.get();
             CompletableFuture<T> cf = new CompletableFuture<>();
             future.whenComplete((res, ex) -> {
-                sample.stop(meterRegistry.timer(timerName, tags));
+                long latency = sample.stop(meterRegistry.timer(timerName, tags));
+                long millisTimeStamp = Instant.now().toEpochMilli();
                 if (ex != null) {
                     cf.completeExceptionally(ex);
                 } else {
                     cf.complete(res);
+                }
+                if (timerName.equals("failure-detector.ping-latency")) {
+                    if (anomalyDetector == null) {
+                        anomalyDetector = new AnomalyDetector();
+                    }
+                    anomalyDetector.pingLatencyMap.put(millisTimeStamp, latency);
                 }
             });
             return cf;
