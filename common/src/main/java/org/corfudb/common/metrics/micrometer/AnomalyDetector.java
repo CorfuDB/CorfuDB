@@ -67,7 +67,5 @@ public class AnomalyDetector {
         for (Map.Entry<Long, Long> entry: pingLatencyMap.entrySet()) {
             expectedTimeSeries.append(entry.getKey(), ThreadLocalRandom.current().nextLong(FAILURE_DETECTOR_PING_LATENCY_LOWER_BOUND, FAILURE_DETECTOR_PING_LATENCY_UPPER_BOUND));
         }
-        log.info("lap hoi see latency map {}", pingLatencyMap);
-        log.info("lap hoi see expected ts {}", expectedTimeSeries);
     }
 }
