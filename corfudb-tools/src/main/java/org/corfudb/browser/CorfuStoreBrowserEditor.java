@@ -31,6 +31,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -121,25 +122,27 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Namespace: " + namespace);
         System.out.println("TableName: " + tableName);
 
-        String fullTableName = FullyQualifiedTableName.build(namespace, tableName).toFqdn();
+        var fullTableName = FullyQualifiedTableName.build(namespace, tableName);
 
+        Object[] arguments;
         if (diskPath == null) {
-            return runtime.getObjectsView().<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
-                            .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer)
-                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
-                            .open();
+            arguments = new Object[]{};
         } else {
-            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
-                    .dataPath(Paths.get(diskPath)).build();
-            return runtime.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
-                    .setStreamName(fullTableName)
-                    .setSerializer(dynamicProtobufSerializer)
-                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
-                    .setArguments(persistenceOptions, dynamicProtobufSerializer)
-                    .open();
+            var opts = PersistenceOptions.builder()
+                    .dataPath(Paths.get(diskPath))
+                    .build();
+            arguments = new Object[]{opts, dynamicProtobufSerializer};
         }
 
+        var smrCfg = SmrObjectConfig
+                .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .streamName(fullTableName.toStreamName())
+                .serializer(dynamicProtobufSerializer)
+                .arguments(arguments)
+                .build();
+
+        return runtime.getObjectsView().open(smrCfg);
     }
 
     /**

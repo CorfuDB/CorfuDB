@@ -12,6 +12,7 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.PersistenceOptions.PersistenceOptionsBuilder;
 import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
 import org.corfudb.util.serializer.ISerializer;
@@ -42,29 +43,28 @@ public class ManagedCorfuTableSetupManager<K, V> {
     private final ManagedCorfuTableSetup<K, V> persistedProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
         public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig config) throws Exception {
+                CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
             config.configure(rt);
 
             String diskBackedDirectory = "/tmp/";
-
-            Options defaultOptions = new Options().setCreateIfMissing(true);
-
             Path dataPath = Paths.get(diskBackedDirectory, config.getTableName().toFqdn());
             PersistenceOptionsBuilder persistenceOptions = PersistenceOptions
                     .builder()
                     .dataPath(dataPath);
 
+            Options defaultOptions = new Options().setCreateIfMissing(true);
             ProtobufIndexer indexer = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getIndexer();
             ISerializer serializer = config.getSerializer(rt);
 
-            return rt
-                    .getObjectsView()
-                    .build()
-                    .setTypeToken(PersistedCorfuTable.<K, V>getTypeToken())
-                    .setArguments(persistenceOptions.build(), defaultOptions, serializer, indexer)
-                    .setStreamName(config.getTableName().toFqdn())
-                    .setSerializer(serializer)
-                    .open();
+            var smrCfg = SmrObjectConfig
+                    .<PersistedCorfuTable<K, V>>builder()
+                    .type(PersistedCorfuTable.getTypeToken())
+                    .streamName(config.getTableName().toStreamName())
+                    .serializer(serializer)
+                    .arguments(new Object[]{persistenceOptions.build(), defaultOptions, serializer, indexer})
+                    .build();
+
+            return rt.getObjectsView().open(smrCfg);
         }
 
         @Override
@@ -75,30 +75,19 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
     private final ManagedCorfuTableSetup<K, V> persistentProtobufCorfu = new ManagedCorfuTableSetup<>() {
         @Override
-        public GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig config) throws Exception {
-            config.configure(rt);
-            Object[] args = ((ManagedCorfuTableProtobufConfig<?, ?, ?>) config).getArgs();
-            ISerializer serializer = config.getSerializer(rt);
+        public GenericCorfuTable<?, K, V> open(CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config) throws Exception {
+            rt.getSerializers().registerSerializer(config.getSerializer(rt));
 
-            PersistentCorfuTable<K, V> table = new PersistentCorfuTable<>();
+            switch (config.getParams().getTableType()) {
+                case PERSISTENT:
+                    return rt.getObjectsView().open(config.persistentCfg());
+                    break;
+                case PERSISTED:
+                    return rt.getObjectsView().open(config.persistedCfg());
+                    break;
+            }
 
-            MVOCorfuCompileProxy proxy = new MVOCorfuCompileProxy(
-                    rt,
-                    config.getTableName().toStreamId().getId(),
-                    table.getTableTypeToken().getRawType(),
-                    PersistentCorfuTable.class,
-                    args,
-                    serializer,
-                    new HashSet<UUID>(),
-                    table,
-                    ObjectOpenOption.CACHE,
-                    rt.getObjectsView().getMvoCache()
-            );
-
-            table.setCorfuSMRProxy(ClassUtils.cast(proxy));
-
-            return table;
+            throw new IllegalStateException("Unknown table type");
         }
 
         @Override
@@ -107,7 +96,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
         }
     };
 
-    public static <K, V> ManagedCorfuTableSetup<K, V> getTableSetup(ManagedCorfuTableConfigParams params){
+    public static <K, V> ManagedCorfuTableSetup<K, V> getTableSetup(ManagedCorfuTableConfigParams params) {
         switch (params.getTableType()) {
             case PERSISTENT:
                 switch (params.getSetupType()) {
@@ -118,7 +107,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
                 }
                 break;
             case PERSISTED:
-                switch (params.getSetupType()){
+                switch (params.getSetupType()) {
                     case PLAIN_TABLE:
                         return persistedPlainCorfu();
                     case PROTOBUF_TABLE:
@@ -160,7 +149,7 @@ public class ManagedCorfuTableSetupManager<K, V> {
 
     public interface ManagedCorfuTableSetup<K, V> {
         GenericCorfuTable<? extends SnapshotGenerator<?>, K, V> open(
-                CorfuRuntime rt, ManagedCorfuTableConfig config
+                CorfuRuntime rt, ManagedCorfuTableConfig<K, V> config
         ) throws Exception;
     }
 

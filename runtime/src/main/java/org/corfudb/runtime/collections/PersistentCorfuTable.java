@@ -112,9 +112,4 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
     public Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
     }
-
-    @Override
-    public TypeToken<ImmutableCorfuTable<K, V>> getTableTypeToken() {
-        return ImmutableCorfuTable.getTypeToken();
-    }
 }

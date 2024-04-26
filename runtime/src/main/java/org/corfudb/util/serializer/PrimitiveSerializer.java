@@ -31,6 +31,7 @@ public class PrimitiveSerializer implements ISerializer {
         this.type = SerializerType.PRIMITIVE.toByte();
     }
 
+    @Deprecated
     public PrimitiveSerializer(byte type) {
         this.type = type;
     }

@@ -1,6 +1,5 @@
 package org.corfudb.test.managedtable;
 
-import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,79 +16,65 @@ import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.ExampleSchemas.Office;
 import org.corfudb.runtime.ExampleSchemas.Person;
 import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ProtobufIndexer;
+import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
-import org.corfudb.test.CPSerializer;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetupType;
-import org.corfudb.util.serializer.DynamicProtobufSerializer;
-import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
-import org.corfudb.util.serializer.Serializers;
 
-import javax.annotation.Nonnull;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-public interface ManagedCorfuTableConfig {
+public interface ManagedCorfuTableConfig<K, V> {
     void configure(CorfuRuntime rt) throws Exception;
-    ISerializer getSerializer(CorfuRuntime rt);
-    FullyQualifiedTableName getTableName();
+
     ManagedCorfuTableConfigParams getParams();
-
-    @Builder
-    @Getter
-    class ManagedCorfuTableGenericConfig implements ManagedCorfuTableConfig {
-        @NonNull
-        private final ManagedSerializer managedSerializer;
-        @NonNull
-        private final ManagedCorfuTableConfigParams params;
-
-        @Default
-        private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
-                .namespace(Optional.of("some-namespace"))
-                .tableName("some-table")
-                .build();
-
-        @Override
-        public void configure(CorfuRuntime rt) throws Exception {
-            managedSerializer.configure(rt);
-        }
-
-        @Override
-        public ISerializer getSerializer(CorfuRuntime rt) {
-            return managedSerializer.getSerializer();
-        }
-
-    }
+    SmrObjectConfig<PersistentCorfuTable<K, V>> persistentCfg();
+    SmrObjectConfig<PersistedCorfuTable<K, V>> persistedCfg();
 
     @Builder
     @Getter
     class ManagedCorfuTableProtobufConfig<K extends Message, V extends Message, M extends Message>
-            implements ManagedCorfuTableConfig {
+            implements ManagedCorfuTableConfig<K, V> {
         @NonNull
         private final TableDescriptor<K, V, M> tableDescriptor;
         @NonNull
         private final ManagedCorfuTableConfigParams params;
 
         @Default
-        private final FullyQualifiedTableName tableName = FullyQualifiedTableName.builder()
-                .namespace(Optional.of("some-namespace"))
-                .tableName("some-table")
-                .build();
-
-        @Default
         private final boolean withSchema = true;
 
-        @Default
-        private final ManagedSerializer managedSerializer = new ManagedProtobufSerializer();
+        public SmrObjectConfig<PersistentCorfuTable<K, V>> persistentCfg() {
+            var cfg = SmrObjectConfig
+                    .<PersistentCorfuTable<K, V>>builder()
+                    .type(PersistentCorfuTable.getTypeToken())
+                    .streamName()
+                    .serializer()
+                    .build();
+            return cfg;
 
-        public static ManagedCorfuTableConfig buildUuid() {
+        }
+
+        @Override
+        public SmrObjectConfig<PersistedCorfuTable<K, V>> persistedCfg() {
+            var cfg = SmrObjectConfig
+                    .<PersistedCorfuTable<K, V>>builder()
+                    .type(PersistedCorfuTable.getTypeToken())
+                    //.streamName()
+                    .build();
+
+            return cfg;
+        }
+
+        public static ManagedCorfuTableConfig<Uuid, Uuid> buildUuid() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Uuid, Uuid>builder()
                     .tableDescriptor(TableDescriptors.UUID)
@@ -159,24 +144,16 @@ public interface ManagedCorfuTableConfig {
 
         @Override
         public void configure(CorfuRuntime rt) throws Exception {
-            managedSerializer.configure(rt);
-
             ProtobufSerializer serializer = getSerializer(rt);
-            K defaultKeyMessage = tableDescriptor.getDefaultKeyMessage();
-            serializer.addTypeToClassMap(defaultKeyMessage);
-
-            V defaultValueMessage = tableDescriptor.getDefaultValueMessage();
-            serializer.addTypeToClassMap(defaultValueMessage);
-
-            M defaultMetadataMessage = tableDescriptor.getDefaultMetadataMessage();
-            serializer.addTypeToClassMap(defaultMetadataMessage);
+            serializer.registerTypes(tableDescriptor);
+            rt.getSerializers().registerSerializer();
         }
 
         @Override
         public ProtobufSerializer getSerializer(CorfuRuntime rt) {
             return rt
                     .getSerializers()
-                    .getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE, ProtobufSerializer.class);
+                    .getProtobufSerializer();
         }
 
         Object[] getArgs() throws Exception {
@@ -191,71 +168,6 @@ public interface ManagedCorfuTableConfig {
             SchemaOptions schemaOptions = tableDescriptor.getSchemaOptions();
             V msg = tableDescriptor.getDefaultValueMessage();
             return new ProtobufIndexer(msg, schemaOptions);
-        }
-    }
-
-    interface ManagedSerializer {
-        void configure(CorfuRuntime rt);
-        ISerializer getSerializer();
-    }
-
-    class ManagedProtobufSerializer implements ManagedSerializer {
-        @Getter
-        private ISerializer serializer;
-
-        @Override
-        public void configure(CorfuRuntime rt) {
-            serializer = setupSerializer(rt);
-        }
-
-        /**
-         * Register a Protobuf serializer with the default runtime.
-         *
-         * @return ProtobufSerializer
-         */
-        private ProtobufSerializer setupSerializer(CorfuRuntime rt) {
-            ProtobufSerializer protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
-            setupSerializer(rt, protoSerializer);
-            return protoSerializer;
-        }
-
-        /**
-         * Register a giver serializer with a given runtime.
-         */
-        protected void setupSerializer(@Nonnull final CorfuRuntime runtime, @Nonnull final ISerializer serializer) {
-            runtime.getSerializers().registerSerializer(serializer);
-        }
-    }
-
-    class ManagedDefaultSerializer implements ManagedSerializer {
-        @Getter
-        private ISerializer serializer;
-
-        @Override
-        public void configure(CorfuRuntime rt) {
-            serializer = Serializers.getDefaultSerializer();
-        }
-    }
-
-    class ManagedDynamicProtobufSerializer implements ManagedSerializer {
-        @Getter
-        private ISerializer serializer;
-
-        @Override
-        public void configure(CorfuRuntime rt) {
-            //create and register dynamic serializer in the runtime
-            serializer = new DynamicProtobufSerializer(rt);
-        }
-    }
-
-    class ManagedCPSerializer implements ManagedSerializer {
-        @Getter
-        private ISerializer serializer;
-
-        @Override
-        public void configure(CorfuRuntime rt) {
-            serializer = new CPSerializer();
-            rt.getSerializers().registerSerializer(serializer);
         }
     }
 

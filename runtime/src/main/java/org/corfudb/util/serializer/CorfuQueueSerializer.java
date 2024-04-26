@@ -22,6 +22,7 @@ public class CorfuQueueSerializer implements ISerializer {
         this.type = SerializerType.QUEUE.toByte();
     }
 
+    @Deprecated
     public CorfuQueueSerializer(byte type) {
         this.type = type;
     }

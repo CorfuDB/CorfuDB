@@ -96,8 +96,7 @@ import static org.corfudb.runtime.CorfuOptions.SizeComputationModel.EXACT_SIZE;
 @Builder(toBuilder = true)
 public class DiskBackedCorfuTable<K, V> implements
         SnapshotGenerator<DiskBackedCorfuTable<K, V>>,
-        ViewGenerator<DiskBackedCorfuTable<K, V>>,
-        ConsistencyView {
+        ViewGenerator<DiskBackedCorfuTable<K, V>> {
 
     public static final Options defaultOptions = getDiskBackedCorfuTableOptions();
     private static final HashFunction murmurHash3 = Hashing.murmur3_32();
@@ -208,7 +207,8 @@ public class DiskBackedCorfuTable<K, V> implements
     }
 
     public static <K, V> TypeToken<DiskBackedCorfuTable<K, V>> getTypeToken() {
-        return new TypeToken<DiskBackedCorfuTable<K, V>>() {};
+        return new TypeToken<>() {
+        };
     }
 
     /**

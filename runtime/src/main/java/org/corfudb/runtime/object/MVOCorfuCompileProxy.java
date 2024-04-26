@@ -17,7 +17,6 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Utils;
@@ -29,8 +28,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 @Slf4j
-public class MVOCorfuCompileProxy<
-        S extends SnapshotGenerator<S> & ConsistencyView>
+public class MVOCorfuCompileProxy<S extends SnapshotGenerator<S>>
         implements ICorfuSMRProxy<S> {
 
     @Getter
@@ -205,7 +203,9 @@ public class MVOCorfuCompileProxy<
     public void close() {
         // Remove this object from the object cache.
         // This prevents a cached version from being returned in the future.
-        rt.getObjectsView().getObjectCache().remove(new ObjectsView.ObjectID(getStreamID(), config.getType()));
+        rt.getObjectsView()
+                .getObjectCache()
+                .remove(config.getObjectId());
         getUnderlyingMVO().close();
     }
 }

@@ -116,9 +116,4 @@ public class PersistedCorfuTable<K, V> implements GenericCorfuTable<DiskBackedCo
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
     }
-
-    @Override
-    public TypeToken<DiskBackedCorfuTable<K, V>> getTableTypeToken() {
-        return DiskBackedCorfuTable.getTypeToken();
-    }
 }

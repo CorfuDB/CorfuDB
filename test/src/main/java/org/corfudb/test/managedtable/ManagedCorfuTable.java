@@ -45,7 +45,7 @@ public class ManagedCorfuTable<K, V> {
 
     public static ManagedCorfuTable<Uuid, ExampleValue> buildExample(ManagedRuntime rt) {
 
-        ManagedCorfuTableConfig cfg = ManagedCorfuTableProtobufConfig
+        ManagedCorfuTableConfig<Uuid, ExampleValue> cfg = ManagedCorfuTableProtobufConfig
                 .<Uuid, ExampleValue, ManagedMetadata>builder()
                 .tableDescriptor(TableDescriptors.EXAMPLE_VALUE)
                 .build();

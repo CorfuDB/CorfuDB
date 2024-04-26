@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.reflect.TypeToken;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -41,20 +42,23 @@ import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
+import org.corfudb.runtime.view.StreamsView.StreamName;
 import org.corfudb.test.CacheSizeForTest;
 import org.corfudb.test.CorfuTableSpec;
+import org.corfudb.test.CorfuTableSpec.CorfuTableSpecContext;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig;
-import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableConfigParams;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableGenericConfig;
 import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedCorfuTableProtobufConfig;
-import org.corfudb.test.managedtable.ManagedCorfuTableConfig.ManagedDefaultSerializer;
-import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager;
 import org.corfudb.test.managedtable.ManagedCorfuTableSetupManager.ManagedCorfuTableSetup;
 import org.corfudb.test.managedtable.ManagedRuntime;
+import org.corfudb.util.LambdaUtils;
+import org.corfudb.util.LambdaUtils.ThrowableConsumer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
 import java.util.ArrayList;
@@ -86,6 +90,64 @@ import static org.mockito.Mockito.spy;
 
 public class CorfuTableDynamicTest extends AbstractViewTest {
     private static final String INTERRUPTED_ERROR_MSG = "Unexpected InterruptedException";
+
+    @Test
+    public void testTest() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+
+        var tables = ImmutableList.of(
+                getTableSetup(PERSISTENT_PROTOBUF_TABLE),
+                getTableSetup(PERSISTED_PROTOBUF_TABLE)
+        );
+
+        ManagedRuntime managedRt = ManagedRuntime
+                .from(getLargeRtParams())
+                .setup(rt -> rt.parseConfigurationString(getDefaultConfigurationString()));
+
+        // rtParams -> rt ->
+        //      table type -> serializer -> rt(register serializer) -> smrConfig
+
+        // managed config: tableType, params for smrConfig
+
+        // CorfuTableType -> serializer configuration
+        // CorfuTableType + serializer configuration + cfgParams -> smrCfg
+
+        // proto serializer -> needs table descriptor
+        // other serializer -> do or don't need specific params
+
+        // do weed need to have a configuration step for a serializer?
+        SerializerConfurator???
+
+        // smrConfig -> needs aa serializer
+
+
+
+        // -> managed config(tableDescriptor needed for serializer)
+
+        // tableType {plus table descriptor} -> everything else
+
+        var smrCfg = SmrObjectConfig
+                .<PersistentCorfuTable<Uuid, Uuid>>builder()
+                .serializer(new ProtobufSerializer())
+                .streamName(StreamName.build("test-stream"))
+                .type(PersistentCorfuTable.getTypeToken())
+                .build();
+
+        var cfg = ManagedCorfuTableProtobufConfig
+                .buildUuid();
+
+        ManagedCorfuTable<Uuid, Uuid> managedTable = ManagedCorfuTable
+                .<Uuid, Uuid>build()
+                .config(cfg)
+                .managedRt(managedRt)
+                .tableSetup(tables.get(0));
+
+        managedTable.execute(uuidUuidCorfuTableSpecContext -> {
+            System.out.println("speeeccccc");
+        });
+
+        cleanupBuffers();
+    }
 
     @TestFactory
     public Stream<DynamicTest> getVersionedObjectOptimizationSpec() {
@@ -1129,14 +1191,14 @@ public class CorfuTableDynamicTest extends AbstractViewTest {
 
     public static class DynamicTestContext<K, V> {
         CorfuRuntimeParameters rtParams;
-        ManagedCorfuTableConfig cfg;
+        ManagedCorfuTableConfig<K, V> cfg;
         CorfuTableSpec<K, V> spec;
         List<ManagedCorfuTableSetup<K, V>> tables;
     }
 
     private <K, V> Stream<DynamicTest> dynamicTest(
             CorfuRuntimeParameters rtParams,
-            ManagedCorfuTableConfig cfg,
+            ManagedCorfuTableConfig<K, V> cfg,
             CorfuTableSpec<K, V> spec
     ) {
 

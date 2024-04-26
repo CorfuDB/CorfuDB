@@ -2,8 +2,8 @@ package org.corfudb.util.serializer;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.exceptions.SerializerException;
 
 import java.util.HashMap;
@@ -53,6 +53,23 @@ public class Serializers {
         } else {
             throw new IllegalArgumentException("The serializer cannot be cast to " + serializerType.getName());
         }
+    }
+
+    public ProtobufSerializer getProtobufSerializer() {
+        ProtobufSerializer protoSerializer;
+        try {
+            // If protobuf serializer is already registered, reference static/global class map so schemas
+            // are shared across all runtime's and not overwritten (if multiple runtime's exist).
+            // This aims to overcome a current design limitation where the serializers are static and not
+            // per runtime (to be changed).
+            protoSerializer = ClassUtils.cast(getSerializer(SerializerType.PROTOBUF.toByte()));
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            protoSerializer = new ProtobufSerializer();
+            registerSerializer(protoSerializer);
+        }
+
+        return protoSerializer;
     }
 
     /**

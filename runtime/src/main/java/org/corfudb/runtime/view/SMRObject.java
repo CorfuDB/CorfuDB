@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
@@ -26,6 +27,7 @@ import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -50,7 +52,6 @@ public class SMRObject<T extends ICorfuSMR<?>> {
     @NonNull
     private final SmrObjectConfig<T> smrConfig;
 
-
     public static <T extends ICorfuSMR<?>> Builder<T> builder() {
         return new Builder<>();
     }
@@ -61,7 +62,6 @@ public class SMRObject<T extends ICorfuSMR<?>> {
 
     private T open() {
         String msg = "ObjectBuilder: open Corfu stream {}";
-        //SmrObjectConfig<T, S> smrConfig = smrConfig;
 
         StreamName streamName = smrConfig.streamName;
         log.info(CorfuRuntime.LOG_NOT_IMPORTANT, msg, streamName);
@@ -184,18 +184,12 @@ public class SMRObject<T extends ICorfuSMR<?>> {
 
     @lombok.Builder
     @AllArgsConstructor
+    @EqualsAndHashCode
     @Getter
-    public static class SmrObjectConfig<T extends ICorfuSMR<?>> {
-        @NonNull
-        private final TypeToken<T> type;
-
+    public static class SmrTableConfig {
         @NonNull
         @With
         private final StreamName streamName;
-
-        @NonNull
-        @Default
-        private final ISerializer serializer = Serializers.getDefaultSerializer();
 
         @NonNull
         @Default
@@ -206,22 +200,37 @@ public class SMRObject<T extends ICorfuSMR<?>> {
         private final Object[] arguments = new Object[0];
 
         @NonNull
+        @Singular
+        private final Set<UUID> streamTags;
+    }
+
+    @lombok.Builder
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @Getter
+    public static class SmrObjectConfig<T extends ICorfuSMR<?>> {
+        @NonNull
+        private final TypeToken<T> type;
+
+        @NonNull
         @Default
-        private final Set<UUID> streamTags = new HashSet<>();
+        private final ISerializer serializer = Serializers.getDefaultSerializer();
+
+        private final SmrTableConfig tableConfig;
 
         public ObjectID getObjectId() {
-            return new ObjectID(streamName.getId().getId(), type.getRawType());
+            return new ObjectID(tableConfig.streamName.getId().getId(), type.getRawType());
         }
 
         public boolean isCacheDisabled() {
-            return openOption == ObjectOpenOption.NO_CACHE;
+            return tableConfig.openOption == ObjectOpenOption.NO_CACHE;
         }
 
         public CorfuTableType getTableType() {
             return CorfuTableType.parse(type);
         }
 
-        public <S extends SnapshotGenerator<S> & ConsistencyView> Class<S> tableImplementationType() {
+        public <S extends SnapshotGenerator<S>> Class<S> tableImplementationType() {
             switch (getTableType()) {
                 case PERSISTENT:
                     return ClassUtils.cast(ImmutableCorfuTable.class);
@@ -233,8 +242,8 @@ public class SMRObject<T extends ICorfuSMR<?>> {
         }
 
         public T newSmrTableInstance() throws InvocationTargetException, IllegalAccessException, InstantiationException {
-            var rawInstance = ReflectionUtils.
-                    findMatchingConstructor(type.getRawType().getDeclaredConstructors(), new Object[0]);
+            Constructor<?>[] constructors = type.getRawType().getDeclaredConstructors();
+            var rawInstance = ReflectionUtils.findMatchingConstructor(constructors, new Object[0]);
             return ClassUtils.cast(rawInstance);
         }
     }

@@ -71,6 +71,28 @@ public class CorfuStore {
                 .build();
     }
 
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    Table<K, V, M> openTable(@Nonnull FullyQualifiedTableName fqTableName,
+                             @Nonnull final TableDescriptor<K, V, M> descriptor,
+                             @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        long startTime = System.currentTimeMillis();
+
+        Table<K, V, M> table = runtime
+                .getTableRegistry()
+                .openTable(fqTableName, descriptor, tableOptions);
+
+        corfuStoreMetrics.recordTableCount();
+
+        log.info(
+                CorfuRuntime.LOG_NOT_IMPORTANT,
+                "openTable {}${} took {}ms",
+                fqTableName.rawNamespace(), fqTableName.rawTableName(), (System.currentTimeMillis() - startTime)
+        );
+        return table;
+    }
+
     /**
      * Creates and registers a table.
      * A table needs to be registered before it is used.
@@ -98,12 +120,11 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        long startTime = System.currentTimeMillis();
-        Table table =
-                runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
-        corfuStoreMetrics.recordTableCount();
-        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "openTable {}${} took {}ms", namespace, tableName, (System.currentTimeMillis() - startTime));
-        return table;
+        return openTable(
+                FullyQualifiedTableName.build(namespace, tableName),
+                new TableDescriptor<>(kClass, vClass, mClass),
+                tableOptions
+        );
     }
 
     /**
@@ -116,9 +137,8 @@ public class CorfuStore {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> getTable(@Nonnull final String namespace,
-                            @Nonnull final String tableName) {
-        return runtime.getTableRegistry().getTable(namespace, tableName);
+    Table<K, V, M> getTable(FullyQualifiedTableName fqTableName) {
+        return runtime.getTableRegistry().getTable(fqTableName);
     }
 
     /**
@@ -131,20 +151,18 @@ public class CorfuStore {
      * @param tableOptions Table options.
      * @param <V>          Value type.
      * @return Table instance.
-     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
-     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
-     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
      */
     @Nonnull
     public <V extends Message>
-    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(@Nonnull final String namespace,
-                                                                        @Nonnull final String queueName,
-                                                                        @Nonnull final Class<V> vClass,
-                                                                        @Nonnull final TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    Table<CorfuGuidMsg, V, CorfuQueueMetadataMsg> openQueue(
+            @Nonnull final String namespace, @Nonnull final String queueName,
+            @Nonnull final Class<V> vClass, @Nonnull final TableOptions tableOptions) {
 
-        return runtime.getTableRegistry().openTable(namespace, queueName,
-                Queue.CorfuGuidMsg.class, vClass, Queue.CorfuQueueMetadataMsg.class, tableOptions);
+        return runtime.getTableRegistry().openTable(
+                FullyQualifiedTableName.build(namespace, queueName),
+                new TableDescriptor<>(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class),
+                tableOptions
+        );
     }
 
     /**
@@ -161,7 +179,8 @@ public class CorfuStore {
      * @throws java.util.NoSuchElementException thrown if table was not found.
      */
     public void freeTableData(String namespace, String tableName) {
-        runtime.getTableRegistry().freeTableData(namespace, tableName);
+        runtime.getTableRegistry()
+                .freeTableData(FullyQualifiedTableName.build(namespace, tableName));
     }
 
     /**
@@ -171,7 +190,8 @@ public class CorfuStore {
      * @param tableName Table name.
      */
     public void deleteTable(String namespace, String tableName) {
-        runtime.getTableRegistry().deleteTable(namespace, tableName);
+        runtime.getTableRegistry()
+                .deleteTable(FullyQualifiedTableName.build(namespace, tableName));
     }
 
     /**
@@ -235,8 +255,9 @@ public class CorfuStore {
         // consecutive checkpoints enforcing holes (3 rounds of CP accumulate before trim happens == 3 holes)
 
         Optional<Timer.Sample> startTime = MeterRegistryProvider.getInstance().map(Timer::start);
-        UUID streamId = CorfuRuntime.getStreamID(
-                TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+        UUID streamId = FullyQualifiedTableName.build(namespace, tableName)
+                .toStreamId()
+                .getId();
         StreamAddressSpace streamAddressSpace = this.runtime.getSequencerView()
                 .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
 

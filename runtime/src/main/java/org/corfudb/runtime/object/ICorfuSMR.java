@@ -7,8 +7,7 @@ import java.util.Map;
  *
  * @param <S> that extends {@link SnapshotGenerator} and {@link ConsistencyView}
  */
-public interface ICorfuSMR<S extends SnapshotGenerator<S> &
-        ConsistencyView> extends AutoCloseable {
+public interface ICorfuSMR<S extends SnapshotGenerator<S>> extends AutoCloseable {
 
     /** Get the proxy for this wrapper, to manage the state of the object.
      * @return The proxy for this wrapper. */
@@ -17,7 +16,6 @@ public interface ICorfuSMR<S extends SnapshotGenerator<S> &
     /**
      * Set the proxy for this wrapper, to manage the state of the object.
      * @param proxy The proxy to set for this wrapper.
-     * @param <S> The type used for managing underlying versions.
      */
     void setCorfuSMRProxy(ICorfuSMRProxy<S> proxy);
 

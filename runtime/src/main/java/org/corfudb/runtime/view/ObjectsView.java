@@ -18,7 +18,6 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.ConsistencyView;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
 import org.corfudb.runtime.object.SnapshotGenerator;
@@ -32,7 +31,6 @@ import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -43,12 +41,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    private static final String LOG_REPLICATOR_STREAM_NAME =
-        "LR_Transaction_Stream";
+    private static final String LOG_REPLICATOR_STREAM_NAME = "LR_Transaction_Stream";
 
-    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
-            new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
-                CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
+    private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
+
+    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO = new StreamTagInfo(
+            LOG_REPLICATOR_STREAM_NAME,
+            CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME)
+    );
 
     /**
      * @return the ID of the log replicator stream.

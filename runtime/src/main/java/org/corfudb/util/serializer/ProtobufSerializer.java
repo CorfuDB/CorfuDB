@@ -12,11 +12,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -44,6 +48,34 @@ public class ProtobufSerializer implements ISerializer {
     public ProtobufSerializer(ConcurrentMap<String, Class<? extends Message>> classMap) {
         this.type = PROTOBUF_SERIALIZER_CODE;
         this.classMap = classMap;
+    }
+
+    public ProtobufSerializer() {
+        this.type = PROTOBUF_SERIALIZER_CODE;
+        this.classMap = new ConcurrentHashMap<>();
+    }
+
+    public <K extends Message, M extends Message, V extends Message>
+    ProtobufSerializer(TableDescriptor<K, V, M> descriptor) {
+        this.type = PROTOBUF_SERIALIZER_CODE;
+        this.classMap = new ConcurrentHashMap<>();
+        registerTypes(descriptor);
+    }
+
+    public <K extends Message, M extends Message, V extends Message>
+    void registerTypes(TableDescriptor<K, V, M> descriptor) {
+
+        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
+        addTypeToClassMap(defaultKeyMessage);
+
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
+        addTypeToClassMap(defaultValueMessage);
+
+        M defaultMetadataMessage;
+        if (descriptor.getMClass() != null) {
+            defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
+            addTypeToClassMap(defaultMetadataMessage);
+        }
     }
 
     enum MessageType {

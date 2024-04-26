@@ -50,6 +50,7 @@ import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -149,41 +150,10 @@ public class TableRegistry {
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
         this.tableMap = new ConcurrentHashMap<>();
-        ISerializer protoSerializer;
-        try {
-            // If protobuf serializer is already registered, reference static/global class map so schemas
-            // are shared across all runtime's and not overwritten (if multiple runtime's exist).
-            // This aims to overcome a current design limitation where the serializers are static and not
-            // per runtime (to be changed).
-            protoSerializer = runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
-        } catch (SerializerException se) {
-            // This means the protobuf serializer had not been registered yet.
-            protoSerializer = new ProtobufSerializer(new ConcurrentHashMap<>());
-            runtime.getSerializers().registerSerializer(protoSerializer);
-        }
-        this.protobufSerializer = protoSerializer;
+        this.protobufSerializer = runtime.getSerializers().getProtobufSerializer();
 
-        var cfg = SmrObjectConfig.builder()
-                .streamName(StreamName.build(FQ_REGISTRY_TABLE_NAME.toFqdn()))
-                .serializer(this.protobufSerializer)
-                .streamTags(Set.of(LOG_REPLICATOR_STREAM_INFO.getStreamId()))
-                .build();
-
-        this.registryTable = this.runtime.getObjectsView().open(cfg);
-
-        this.registryTable = this.runtime.getObjectsView().build()
-            .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
-            .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
-            .setSerializer(this.protobufSerializer)
-            .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
-            .open();
-
-        this.protobufDescriptorTable = this.runtime.getObjectsView().build()
-            .setTypeToken(PersistentCorfuTable.<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>getTypeToken())
-            .setStreamName(FQ_PROTO_DESC_TABLE_NAME.toFqdn())
-            .setSerializer(this.protobufSerializer)
-            .setStreamTags(LOG_REPLICATOR_STREAM_INFO.getStreamId())
-            .open();
+        this.registryTable = openRegistryTable();
+        this.protobufDescriptorTable = openDescriptorTable();
 
         // Register the table schemas to schema table.
         addTypeToClassMap(TableName.getDefaultInstance());
@@ -210,6 +180,31 @@ public class TableRegistry {
         }
     }
 
+    private PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
+    openDescriptorTable() {
+        var descriptorCfg = SmrObjectConfig
+                .<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .streamName(FQ_PROTO_DESC_TABLE_NAME.toStreamName())
+                .serializer(this.protobufSerializer)
+                .streamTag(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+                .build();
+
+        return this.runtime.getObjectsView().open(descriptorCfg);
+    }
+
+    private PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> openRegistryTable() {
+        var registryCfg = SmrObjectConfig
+                .<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .streamName(FQ_REGISTRY_TABLE_NAME.toStreamName())
+                .serializer(this.protobufSerializer)
+                .streamTag(LOG_REPLICATOR_STREAM_INFO.getStreamId())
+                .build();
+
+        return this.runtime.getObjectsView().open(registryCfg);
+    }
+
     /**
      * Register a table in the internal Table Registry.
      *
@@ -218,15 +213,11 @@ public class TableRegistry {
      * @param <K>           Type of Key.
      * @param <V>           Type of Value.
      * @param <M>           Type of Metadata.
-     * @throws NoSuchMethodException     If this is not a protobuf message.
-     * @throws InvocationTargetException If this is not a protobuf message.
-     * @throws IllegalAccessException    If this is not a protobuf message.
      */
     private <K extends Message, V extends Message, M extends Message>
     void registerTable(@Nonnull FullyQualifiedTableName fqTableName,
                        @Nonnull TableDescriptor<K, V, M> descriptor,
-                       @Nonnull final TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+                       @Nonnull final TableOptions tableOptions) {
 
         K defaultKeyMessage = descriptor.getDefaultKeyMessage();
         V defaultValueMessage = descriptor.getDefaultValueMessage();
@@ -271,13 +262,13 @@ public class TableRegistry {
         while (numRetries-- > 0) {
             // Schema validation to ensure that there is either proper modification of the schema across open calls.
             // Or no modification to the protobuf files.
-            /**
+            /*
              * Caller is opening a new table with a map of protobufFilename -> protobufFileDescriptor pairs
-             *
+             * <p>
              *  If no entry in TableRegistry, tt is a new table. Then we insert new protobufs into descriptor table.
              *  Note: we do not replace existing descriptor, as table schema change should be handled by explicit APIs.
              *  (assumption is that protobuf definitions do not change outside of an upgrade/migration scenario)
-             *
+             * <p>
              *  If entry exists in TableRegistry -> Existing table re-opened:
              *  We won't check equality as the expectation is that schemas do not change outside of upgrade paths.
              */
@@ -352,12 +343,14 @@ public class TableRegistry {
             throw new IllegalStateException(errMsg);
         }
 
-        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> corfuTable = runtime
-                .getObjectsView().build()
-                .setTypeToken(PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken())
-                .setStreamName(fqTableName.toFqdn())
-                .setSerializer(Serializers.JSON)
-                .open();
+        var cfg = SmrObjectConfig
+                .<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .streamName(fqTableName.toStreamName())
+                .serializer(Serializers.JSON)
+                .build();
+
+        var corfuTable = runtime.getObjectsView().open(cfg);
 
         UUID streamId = fqTableName.toStreamId().getId();
         CheckpointWriter<ICorfuTable<?,?>> cpw =
@@ -444,7 +437,7 @@ public class TableRegistry {
             CorfuRecord<ProtobufFileDescriptor, TableMetadata> newProtoFd = e.getValue();
             final CorfuRecord<ProtobufFileDescriptor, TableMetadata> currentSchema =
                     this.protobufDescriptorTable.get(protoName);
-            /** Known bug: Protobuf FileDescriptor maps are not deterministically constructed **
+            /* Known bug: Protobuf FileDescriptor maps are not deterministically constructed **
             if (log.isTraceEnabled() && currentSchema != null &&
                     !protoName.getFileName().startsWith("google/protobuf") &&
                     !currentSchema.getPayload().getFileDescriptor()
@@ -548,10 +541,14 @@ public class TableRegistry {
      * @param <T> Type of message.
      */
     public <T extends Message> void addTypeToClassMap(T msg) {
-        ProtobufSerializer serializer = (ProtobufSerializer) runtime
+        ProtobufSerializer serializer = getSerializer();
+        serializer.addTypeToClassMap(msg);
+    }
+
+    private ProtobufSerializer getSerializer() {
+        return (ProtobufSerializer) runtime
                 .getSerializers()
                 .getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
-        serializer.addTypeToClassMap(msg);
     }
 
     @Deprecated
@@ -580,27 +577,13 @@ public class TableRegistry {
      * @param <V>          Value type.
      * @param <M>          Metadata type.
      * @return Table instance.
-     * @throws NoSuchMethodException     If this is not a protobuf message.
-     * @throws InvocationTargetException If this is not a protobuf message.
-     * @throws IllegalAccessException    If this is not a protobuf message.
      */
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull FullyQualifiedTableName fqTableName,
                              @Nonnull final TableDescriptor<K, V, M> descriptor,
-                             @Nonnull final TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+                             @Nonnull final TableOptions tableOptions) {
 
-        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
-        addTypeToClassMap(defaultKeyMessage);
-
-        V defaultValueMessage = descriptor.getDefaultValueMessage();
-        addTypeToClassMap(defaultValueMessage);
-
-        M defaultMetadataMessage = null;
-        if (descriptor.mClass != null) {
-            defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
-            addTypeToClassMap(defaultMetadataMessage);
-        }
+        getSerializer().registerTypes(descriptor);
 
         // persistentDataPath is deprecated and needs to be removed.
         PersistenceOptions persistenceOptions =
@@ -647,8 +630,8 @@ public class TableRegistry {
                         .kClass(descriptor.kClass)
                         .vClass(descriptor.vClass)
                         .mClass(descriptor.mClass)
-                        .valueSchema(defaultValueMessage)
-                        .metadataSchema(defaultMetadataMessage)
+                        .valueSchema(descriptor.getDefaultValueMessage())
+                        .metadataSchema(descriptor.getDefaultMetadataMessage())
                         .schemaOptions(tableSchemaOptions)
                         .persistenceOptions(persistenceOptions)
                         .secondaryIndexesDisabled(tableOptions.isSecondaryIndexesDisabled())
@@ -895,6 +878,7 @@ public class TableRegistry {
     @AllArgsConstructor
     @Getter
     public static class TableDescriptor<K extends Message, V extends Message, M extends Message> {
+        public static final String DEFAULT_METHOD_NOT_FOUND_ERR_MSG = "The instance doesn't provide the default value";
         @NonNull
         private final Class<K> kClass;
         @NonNull
@@ -907,16 +891,28 @@ public class TableRegistry {
             return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
         }
 
-        public V getDefaultValueMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-            return ClassUtils.cast(vClass.getMethod(defaultInstanceMethodName).invoke(null));
+        public V getDefaultValueMessage() {
+            try {
+                return ClassUtils.cast(vClass.getMethod(defaultInstanceMethodName).invoke(null));
+            } catch (Exception ex) {
+                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
+            }
         }
 
-        public K getDefaultKeyMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-            return ClassUtils.cast(kClass.getMethod(defaultInstanceMethodName).invoke(null));
+        public K getDefaultKeyMessage() {
+            try {
+                return ClassUtils.cast(kClass.getMethod(defaultInstanceMethodName).invoke(null));
+            } catch (Exception ex) {
+                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
+            }
         }
 
-        public M getDefaultMetadataMessage() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-            return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
+        public M getDefaultMetadataMessage() {
+            try {
+                return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
+            } catch (Exception ex) {
+                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
+            }
         }
     }
 
@@ -941,6 +937,10 @@ public class TableRegistry {
 
         public StreamId toStreamId() {
             return StreamId.build(toFqdn());
+        }
+
+        public StreamName toStreamName() {
+            return StreamName.build(toFqdn());
         }
 
         public static StreamId streamId(String ns, String name) {
