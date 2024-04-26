@@ -12,6 +12,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuOptions;
@@ -45,6 +46,7 @@ import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -55,6 +57,7 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -117,6 +120,8 @@ public class DiskBackedCorfuTable<K, V> implements
 
     @Getter
     private final Statistics statistics;
+    private final Long reportingFrequency;
+    private final AtomicLong currentReportingCycle = new AtomicLong(0);
 
     @Getter
     @VisibleForTesting
@@ -170,6 +175,9 @@ public class DiskBackedCorfuTable<K, V> implements
                 persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
             }
             this.rocksDbOptions.setTableFormatConfig(tableConfig);
+            this.reportingFrequency = persistenceOptions.getReportingFrequency();
+            rocksDbOptions.setStatistics(statistics);
+            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
                     persistenceOptions.getDataPath(), this.rocksDbOptions, writeOptions);
@@ -179,7 +187,7 @@ public class DiskBackedCorfuTable<K, V> implements
             this.rocksDbSnapshotGenerator = rocksDbStore;
             this.metricsId = String.format("%s.%s.",
                     persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
-            MeterRegistryProvider.registerExternalSupplier(metricsId, this.statistics::toString);
+            MeterRegistryProvider.registerExternalSupplier(metricsId, this::statisticsProvider);
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
@@ -550,6 +558,18 @@ public class DiskBackedCorfuTable<K, V> implements
             throw new IllegalStateException("Only the root object cen generate new views.");
         }
         return toBuilder().rocksApi(rocksApi).build();
+    }
+
+    private String statisticsProvider() {
+        final long cycle = currentReportingCycle.incrementAndGet();
+        if (cycle % reportingFrequency == 0) {
+            return StringUtils.EMPTY;
+        }
+
+        final String[] prefixes = {"rocksdb.blobdb.", "rocksdb.tnx."};
+        return Arrays.stream(statistics.toString().split(System.lineSeparator()))
+                .filter(line -> Arrays.stream(prefixes).noneMatch(line::contains))
+                .collect(Collectors.joining(System.lineSeparator()));
     }
 
     private boolean isRoot() {

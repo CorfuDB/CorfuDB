@@ -1296,7 +1296,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
     public void testExternalProvider() throws InterruptedException, IOException {
         final Logger logger = Mockito.mock(Logger.class);
         final List<String> logMessages = new ArrayList<>();
-        final CountDownLatch countDownLatch = new CountDownLatch(10);
+        final CountDownLatch countDownLatch = new CountDownLatch(100);
         final String tableFolderName = "metered-table";
 
         Mockito.doAnswer(invocation -> {
@@ -1310,7 +1310,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
             }
         }).when(logger).debug(logCaptor.capture());
 
-        final Duration loggingInterval = Duration.ofMillis(100);
+        final Duration loggingInterval = Duration.ofMillis(10);
         initClientMetrics(logger, loggingInterval, PersistedCorfuTableTest.class.toString());
 
         PersistedCorfuTable<String, String> table = setupTable(tableFolderName);

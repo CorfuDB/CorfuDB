@@ -39,6 +39,12 @@ message PersistenceOptions {
     optional SizeComputationModel sizeComputationModel = 3;
     optional int64 writeBufferSize = 4; // In bytes.
     optional int32 blockCacheIndex = 5; // In bytes.
+
+    // Observability settings start at index 100.
+
+    // How often should RocksDB statistics be gathered.
+    // For example, 5 would indicate every 5th iteration.
+    optional uint32 reportingFrequency = 100;
 }
 
 message ReplicationLogicalGroup {
