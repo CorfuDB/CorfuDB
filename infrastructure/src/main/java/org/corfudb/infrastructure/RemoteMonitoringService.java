@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.Component;
 import org.corfudb.infrastructure.health.HealthMonitor;
@@ -34,6 +35,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -193,19 +196,19 @@ public class RemoteMonitoringService implements ManagementService {
             if (!failureDetectorFuture.isDone()) {
                 return;
             }
-
+            initMetrics();
             failureDetectorFuture = runDetectionTasks();
+            if (MicroMeterUtils.anomalyDetector != null && !MicroMeterUtils.anomalyDetector.pingLatencyMap.isEmpty()) {
+                MicroMeterUtils.anomalyDetector.anomalyDetection();
+            }
         };
-
         detectionTasksScheduler.scheduleAtFixedRate(
                 () -> LambdaUtils.runSansThrow(task),
                 0,
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
-        if (MicroMeterUtils.anomalyDetector != null && !MicroMeterUtils.anomalyDetector.pingLatencyMap.isEmpty()) {
-            MicroMeterUtils.anomalyDetector.anomalyDetection();
-        }
+
         HealthMonitor.resolveIssue(Issue.createInitIssue(Component.FAILURE_DETECTOR));
     }
 
@@ -351,5 +354,12 @@ public class RemoteMonitoringService implements ManagementService {
         public static DetectorTask fromBool(boolean taskResult) {
             return taskResult ? COMPLETED : NOT_COMPLETED;
         }
+    }
+
+    private static void initMetrics() {
+        Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
+
+        Duration defaultMetricsLoggingInterval = Duration.ofNanos(500L);
+        MeterRegistryProvider.MeterRegistryInitializer.initClientMetrics(logger, defaultMetricsLoggingInterval, FailureDetector.class.toString());
     }
 }
