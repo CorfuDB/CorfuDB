@@ -7,6 +7,7 @@ import org.rocksdb.ReadOptions;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.RocksIteratorInterface;
+import org.rocksdb.Snapshot;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -181,6 +182,11 @@ public class CheckedRocksIterator implements RocksIteratorInterface, AutoCloseab
 
     @Override
     public void refresh() {
+        throw new UnsupportedOperationException("refresh");
+    }
+
+    @Override
+    public void refresh(Snapshot snapshot) throws RocksDBException {
         throw new UnsupportedOperationException("refresh");
     }
 
