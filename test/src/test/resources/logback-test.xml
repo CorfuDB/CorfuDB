@@ -15,7 +15,7 @@
             </pattern>
         </encoder>
     </appender>
-    <!--appender name="MetricsRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="MetricsRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>/tmp/log/corfu-metrics.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>/var/log/corfu-metrics.%i.log</fileNamePattern>
@@ -29,11 +29,11 @@
         <encoder>
             <pattern>%d %-5level - %msg%n %ex{short}</pattern>
         </encoder>
-    </appender-->
+    </appender>
 
     <property name="CORFU_METRICS_DIRECTORY" value="/tmp/corfu_metrics" />
 
-    <!--appender name="MetricsRollingFileCorfu" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="MetricsRollingFileCorfu" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${CORFU_METRICS_DIRECTORY}/corfu-metrics.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${CORFU_METRICS_DIRECTORY}/corfu-metrics.%i.log.gz</fileNamePattern>
@@ -48,12 +48,12 @@
                 %msg%n%xException
             </pattern>
         </encoder>
-    </appender-->
+    </appender>
 
-    <!--appender name="AsyncMetricsRollingFileCorfu" class="ch.qos.logback.classic.AsyncAppender">
+    <appender name="AsyncMetricsRollingFileCorfu" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="MetricsRollingFileCorfu" />
         <queueSize>1024</queueSize>
-    </appender-->
+    </appender>
 
 
 
