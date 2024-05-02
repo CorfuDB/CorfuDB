@@ -24,6 +24,11 @@ COPY target/logback.prod.xml /usr/share/corfu/conf/logback.prod.xml
 COPY target/corfu-compactor-config.yml /usr/share/corfu/conf/corfu-compactor-config.yml
 COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.prod.xml
 
+# Create directories and files required for running Corfu Server
+RUN mkdir -p /config
+RUN mkdir -p /var/log/corfu/
+RUN touch /var/log/corfu/corfu.jvm.gc.9000.log
+
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar
 
@@ -44,4 +49,6 @@ CMD java -cp *.jar \
     org.corfudb.infrastructure.CorfuServer \
     --compactor-script /usr/share/corfu/scripts/compactor_runner.py \
     --compactor-config=/usr/share/corfu/conf/corfu-compactor-config.yml \
-    --compaction-trigger-freq-ms=900000
+    --compaction-trigger-freq-ms=900000 \
+    --log-path /config \
+    9000
