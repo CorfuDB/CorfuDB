@@ -45,6 +45,9 @@ public class PersistenceOptions {
     @Builder.Default
     boolean disableBlockCache = false;
 
+    @Builder.Default
+    Long reportingFrequency = 5L;
+
     public static synchronized Cache getBlockCache(int blockCacheIndex) {
         if (!blockCacheMap.containsKey(blockCacheIndex)) {
             throw new NoSuchElementException("Specified block cache does not exist.");

@@ -241,6 +241,10 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             if (tableParameters.getPersistenceOptions().hasWriteBufferSize()) {
                 persistenceOptions.writeBufferSize(Optional.of(tableParameters.getPersistenceOptions().getWriteBufferSize()));
             }
+            if (tableParameters.getPersistenceOptions().hasReportingFrequency()) {
+                final long reportingFrequency = tableParameters.getPersistenceOptions().getReportingFrequency();
+                persistenceOptions.reportingFrequency(reportingFrequency);
+            }
 
             if (tableParameters.getPersistenceOptions().hasBlockCacheIndex()) {
                 final int blockCacheIndex = tableParameters.getPersistenceOptions().getBlockCacheIndex();
