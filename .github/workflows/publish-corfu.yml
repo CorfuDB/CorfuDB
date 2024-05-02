@@ -1,4 +1,4 @@
-name: CorfuDB Artifacts
+name: Publish CorfuDB Artifacts
 
 on:
   push:

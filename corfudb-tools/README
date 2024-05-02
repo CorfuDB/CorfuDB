@@ -15,7 +15,7 @@ stream tags for a table, display all known stream tags, etc.
 
 1. showTable to read and output all entries in a given table and namespace.
 It can be invoked like the below example-
-java -cp "/path/to/corfudb-tools-0.4.0-SNAPSHOT-shaded.jar"
+java -cp "/path/to/corfudb-tools-0.4.2.0-SNAPSHOT-shaded.jar"
 org.corfudb.browser.CorfuStoreBrowserMain
 --host=10.160.29.112
 --port=9000
@@ -30,7 +30,7 @@ org.corfudb.browser.CorfuStoreBrowserMain
 
 2. listTables to list all table names in a given namespace(all namespaces if the
 namespace param is null)-
-java -cp "corfudb-tools-0.4.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
+java -cp "corfudb-tools-0.4.2.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
 org.corfudb.browser.CorfuBrowserMain
 --host=10.160.29.112
 --port=9000
@@ -45,7 +45,7 @@ org.corfudb.browser.CorfuBrowserMain
 Keystore and truststore parameters are not required if tls is disabled.
 
 For usage help,
-java -cp "corfudb-tools-0.4.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuStoreBrowserMain <--help|-h>
+java -cp "corfudb-tools-0.4.2.0-SNAPSHOT-shaded.jar" org.corfudb.browser.CorfuStoreBrowserMain <--help|-h>
 
 
 -------
@@ -53,7 +53,7 @@ Editor
 -------
 editTable to edit the value associated with a key in a given table and
 namespace-
-java -cp "corfudb-tools-0.4.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
+java -cp "corfudb-tools-0.4.2.0-SNAPSHOT-shaded.jar" --Dlogback.configurationFile=logback.prod.xml
 org.corfudb.browser.CorfuBrowserMain
 --host=10.160.29.112
 --port=9000

@@ -69,7 +69,7 @@ public class CorfuServerParams implements NodeParams {
     private final ContainerResources containerResources;
 
     /**
-     * Corfu server version, for instance: 0.4.0-SNAPSHOT
+     * Corfu server version, for instance: 0.0.0.0-SNAPSHOT
      */
     @NonNull
     private final String serverVersion;
