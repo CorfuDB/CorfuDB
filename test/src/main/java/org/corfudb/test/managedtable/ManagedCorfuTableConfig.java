@@ -19,12 +19,8 @@ import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.ProtobufIndexer;
-import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
-import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.TestSchema.Uuid;
 import org.corfudb.test.managedtable.ManagedCorfuTable.TableDescriptors;
@@ -81,49 +77,49 @@ public interface ManagedCorfuTableConfig<K, V> {
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildTestSchemaUuid() {
+        public static ManagedCorfuTableConfig<Uuid, ExampleValue> buildTestSchemaUuid() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, ExampleValue, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.EXAMPLE_VALUE)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildExampleSchemaUuid() {
+        public static ManagedCorfuTableConfig<ExampleSchemas.Uuid, ExampleValue> buildExampleSchemaUuid() {
             return ManagedCorfuTableProtobufConfig
                     .<ExampleSchemas.Uuid, ExampleValue, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.EXAMPLE_SCHEMA_UUID_VALUE)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildCompanyAndUuid() {
+        public static ManagedCorfuTableConfig<Uuid, Company> buildCompanyAndUuid() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Company, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.COMPANY)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildPerson() {
+        public static ManagedCorfuTableConfig<Uuid, Person> buildPerson() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Person, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.PERSON)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildOffice() {
+        public static ManagedCorfuTableConfig<Uuid, Office> buildOffice() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Office, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.OFFICE)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildAdult() {
+        public static ManagedCorfuTableConfig<Uuid, Adult> buildAdult() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, Adult, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.ADULT)
                     .build();
         }
 
-        public static ManagedCorfuTableConfig buildSportsProfessional() {
+        public static ManagedCorfuTableConfig<Uuid, SportsProfessional> buildSportsProfessional() {
             return ManagedCorfuTableProtobufConfig
                     .<Uuid, SportsProfessional, ManagedMetadata>builder()
                     .tableDescriptor(TableDescriptors.SPORTS_PROFESSIONAL)
