@@ -840,7 +840,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void testTransitionFromInSnapshotSyncWhenMultipleSnapshotSync() throws Exception {
         observeTransitions = true;
 
-        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -898,7 +898,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Test
     public void testTransitionFromWaitSnapshotApplyWhenMultipleSnapshotSync() throws Exception {
 
-        initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        initLogReplicationFSM(ReaderImplementation.EMPTY, false);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -913,9 +913,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSync, true);
 
         // Transition #3: transfer completed -> WAIT_SNAPSHOT_APPLY
-        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY,snapshotSync, true);
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSync, true);
 
-        // Transition #4: sync cancel from a different snapshot event -> Ignored, reaming in WAIT_SNAPSHOT_APPLY
+        // Transition #4: sync cancel from a different snapshot event -> Ignored, remain in WAIT_SNAPSHOT_APPLY
         transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, UUID.randomUUID(), false);
 
         assertThat(fsm.getState().getTransitionSyncId()).isEqualTo(snapshotSync);
