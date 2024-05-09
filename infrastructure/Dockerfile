@@ -27,7 +27,6 @@ COPY target/compactor-logback.prod.xml /usr/share/corfu/conf/compactor-logback.p
 # Create directories and files required for running Corfu Server
 RUN mkdir -p /config
 RUN mkdir -p /var/log/corfu/
-RUN touch /var/log/corfu/corfu.jvm.gc.9000.log
 
 # For integration testing purposes
 COPY target/${CORFU_JAR} /app/corfu.jar
