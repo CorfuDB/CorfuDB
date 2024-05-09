@@ -34,7 +34,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <revision>0.4.0-SNAPSHOT</revision>
+        <revision>0.4.2.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.11</logback.classic.version>
