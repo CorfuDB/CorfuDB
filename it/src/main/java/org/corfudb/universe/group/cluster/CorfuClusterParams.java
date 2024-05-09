@@ -42,7 +42,7 @@ public class CorfuClusterParams<T extends CorfuServerParams> implements GroupPar
             ContainerResources.builder().build();
 
     /**
-     * Corfu server version, for instance: 0.4.0-SNAPSHOT
+     * Corfu server version, for instance: 0.0.0.0-SNAPSHOT
      */
     @NonNull
     @Getter
