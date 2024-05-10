@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
@@ -47,6 +48,9 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
     private final WriteOptions writeOptions;
     private final ColumnFamilyRegistry columnFamilyRegistry;
 
+    @Getter
+    private final VersionedObjectStats metrics;
+
     // A set of iterators associated with this snapshot.
     private final Set<RocksDbEntryIterator<?, ?>> set;
 
@@ -64,6 +68,7 @@ public class DiskBackedSMRSnapshot<S extends SnapshotGenerator<S>> implements SM
         this.version = version;
         this.columnFamilyRegistry = columnFamilyRegistry;
         this.set = Collections.newSetFromMap(new WeakHashMap<>());
+        this.metrics = new VersionedObjectStats();
     }
 
     private boolean isInvalid() {

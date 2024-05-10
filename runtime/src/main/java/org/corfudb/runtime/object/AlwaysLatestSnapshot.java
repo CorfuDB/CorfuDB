@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import lombok.Getter;
 import lombok.NonNull;
 import org.rocksdb.OptimisticTransactionDB;
 
@@ -12,10 +13,14 @@ public class AlwaysLatestSnapshot<S extends SnapshotGenerator<S>> implements SMR
     private final OptimisticTransactionDB rocksDb;
     private final ViewGenerator<S> viewGenerator;
 
+    @Getter
+    private final VersionedObjectStats metrics;
+
     public AlwaysLatestSnapshot(@NonNull OptimisticTransactionDB rocksDb,
                                 @NonNull ViewGenerator<S> viewGenerator) {
         this.rocksDb = rocksDb;
         this.viewGenerator = viewGenerator;
+        this.metrics = new VersionedObjectStats();
     }
 
     @Override
