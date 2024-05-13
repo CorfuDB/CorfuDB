@@ -16,6 +16,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.SafeProtobufSerializer;
 
@@ -104,6 +105,21 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
     @Getter
     private final ISerializer serializer;
+
+    public Table(String namespace, String tableName, Class<K> keyClass, Class<V> valueClass, Class<M> metadataClass) {
+        this.fullyQualifiedTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+        this.keyClass = keyClass;
+        this.valueClass = valueClass;
+        this.metadataClass = metadataClass;
+
+        this.namespace = null;
+        this.streamTags = null;
+        this.streamUUID = null;
+        this.metadataOptions = null;
+        this.tableParameters = null;
+        this.guidGenerator = null;
+        this.serializer = null;
+    }
 
     /**
      * Returns a Table instance backed by a CorfuTable.
