@@ -17,7 +17,7 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -952,7 +953,7 @@ public class StreamingIT extends AbstractIT {
     /**
      * Test the case where a snapshot of the database is captured and we stream from this snapshot onwards.
      * Verify deltas are not missed and that tx.commit() returns the correct timestamp.
-     *
+     * <p>
      * We will write data to 2 tables, but snapshot/stream on only one of them.
      *
      */
@@ -979,8 +980,10 @@ public class StreamingIT extends AbstractIT {
             CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> entry = txn.getRecord(defaultTableName, firstKey);
             assertThat(entry.getPayload()).isEqualTo(firstValue);
             snapshotTs = txn.commit();
-            assertThat(snapshotTs.getSequence()).isEqualTo(runtime.getSequencerView()
-                    .query(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, defaultTableName))));
+
+            var streamId = FullyQualifiedTableName.streamId(namespace, defaultTableName).getId();
+            var query = runtime.getSequencerView().query(streamId);
+            assertThat(snapshotTs.getSequence()).isEqualTo(query);
         }
 
         // Subscribe from latest full sync

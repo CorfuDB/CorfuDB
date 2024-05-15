@@ -20,11 +20,13 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.MVOCache;
+import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -39,12 +41,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    private static final String LOG_REPLICATOR_STREAM_NAME =
-        "LR_Transaction_Stream";
+    private static final String LOG_REPLICATOR_STREAM_NAME = "LR_Transaction_Stream";
 
-    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO =
-            new StreamTagInfo(LOG_REPLICATOR_STREAM_NAME,
-                CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME));
+    private static final String LOGICAL_GROUP_REPLICATION_STREAM_NAME_PREFIX = "LogicalGroupReplicationStream_";
+
+    public static final StreamTagInfo LOG_REPLICATOR_STREAM_INFO = new StreamTagInfo(
+            LOG_REPLICATOR_STREAM_NAME,
+            CorfuRuntime.getStreamID(LOG_REPLICATOR_STREAM_NAME)
+    );
 
     /**
      * @return the ID of the log replicator stream.
@@ -54,11 +58,11 @@ public class ObjectsView extends AbstractView {
     }
 
     @Getter
-    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+    private final Map<ObjectID, ICorfuSMR<?>> objectCache = new ConcurrentHashMap<>();
 
     @Getter
     @Setter
-    MVOCache mvoCache = new MVOCache(runtime);
+    private MVOCache<? extends SnapshotGenerator<?>> mvoCache = new MVOCache<>(runtime);
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
@@ -70,7 +74,11 @@ public class ObjectsView extends AbstractView {
      * @return An object builder to open an object with.
      */
     public <T extends ICorfuSMR<?>> SMRObject.Builder<T> build() {
-        return new SMRObject.Builder<T>().setCorfuRuntime(runtime);
+        return new SMRObject.Builder().setCorfuRuntime(runtime);
+    }
+
+    public <T extends ICorfuSMR<?>> T open(SmrObjectConfig<T> smrConfig) {
+        return SMRObject.open(runtime, smrConfig);
     }
 
     /**
@@ -227,8 +235,8 @@ public class ObjectsView extends AbstractView {
      * open with the NO_CACHE options will not be gc'd
      */
     public void gc(long trimMark) {
-        for (Object obj : getObjectCache().values()) {
-            ((ICorfuSMR) obj).getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
+        for (ICorfuSMR<?> obj : getObjectCache().values()) {
+            obj.getCorfuSMRProxy().getUnderlyingMVO().gc(trimMark);
         }
     }
 

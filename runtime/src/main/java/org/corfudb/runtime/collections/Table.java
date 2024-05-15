@@ -16,6 +16,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.SafeProtobufSerializer;
 
@@ -87,15 +88,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     private final MetadataOptions metadataOptions;
 
     @Getter
-    private final Class<K> keyClass;
-
-    @Getter
-    private final Class<V> valueClass;
-
-    @Getter
-    private final Class<M> metadataClass;
-
-    @Getter
     private final Set<UUID> streamTags;
 
     private final TableParameters<K, V, M> tableParameters;
@@ -139,16 +131,30 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
         initializeCorfuTable(corfuRuntime);
 
-        this.keyClass = tableParameters.getKClass();
-        this.valueClass = tableParameters.getVClass();
-        this.metadataClass = tableParameters.getMClass();
+        TableDescriptor<K, V, M> descriptor = tableParameters.getDescriptor();
 
-        if (keyClass == Queue.CorfuGuidMsg.class &&
-                metadataClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
+        if (descriptor.getKClass() == Queue.CorfuGuidMsg.class &&
+                descriptor.getMClass() == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
             this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
         } else {
             this.guidGenerator = null;
         }
+    }
+
+    public Class<K> getKeyClass() {
+        return getDescriptor().getKClass();
+    }
+
+    public Class<V> getValueClass() {
+        return getDescriptor().getVClass();
+    }
+
+    public Class<M> getMetadataClass() {
+        return getDescriptor().getMClass();
+    }
+
+    public TableDescriptor<K, V, M> getDescriptor() {
+        return tableParameters.getDescriptor();
     }
 
     /**
@@ -180,7 +186,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      *
      * @param key Key.
      */
-    @Nullable
     protected void deleteRecord(@Nonnull final K key) {
         if (!corfuTable.containsKey(key)) {
             log.warn("Deleting a non-existent key {}", key);
@@ -297,7 +302,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      *                                  element prevents it from being added to this queue
      */
     public K enqueue(V e) {
-        /**
+        /*
          * This is a callback that is placed into the root transaction's context on
          * the thread local stack which will be invoked right after this transaction
          * is deemed successful and has obtained a final sequence number to write.

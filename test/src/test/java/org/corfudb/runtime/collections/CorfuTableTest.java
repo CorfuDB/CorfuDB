@@ -10,6 +10,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.test.StringIndexer;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -31,8 +32,10 @@ public class CorfuTableTest extends AbstractViewTest {
     private static final int ITERATIONS = 20;
 
     private Collection<String> project(Iterable<Map.Entry<String, String>> entries) {
-        return StreamSupport.stream(entries.spliterator(), false)
-                .map(Map.Entry::getValue).collect(Collectors.toCollection(ArrayList::new));
+        return StreamSupport
+                .stream(entries.spliterator(), false)
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Test

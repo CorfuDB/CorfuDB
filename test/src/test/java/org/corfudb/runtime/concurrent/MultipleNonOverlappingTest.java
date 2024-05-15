@@ -231,20 +231,5 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     protected long TXEnd() {
         return getRuntime().getObjectsView().TXEnd();
     }
-
-    @Override
-    protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
-
-        // TODO: Does not work at the moment.
-        // corfudb.runtime.exceptions.NoRollbackException: Can't roll back due to non-undoable exception
-        // getRuntime().getParameters().setUndoDisabled(true).setOptimisticUndoDisabled(true);
-
-        return (T) getRuntime()
-                .getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setType(tClass)        // object class backed by this stream\
-                .open();                // instantiate the object!
-    }
 }
 

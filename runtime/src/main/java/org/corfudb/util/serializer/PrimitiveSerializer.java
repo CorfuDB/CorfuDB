@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.lang.reflect.Array;
 import java.util.Arrays;
@@ -26,6 +27,11 @@ public class PrimitiveSerializer implements ISerializer {
                     .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));
     public static final Map<Class, Primitives> SerializerMap = getSerializerMap();
 
+    public PrimitiveSerializer() {
+        this.type = SerializerType.PRIMITIVE.toByte();
+    }
+
+    @Deprecated
     public PrimitiveSerializer(byte type) {
         this.type = type;
     }

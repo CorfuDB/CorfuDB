@@ -9,7 +9,7 @@ import java.util.Optional;
  *
  * @param <T>
  */
-public interface SnapshotGenerator<T> extends AutoCloseable {
+public interface SnapshotGenerator<T> extends ConsistencyView, AutoCloseable {
 
     /**
      * Generate a new snapshot of the underlying data structure
