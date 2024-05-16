@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -164,41 +165,66 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
         final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
-        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
-            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                printKey(entry);
-                printPayload(entry);
-                printMetadata(entry);
+
+        String fullTableName = namespace + "$" + tablename;
+        String filePath = "./" + fullTableName + ".txt";
+
+        try {
+            String deleteQuery = "DELETE FROM \"" + fullTableName + "\";\n";
+            Files.write(Paths.get(filePath), deleteQuery.getBytes());
+
+            for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+                for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+                    String keyJsonString = printKey(entry);
+                    String payloadJsonString = printPayload(entry);
+                    printMetadata(entry);
+
+                    String query = "INSERT INTO \"" + fullTableName + "\" (key, value) VALUES ('" + keyJsonString + "','" + payloadJsonString + "');\n";
+                    Files.write(Paths.get(filePath), query.getBytes(), StandardOpenOption.APPEND);
+                }
             }
+            System.out.println("Table size="+size);
+        } catch (Exception e) {
+            System.out.println("Failed to print table!\n" + e);
         }
-        System.out.println("Table size="+size);
+
         return size;
     }
 
-    public static void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
+    public static String printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         try {
-            builder = new StringBuilder("\nKey:\n")
-                    .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            System.out.println(builder.toString());
+            StringBuilder builder;
+            try {
+                builder = new StringBuilder("\nKey:\n")
+                        .append(JsonFormat.printer().print(entry.getKey().getKey()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("invalid key: ", e);
+            }
+
+            return JsonFormat.printer().omittingInsignificantWhitespace().print(entry.getKey().getKey());
         } catch (Exception e) {
             log.info("invalid key: ", e);
+            return "";
         }
     }
 
-    public static void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static String printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getPayload() == null) {
             log.info("payload is NULL");
-            return;
+            return "";
         }
 
         try {
             builder = new StringBuilder("\nPayload:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
             System.out.println(builder.toString());
+
+            return JsonFormat.printer().omittingInsignificantWhitespace().print(entry.getValue().getPayload());
         } catch (Exception e) {
             log.info("invalid payload: ", e);
+            return "";
         }
     }
 
