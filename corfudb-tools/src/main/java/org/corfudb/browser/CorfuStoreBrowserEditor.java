@@ -33,12 +33,14 @@ import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.json.JSONObject;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -164,41 +166,84 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
         final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
-        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
-            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                printKey(entry);
-                printPayload(entry);
-                printMetadata(entry);
+
+        String fullTableName = namespace + "$" + tablename;
+        String filePath = "./" + fullTableName + ".txt";
+
+        try {
+            String deleteQuery = "DELETE FROM \"" + fullTableName + "\";\n";
+            Files.write(Paths.get(filePath), deleteQuery.getBytes());
+
+            for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+                for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+                    String keyJsonString = printKey(entry);
+                    String payloadJsonString = printPayload(entry);
+                    printMetadata(entry);
+
+                    String query = "INSERT INTO \"" + fullTableName + "\" (key, value) VALUES ('" + keyJsonString + "','" + payloadJsonString + "');\n";
+                    Files.write(Paths.get(filePath), query.getBytes(), StandardOpenOption.APPEND);
+                }
             }
+            System.out.println("Table size="+size);
+        } catch (Exception e) {
+            System.out.println("Failed to print table!\n" + e);
         }
-        System.out.println("Table size="+size);
+
         return size;
     }
 
-    public static void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
+    private static void dumpJsonToFile(String jsonString, String filePath) {
         try {
-            builder = new StringBuilder("\nKey:\n")
-                    .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            System.out.println(builder.toString());
-        } catch (Exception e) {
-            log.error("invalid key: ", e);
+            Files.write(Paths.get(filePath), jsonString.getBytes());
+            System.out.println("JSON file created: " + filePath);
+        } catch (IOException e) {
+            System.err.println("An error occurred while writing the JSON file: " + e.getMessage());
         }
     }
 
-    public static void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    private static String getComapctJson(String jsonString) {
+        // Convert the jsonString to a compact JSON string
+        JSONObject jsonObject = new JSONObject(jsonString);
+        String compactJsonString = jsonObject.toString();
+        return compactJsonString;
+    }
+
+    public static String printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+        try {
+            StringBuilder builder;
+            try {
+                builder = new StringBuilder("\nKey:\n")
+                        .append(JsonFormat.printer().print(entry.getKey().getKey()));
+                System.out.println(builder.toString());
+            } catch (Exception e) {
+                log.error("invalid key: ", e);
+            }
+
+            String jsonString = JsonFormat.printer().print(entry.getKey().getKey());
+            return getComapctJson(jsonString);
+        } catch (Exception e) {
+            log.error("invalid key: ", e);
+            return "";
+        }
+    }
+
+    public static String printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getPayload() == null) {
             log.error("payload is NULL");
-            return;
+            return "";
         }
 
         try {
             builder = new StringBuilder("\nPayload:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
             System.out.println(builder.toString());
+
+            String jsonString = JsonFormat.printer().print(entry.getValue().getPayload());
+            return getComapctJson(jsonString);
         } catch (Exception e) {
             //log.error("invalid payload: ", e);
+            return "";
         }
     }
 
