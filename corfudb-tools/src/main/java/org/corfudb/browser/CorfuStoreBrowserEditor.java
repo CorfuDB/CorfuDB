@@ -31,7 +31,9 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
 import javax.annotation.Nonnull;
@@ -120,25 +122,27 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Namespace: " + namespace);
         System.out.println("TableName: " + tableName);
 
-        String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+        var fullTableName = FullyQualifiedTableName.build(namespace, tableName);
 
+        Object[] arguments;
         if (diskPath == null) {
-            return runtime.getObjectsView().<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
-                            .setStreamName(fullTableName)
-                            .setSerializer(dynamicProtobufSerializer)
-                            .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
-                            .open();
+            arguments = new Object[]{};
         } else {
-            final PersistenceOptions persistenceOptions = PersistenceOptions.builder()
-                    .dataPath(Paths.get(diskPath)).build();
-            return runtime.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
-                    .setStreamName(fullTableName)
-                    .setSerializer(dynamicProtobufSerializer)
-                    .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
-                    .setArguments(persistenceOptions, dynamicProtobufSerializer)
-                    .open();
+            var opts = PersistenceOptions.builder()
+                    .dataPath(Paths.get(diskPath))
+                    .build();
+            arguments = new Object[]{opts, dynamicProtobufSerializer};
         }
 
+        var smrCfg = SmrObjectConfig
+                .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .streamName(fullTableName.toStreamName())
+                .serializer(dynamicProtobufSerializer)
+                .arguments(arguments)
+                .build();
+
+        return runtime.getObjectsView().open(smrCfg);
     }
 
     /**
@@ -288,7 +292,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     @Override
     public int printTableInfo(String namespace, String tablename) {
         System.out.println("\n======================\n");
-        String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
+        String fullName = FullyQualifiedTableName.build(namespace, tablename).toFqdn();
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
@@ -340,7 +344,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     @Override
     public int clearTable(String namespace, String tablename) {
         System.out.println("\n======================\n");
-        String fullName = TableRegistry.getFullyQualifiedTableName(namespace, tablename);
+        String fullName = FullyQualifiedTableName.build(namespace, tablename).toFqdn();
         UUID streamUUID = UUID.nameUUIDFromBytes(fullName.getBytes());
         try {
             runtime.getObjectsView().TXBegin();
@@ -467,9 +471,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     public CorfuDynamicRecord editRecord(String namespace, String tableName,
                                          String keyToEdit, String newRecord) {
         System.out.println("\n======================\n");
-        String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
-            tableName);
-        UUID streamUUID = CorfuRuntime.getStreamID(fullName);
+        UUID streamUUID = FullyQualifiedTableName.streamId(namespace, tableName).getId();
 
         TableName tableNameProto = TableName.newBuilder().setTableName(tableName)
             .setNamespace(namespace).build();
@@ -569,9 +571,8 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     @SuppressWarnings("checkstyle:magicnumber")
     public int deleteRecords(String namespace, String tableName, List<String> keysToDelete, int batchSize) {
         System.out.println("\n======================\n");
-        String fullName = TableRegistry.getFullyQualifiedTableName(namespace,
-                tableName);
-        UUID streamUUID = CorfuRuntime.getStreamID(fullName);
+        FullyQualifiedTableName fullName = FullyQualifiedTableName.build(namespace, tableName);
+        UUID streamUUID = fullName.toStreamId().getId();
 
         System.out.println("\nDeleting "+keysToDelete.size()+" records"+
                 " in table " + tableName + " and namespace " + namespace +

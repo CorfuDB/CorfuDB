@@ -1,6 +1,14 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.With;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -22,6 +30,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -288,5 +298,79 @@ public class StreamsView extends AbstractView {
     @VisibleForTesting
     List<IStreamView> getOpenedStreams() {
         return openedStreams;
+    }
+
+    @Builder
+    @Getter
+    @EqualsAndHashCode
+    @ToString
+    public static class StreamName {
+
+        @With
+        private final StreamId id;
+        @Default
+        @With
+        private final Optional<String> name = Optional.empty();
+
+        public static StreamName build(StreamId id) {
+            return new StreamName(id, Optional.empty());
+        }
+
+        public static StreamName build(String name) {
+            return new StreamName(StreamId.build(name), Optional.of(name));
+        }
+
+        public static class StreamNameBuilder {
+
+            public StreamName build() {
+                if (id == null && name$value.isEmpty()) {
+                    throw new IllegalStateException("Empty id and stream name");
+                }
+
+                // Build stream id from a name in case if the name has been set
+                if (id == null) {
+                    id = StreamId.build(name$value.get());
+                }
+
+                verify();
+                return new StreamName(id, name$value);
+            }
+
+            private void verify() {
+                name$value.ifPresent(streamName -> {
+                    var nameForId = StreamId.build(streamName);
+
+                    if (!Objects.equals(nameForId, id)) {
+                        throw new IllegalArgumentException("Stream id must be derived from stream name");
+                    }
+                });
+            }
+        }
+    }
+
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @ToString
+    public static class StreamId {
+        @Getter
+        private final UUID id;
+
+        /**
+         * Get a UUID for a named stream.
+         *
+         * @param string The name of the stream.
+         * @return The ID of the stream.
+         */
+        public static StreamId build(String string) {
+            return new StreamId(UUID.nameUUIDFromBytes(string.getBytes()));
+        }
+
+        public static StreamId buildCkpStreamId(UUID streamId) {
+            return build(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+        }
+
+        public static StreamId buildCkpStreamId(String streamName) {
+            return buildCkpStreamId(CorfuRuntime.getStreamID(streamName));
+        }
     }
 }

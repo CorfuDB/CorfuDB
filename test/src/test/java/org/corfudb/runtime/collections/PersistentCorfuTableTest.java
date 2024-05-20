@@ -1,27 +1,30 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.Basketball;
 import org.corfudb.runtime.ExampleSchemas.Company;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.ExampleSchemas.SportsProfessional;
 import org.corfudb.runtime.ExampleSchemas.Uuid;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
+import org.corfudb.runtime.view.SMRObject.SmrTableConfig;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.test.TestSchema;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
@@ -30,10 +33,8 @@ import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,31 +71,15 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
     private static final String someNamespace = "some-namespace";
     private static final String someTable = "some-table";
-
-    /**
-     * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
-     * Note: This is same as used in Any.proto.
-     */
-    private String getTypeUrl(Descriptors.Descriptor descriptor) {
-        return "type.googleapis.com/" + descriptor.getFullName();
-    }
-
-    /**
-     * Fully qualified table name created to produce the stream uuid.
-     */
-    private String getFullyQualifiedTableName(String namespace, String tableName) {
-        return namespace + "$" + tableName;
-    }
-
-    /**
-     * Adds the schema to the class map to enable serialization of this table data.
-     */
-    private <T extends Message> void addTypeToClassMap(@Nonnull final CorfuRuntime runtime, T msg) {
-        String typeUrl = getTypeUrl(msg.getDescriptorForType());
-        // Register the schemas to schema table.
-        ((ProtobufSerializer)runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
-                .getClassMap().put(typeUrl, msg.getClass());
-    }
+    private static final FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build(someNamespace, someTable);
+    private static final TableDescriptor<TestSchema.Uuid, TestSchema.Uuid, TestSchema.Uuid> UUID_DESCRIPTOR =
+            TableDescriptor
+                    .<TestSchema.Uuid, TestSchema.Uuid, TestSchema.Uuid>builder()
+                    .kClass(TestSchema.Uuid.class)
+                    .vClass(TestSchema.Uuid.class)
+                    .mClass(TestSchema.Uuid.class)
+                    .withSchema(false)
+                    .build();
 
     /**
      * Register a giver serializer with a given runtime.
@@ -111,62 +96,30 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     }
 
     private void openTable() {
-        corfuTable = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                TestSchema.Uuid.class,
-                TestSchema.Uuid.class,
-                TestSchema.Uuid.class,
-                null
-        );
+        corfuTable = openTable(rt, UUID_DESCRIPTOR);
     }
 
     @SneakyThrows
     private <K extends Message, V extends Message, M extends Message>
-    PersistentCorfuTable<K, CorfuRecord<V, M>> openTable(@Nonnull final CorfuRuntime runtime,
-                                                         @Nonnull final String namespace,
-                                                         @Nonnull final String tableName,
-                                                         @Nonnull final Class<K> kClass,
-                                                         @Nonnull final Class<V> vClass,
-                                                         @Nullable final Class<M> mClass,
-                                                         @Nullable final CorfuOptions.SchemaOptions schemaOptions) {
+    PersistentCorfuTable<K, CorfuRecord<V, M>> openTable(CorfuRuntime runtime, TableDescriptor<K, V, M> descriptor) {
 
-        K defaultKeyMessage = (K) kClass.getMethod("getDefaultInstance").invoke(null);
-        addTypeToClassMap(runtime, defaultKeyMessage);
+        var serializer = new ProtobufSerializer(descriptor);
+        runtime.getSerializers().registerSerializer(serializer);
 
-        V defaultValueMessage = (V) vClass.getMethod("getDefaultInstance").invoke(null);
-        addTypeToClassMap(runtime, defaultValueMessage);
+        var tableCfg =  SmrTableConfig.builder()
+                .streamName(fqTableName.toStreamName())
+                .openOption(ObjectOpenOption.CACHE)
+                .arguments(descriptor.getArgs())
+                .build();
 
-        if (mClass != null) {
-            M defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
-            addTypeToClassMap(runtime, defaultMetadataMessage);
-        }
+        var smrConfig = SmrObjectConfig
+                .<PersistentCorfuTable<K, CorfuRecord<V, M>>>builder()
+                .type(PersistentCorfuTable.getTypeToken())
+                .serializer(serializer)
+                .tableConfig(tableCfg)
+                .build();
 
-        final String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
-        PersistentCorfuTable<K, CorfuRecord<V, M>> table = new PersistentCorfuTable<>();
-
-        Object[] args = {};
-
-        // If no schema options are provided, omit secondary indexes.
-        if (schemaOptions != null) {
-            args = new Object[]{new ProtobufIndexer(defaultValueMessage, schemaOptions)};
-        }
-
-        table.setCorfuSMRProxy(new MVOCorfuCompileProxy(
-                runtime,
-                UUID.nameUUIDFromBytes(fullyQualifiedTableName.getBytes()),
-                ImmutableCorfuTable.<K, CorfuRecord<V, M>>getTypeToken().getRawType(),
-                PersistentCorfuTable.class,
-                args,
-                runtime.getSerializers().getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE),
-                new HashSet<UUID>(),
-                table,
-                ObjectOpenOption.CACHE,
-                rt.getObjectsView().getMvoCache()
-                ));
-
-        return table;
+        return rt.getObjectsView().open(smrConfig);
     }
 
     //TODO(George): current test needs human observation to verify the optimization
@@ -182,8 +135,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         openTable();
 
         for (int i = 0; i < 100; i++) {
-            TestSchema.Uuid uuidMsg = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value1 = new CorfuRecord(uuidMsg, uuidMsg);
+            var uuidMsg = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            var value1 = new CorfuRecord<>(uuidMsg, uuidMsg);
             corfuTable.insert(uuidMsg, value1);
         }
 
@@ -232,7 +185,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         TestSchema.Uuid key1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
         TestSchema.Uuid payload1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
         TestSchema.Uuid metadata1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
-        CorfuRecord value1 = new CorfuRecord(payload1, metadata1);
+        var value1 = new CorfuRecord<>(payload1, metadata1);
 
         rt.getObjectsView().TXBegin();
 
@@ -261,9 +214,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer(rt2, new ProtobufSerializer(new ConcurrentHashMap<>()));
 
-        PersistentCorfuTable<TestSchema.Uuid, CorfuRecord<TestSchema.Uuid, TestSchema.Uuid>> ct =
-                openTable(rt2, someNamespace, someTable, TestSchema.Uuid.class, TestSchema.Uuid.class, TestSchema.Uuid.class, null);
-
+        var ct = openTable(rt2, UUID_DESCRIPTOR);
 
         assertThat(ct.get(key1).getPayload().getLsb()).isEqualTo(payload1.getLsb());
         assertThat(ct.get(key1).getPayload().getMsb()).isEqualTo(payload1.getMsb());
@@ -284,7 +235,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         TestSchema.Uuid key1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
         TestSchema.Uuid payload1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
         TestSchema.Uuid metadata1 = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
-        CorfuRecord value1 = new CorfuRecord(payload1, metadata1);
+        var value1 = new CorfuRecord<>(payload1, metadata1);
 
         rt.getObjectsView().TXBegin();
 
@@ -304,7 +255,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         TestSchema.Uuid key2 = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
         TestSchema.Uuid payload2 = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
         TestSchema.Uuid metadata2 = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
-        CorfuRecord value2 = new CorfuRecord(payload2, metadata2);
+        var value2 = new CorfuRecord<>(payload2, metadata2);
 
         TestSchema.Uuid nonExistingKey = TestSchema.Uuid.newBuilder().setLsb(3).setMsb(3).build();
 
@@ -376,7 +327,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
+            var value = new CorfuRecord<>(payload, metadata);
             corfuTable.insert(key, value);
         }
         rt.getObjectsView().TXEnd();
@@ -387,7 +338,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
             TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
             TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
-            CorfuRecord value = new CorfuRecord(payload, metadata);
+            var value = new CorfuRecord<>(payload, metadata);
             corfuTable.insert(key, value);
         }
         rt.getObjectsView().TXEnd();
@@ -512,16 +463,16 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         UUID streamB = UUID.randomUUID();
 
         PersistentCorfuTable<String, String> tableA = rt.getObjectsView()
-                .build()
+                .<PersistentCorfuTable<String, String>>build()
                 .setStreamID(streamA)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .addOpenOption(ObjectOpenOption.CACHE)
                 .open();
 
         PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
-                .build()
+                .<PersistentCorfuTable<String, String>>build()
                 .setStreamID(streamB)
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -560,15 +511,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                null
-        );
+        var descriptor = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, false);
+        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(rt, descriptor);
 
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
@@ -605,19 +549,11 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         rt.getObjectsView().TXBegin();
-        List<Map.Entry<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>>>
-                entries = toList(table.getByIndex(() -> "anotherKey", 0));
+        var entries = toList(table.getByIndex(() -> "anotherKey", 0));
         assertThat(entries).isEmpty();
 
         entries = toList(table.getByIndex(() -> "uuid", Uuid.getDefaultInstance()));
@@ -639,15 +575,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         final UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
         Uuid key1 = Uuid.newBuilder()
@@ -698,15 +627,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
         final long numEntries = 10;
@@ -789,15 +711,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleValue.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleValue.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         // Create 100 records.
         final int totalRecords = 100;
@@ -880,15 +795,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<Company, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                Company.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(Company.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, Company.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         final int totalCompanies = 100;
         List<ExampleSchemas.Department> departments = createApartments();
@@ -1003,15 +911,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Person, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleSchemas.Person.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleSchemas.Person.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Person.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         // Create 10 records.
         final int people = 10;
@@ -1071,15 +972,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Office, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleSchemas.Office.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleSchemas.Office.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Office.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         // Create 6 records.
         final int numOffices = 6;
@@ -1161,15 +1055,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.Adult, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleSchemas.Adult.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleSchemas.Adult.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Adult.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
         final int adultCount = 50;
@@ -1255,22 +1142,15 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        PersistentCorfuTable<Uuid, CorfuRecord<ExampleSchemas.SportsProfessional, ManagedMetadata>> table = openTable(
-                rt,
-                someNamespace,
-                someTable,
-                Uuid.class,
-                ExampleSchemas.SportsProfessional.class,
-                ManagedMetadata.class,
-                TableOptions.fromProtoSchema(ExampleSchemas.SportsProfessional.class).getSchemaOptions()
-        );
+        var desc = new TableDescriptor<>(Uuid.class, SportsProfessional.class, ManagedMetadata.class, true);
+        var table = openTable(rt, desc);
 
         // Define a player and set only (1) oneOf type, then query for the unset field to confirm this
         // is indexed as NULL (i.e., not set)
-        ExampleSchemas.SportsProfessional player1 = ExampleSchemas.SportsProfessional.newBuilder()
+        SportsProfessional player1 = SportsProfessional.newBuilder()
                 .setPerson(ExampleSchemas.Person.newBuilder().setName("Michael Jordan").build())
                 // Set Basket as profession (oneOf field) so query for Baseball as profession
-                .setProfession(ExampleSchemas.Hobby.newBuilder().setBasket(ExampleSchemas.Basketball.newBuilder().setTeam("Chicago Bulls").build()).build())
+                .setProfession(ExampleSchemas.Hobby.newBuilder().setBasket(Basketball.newBuilder().setTeam("Chicago Bulls").build()).build())
                 // Set Baseball as hobby (oneOf field) so query for Basket as hobby
                 .addHobby(ExampleSchemas.Hobby.newBuilder().setBaseball(ExampleSchemas.Baseball.newBuilder().build()).build())
                 // Do not define any sub-field of repeated type (Exercises) and confirmed its indexed as NULL
@@ -1278,7 +1158,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .build();
 
         // Define a player which does not have any indexed sub-field set (therefore, it should be indexed as NULL)
-        ExampleSchemas.SportsProfessional playerUndefined = ExampleSchemas.SportsProfessional.newBuilder()
+        SportsProfessional playerUndefined = SportsProfessional.newBuilder()
                 .setPerson(ExampleSchemas.Person.newBuilder().setName("Undefined").build())
                 // Don't set any 'oneOf' sport for profession (sub-field)
                 .setProfession(ExampleSchemas.Hobby.newBuilder().build())
@@ -1314,7 +1194,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         // Query secondary indexes
         // (1) Repeated field followed by oneOf field (e.g., hobby.sport)
         rt.getObjectsView().TXBegin();
-        List<Map.Entry<Uuid, CorfuRecord<ExampleSchemas.SportsProfessional, ManagedMetadata>>>
+        List<Map.Entry<Uuid, CorfuRecord<SportsProfessional, ManagedMetadata>>>
                 entries = toList(table.getByIndex(() -> "basketAsHobby", null));
         assertThat(entries.size()).isEqualTo(2);
         rt.getObjectsView().TXEnd();
@@ -1339,15 +1219,15 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
      */
     @Test
     public void testTableNoUpdateInterleave() {
-        PersistentCorfuTable<String, String>
-                table1 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+        PersistentCorfuTable<String, String> table1 = getDefaultRuntime().getObjectsView()
+                .<PersistentCorfuTable<String, String>>build()
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName("t1")
                 .open();
 
-        PersistentCorfuTable<String, String>
-                table2 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+        PersistentCorfuTable<String, String> table2 = getDefaultRuntime().getObjectsView()
+                .<PersistentCorfuTable<String, String>>build()
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName("t2")
                 .open();
 
@@ -1424,8 +1304,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .parseConfigurationString(getDefaultConfigurationString())
                 .connect();
 
-        PersistentCorfuTable<String, String> table1 = rt.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+        PersistentCorfuTable<String, String> table1 = rt.getObjectsView()
+                .<PersistentCorfuTable<String, String>>build()
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName("t1")
                 .open();
 
@@ -1450,8 +1331,9 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .when(spyAddressSpaceView)
                 .read(eq(triggerAddress), any(), any());
 
-        table1 = spyRt.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+        table1 = spyRt.getObjectsView()
+                .<PersistentCorfuTable<String, String>>build()
+                .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName("t1")
                 .open();
 

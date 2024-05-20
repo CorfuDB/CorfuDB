@@ -1,5 +1,6 @@
 package org.corfudb.util.serializer;
 
+import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import io.netty.buffer.ByteBuf;
@@ -8,6 +9,7 @@ import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -21,8 +23,11 @@ import java.util.UUID;
 public class JsonSerializer implements ISerializer {
     private final byte type;
 
-    private static final Gson gson = new GsonBuilder()
-            .create();
+    private static final Gson gson = new GsonBuilder().create();
+
+    public JsonSerializer() {
+        this.type = SerializerType.JSON.toByte();
+    }
 
     public JsonSerializer(byte type) {
         this.type = type;
@@ -53,9 +58,10 @@ public class JsonSerializer implements ISerializer {
             b.readBytes(smrClassNameBytes, 0, smrClassNameLength);
             String smrClassName = new String(smrClassNameBytes);
             try {
+                var tableType = (Class<? extends ICorfuSMR<?>>) Class.forName(smrClassName);
                 return rt.getObjectsView().build()
                         .setStreamID(new UUID(b.readLong(), b.readLong()))
-                        .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
+                        .setTypeToken(new TypeToken<>(tableType) {})
                         .open();
             } catch (ClassNotFoundException cnfe) {
                 log.error("Exception during deserialization!", cnfe);

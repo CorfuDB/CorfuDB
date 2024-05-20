@@ -1,8 +1,9 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -20,24 +21,31 @@ import javax.annotation.Nullable;
  */
 
 @EqualsAndHashCode
+@AllArgsConstructor
 public class TableSchema<K extends Message, V extends Message, M extends Message> {
-    @Getter
     private final String tableName;
 
-    @Getter
-    private final Class<K> keyClass;
+    private final TableDescriptor<K, V, M> descriptor;
 
-    @Getter
-    private final Class<V> payloadClass;
-
-    @Getter
-    private final Class<M> metadataClass;
-
+    @Deprecated
     public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass, @Nullable Class<M> metadataClass) {
-        this.tableName = tableName;
-        this.keyClass = keyClass;
-        this.payloadClass = payloadClass;
-        this.metadataClass = metadataClass;
+        this(tableName, new TableDescriptor<>(keyClass, payloadClass, metadataClass, true));
+    }
+
+    public String getTableName() {
+        return this.tableName;
+    }
+
+    public Class<K> getKeyClass() {
+        return descriptor.getKClass();
+    }
+
+    public Class<V> getPayloadClass() {
+        return descriptor.getVClass();
+    }
+
+    public Class<M> getMetadataClass() {
+        return descriptor.getMClass();
     }
 }

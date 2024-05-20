@@ -34,9 +34,7 @@ import java.util.stream.StreamSupport;
  */
 @Slf4j
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-public class ImmutableCorfuTable<K, V> implements
-        SnapshotGenerator<ImmutableCorfuTable<K, V>>,
-        ConsistencyView {
+public class ImmutableCorfuTable<K, V> implements SnapshotGenerator<ImmutableCorfuTable<K, V>>{
 
     // The "main" map which contains the primary key-value mappings.
     private final Map<K, V> mainMap;

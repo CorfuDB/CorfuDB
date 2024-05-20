@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -16,7 +17,7 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -24,10 +25,10 @@ import org.corfudb.util.serializer.ISerializer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Slf4j
-public class MVOCorfuCompileProxy<
-        S extends SnapshotGenerator<S> & ConsistencyView>
+public class MVOCorfuCompileProxy<S extends SnapshotGenerator<S>>
         implements ICorfuSMRProxy<S> {
 
     @Getter
@@ -35,48 +36,34 @@ public class MVOCorfuCompileProxy<
 
     private final CorfuRuntime rt;
 
-    private final UUID streamID;
+    private final SmrObjectConfig<? extends ICorfuSMR<?>> config;
 
-    private final Class<?> type;
-    private final Class<?> wrapperType;
-
-
-    @Getter
-    private final ISerializer serializer;
-
-    @Getter
-    private final Set<UUID> streamTags;
-
-    private final Object[] args;
-
-    private final ObjectOpenOption objectOpenOption;
-
-    public MVOCorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<S> type, Class<?> wrapperType,
-                                Object[] args, ISerializer serializer, Set<UUID> streamTags,
-                                ICorfuSMR wrapperObject, ObjectOpenOption objectOpenOption,
-                                MVOCache<S> mvoCache) {
+    public MVOCorfuCompileProxy(
+            CorfuRuntime rt, SmrObjectConfig<? extends ICorfuSMR<?>> cfg,
+            ICorfuSMR<?> smrTableInstance, MVOCache<S> mvoCache
+    ) {
         this.rt = rt;
-        this.streamID = streamID;
-        this.type = type;
-        this.wrapperType = wrapperType;
-        this.args = args;
-        this.serializer = serializer;
-        this.streamTags = streamTags;
-        this.objectOpenOption = objectOpenOption;
+        this.config = cfg;
+        Supplier<S> newInstanceAction = () -> ClassUtils.cast(getNewInstance());
+
         this.underlyingMVO = new MultiVersionObject<>(
                 rt,
-                this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject,
+                newInstanceAction,
+                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(getStreamID())),
+                smrTableInstance,
                 mvoCache,
-                objectOpenOption
+                config.getTableConfig().getOpenOption()
         );
     }
 
     @Override
     public <R> R access(ICorfuSMRAccess<R, S> accessMethod, Object[] conflictObject) {
-        return MicroMeterUtils.time(() -> accessInner(accessMethod, conflictObject),
-                "mvo.read.timer", "streamId", streamID.toString());
+        return MicroMeterUtils.time(
+                () -> accessInner(accessMethod, conflictObject),
+                "mvo.read.timer",
+                "streamId",
+                getStreamID().toString()
+        );
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, S> accessMethod,
@@ -106,7 +93,7 @@ public class MVOCorfuCompileProxy<
     public long logUpdate(String smrUpdateFunction, Object[] conflictObject, Object... args) {
         return MicroMeterUtils.time(
                 () -> logUpdateInner(smrUpdateFunction, conflictObject, args),
-                "mvo.write.timer", "streamId", streamID.toString());
+                "mvo.write.timer", "streamId", getStreamID().toString());
     }
 
     private long logUpdateInner(String smrUpdateFunction,
@@ -117,7 +104,7 @@ public class MVOCorfuCompileProxy<
         if (TransactionalContext.isInTransaction()) {
             try {
                 // We generate an entry to avoid exposing the serializer to the tx context.
-                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+                SMREntry entry = new SMREntry(smrUpdateFunction, args, getSerializer());
                 return TransactionalContext.getCurrentContext()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
@@ -128,7 +115,7 @@ public class MVOCorfuCompileProxy<
 
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
-        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
+        SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, getSerializer());
         long address = underlyingMVO.logUpdate(smrEntry);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
@@ -137,14 +124,19 @@ public class MVOCorfuCompileProxy<
 
     @Override
     public UUID getStreamID() {
-        return streamID;
+        return config.getTableConfig().getStreamName().getId().getId();
+    }
+
+    @Override
+    public Set<UUID> getStreamTags() {
+        return config.getTableConfig().getStreamTags();
     }
 
     private S getNewInstance() {
         try {
-            S ret = (S) ReflectionUtils
-                    .findMatchingConstructor(type.getDeclaredConstructors(), args);
-            return ret;
+            var constructors = config.tableImplementationType().getDeclaredConstructors();
+            Object ret = ReflectionUtils.findMatchingConstructor(constructors, config.getTableConfig().getArguments());
+            return ClassUtils.cast(ret);
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new RuntimeException(e);
         }
@@ -152,7 +144,7 @@ public class MVOCorfuCompileProxy<
 
     @Override
     public String toString() {
-        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
+        return config.tableImplementationType().getSimpleName() + "[" + Utils.toReadableId(getStreamID()) + "]";
     }
 
     private void abortTransaction(Exception e) {
@@ -199,14 +191,22 @@ public class MVOCorfuCompileProxy<
 
     @Override
     public boolean isObjectCached() {
-        return objectOpenOption.equals(ObjectOpenOption.CACHE);
+        return config.getTableConfig().getOpenOption() == ObjectOpenOption.CACHE;
+    }
+
+    @Override
+    public ISerializer getSerializer() {
+        return config.getSerializer();
     }
 
     @Override
     public void close() {
         // Remove this object from the object cache.
         // This prevents a cached version from being returned in the future.
-        rt.getObjectsView().getObjectCache().remove(new ObjectsView.ObjectID(streamID, wrapperType));
+        rt.getObjectsView()
+                .getObjectCache()
+                .remove(config.getObjectId());
         getUnderlyingMVO().close();
     }
 }
+

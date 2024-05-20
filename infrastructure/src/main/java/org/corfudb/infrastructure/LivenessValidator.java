@@ -13,7 +13,8 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.StreamsView.StreamId;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,10 +127,12 @@ public class LivenessValidator {
 
     @VisibleForTesting
     public long getCpStreamTail(TableName table) {
-        String cpStreamName = TableRegistry.getFullyQualifiedTableName(table.getNamespace(), table.getTableName());
-        UUID cpStreamId = CorfuRuntime.getCheckpointStreamIdFromName(cpStreamName);
-        return corfuRuntime.getSequencerView()
-                .getStreamAddressSpace(new StreamAddressRange(cpStreamId, Address.MAX, Address.NON_ADDRESS)).getTail();
+        FullyQualifiedTableName cpStreamName = FullyQualifiedTableName.build(table);
+        UUID cpStreamId = StreamId.buildCkpStreamId(cpStreamName.toFqdn()).getId();
+        return corfuRuntime
+                .getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(cpStreamId, Address.MAX, Address.NON_ADDRESS))
+                .getTail();
     }
 
     private int getIdleCount() {
@@ -159,7 +162,7 @@ public class LivenessValidator {
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload());
             txn.commit();
-            log.trace("ManagerStatus: {}", managerStatus.get().getStatus().toString());
+            log.trace("ManagerStatus: {}", managerStatus.get().getStatus());
         } catch (Exception e) {
             log.warn("Unable to acquire Manager Status, ", e);
         }

@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplication
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,7 +18,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * This class represents any Log Replication Configuration,
@@ -50,11 +50,13 @@ public class LogReplicationConfig {
     // Percentage of log data per log replication message
     public static final int DATA_FRACTION_PER_MSG = 90;
 
-    public static final UUID REGISTRY_TABLE_ID = CorfuRuntime.getStreamID(
-            getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME));
+    public static final UUID REGISTRY_TABLE_ID = FullyQualifiedTableName
+            .streamId(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME)
+            .getId();
 
-    public static final UUID PROTOBUF_TABLE_ID = CorfuRuntime.getStreamID(
-            getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME));
+    public static final UUID PROTOBUF_TABLE_ID = FullyQualifiedTableName
+            .streamId(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)
+            .getId();
 
     // Set of streams that shouldn't be cleared on snapshot apply phase, as these
     // streams should be the result of "merging" the replicated data (from active) + local data (on standby).
