@@ -42,5 +42,5 @@ jobs:
 
       - name: Run universe tests
         run: |
-          ./mvnw -Dmaven.javadoc.skip=true -DskipTests -T 1C clean install
-          ./mvnw -pl :universe -Puniverse -Dmaven.javadoc.skip=true verify
+          ./mvnw -Dmaven.javadoc.skip=true -DskipTests -Dorg.slf4j.simpleLogger.defaultLogLevel=error -T 1C clean install
+          ./mvnw -pl :universe -Puniverse -Dmaven.javadoc.skip=true -Dorg.slf4j.simpleLogger.defaultLogLevel=error verify

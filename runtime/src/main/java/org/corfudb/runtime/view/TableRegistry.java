@@ -594,11 +594,12 @@ public class TableRegistry {
         getSerializer().registerTypes(descriptor);
 
         // persistentDataPath is deprecated and needs to be removed.
-        PersistenceOptions persistenceOptions =
-                tableOptions.getPersistenceOptions();
+        PersistenceOptions persistenceOptions = tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
-            persistenceOptions = tableOptions.getPersistenceOptions().toBuilder().setDataPath(
-                    tableOptions.getPersistentDataPath().get().toString()).build();
+            persistenceOptions = persistenceOptions
+                    .toBuilder()
+                    .setDataPath(tableOptions.getPersistentDataPath().get().toString())
+                    .build();
         }
 
         CorfuOptions.SchemaOptions tableSchemaOptions;

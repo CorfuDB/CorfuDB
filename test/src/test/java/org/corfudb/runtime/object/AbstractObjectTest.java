@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
 
 /**
@@ -23,7 +22,7 @@ public class AbstractObjectTest extends AbstractViewTest {
      * @param <T> the return class
      * @return an object instance of type T backed by a stream named 'name'
      */
-    protected <T extends ICorfuSMR<?>> T instantiateCorfuObject(
+    protected <T extends ICorfuSMR> T instantiateCorfuObject(
             CorfuRuntime r, Class<T> tClass, String name) {
         // stream name
         // object class backed by this stream
@@ -31,7 +30,7 @@ public class AbstractObjectTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name
-                .setType(tClass)        // object class backed by this stream
+                .setTypeToken(new TypeToken<T>(){})        // object class backed by this stream
                 .open();                // instantiate the object!
     }
 
@@ -55,21 +54,17 @@ public class AbstractObjectTest extends AbstractViewTest {
      */
     protected <T extends ICorfuSMR> Object instantiateCorfuObject(
             CorfuRuntime r, TypeToken<T> tType, String name) {
-        if (tType.getRawType() == PersistentCorfuTable.class) {
-            return r.getObjectsView()
-                    .build()
-                    .setStreamName(name)     // stream name
-                    .setTypeToken(tType)    // a TypeToken of the specified class
-                    .open();                // instantiate the object!
-        } else {
-            return r.getObjectsView()
-                    .build()
-                    .setStreamName(name)     // stream name
-                    .setTypeToken(tType)    // a TypeToken of the specified class
-                    .open();                // instantiate the object!
-        }
+        // stream name
+        // a TypeToken of the specified class
+        // instantiate the object!
+        return r.getObjectsView()
+                .<T>build()
+                .setStreamName(name)     // stream name
+                .setTypeToken(tType)    // a TypeToken of the specified class
+                .open();                // instantiate the object!
 
     }
+
     protected <T extends ICorfuSMR<?>> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
         return instantiateCorfuObject(getRuntime(), tType, name);
     }

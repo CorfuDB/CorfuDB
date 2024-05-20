@@ -18,6 +18,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
@@ -437,14 +438,14 @@ public class StreamingIT extends AbstractIT {
          * @return
          */
         public CorfuStoreEntry<K, V, M> getPreviousRecord(String namespace, String tableName,
-                                                          CorfuStreamEntry entry,
+                                                          CorfuStreamEntry<K, V, M> entry,
                                                           long epoch,
                                                           long sequence) {
             Timestamp prevTimestamp = Timestamp.newBuilder()
                     .setEpoch(epoch)
                     .setSequence(sequence - 1)
                     .build();
-            CorfuStoreEntry<K,V,M> prevRecord = null;
+            CorfuStoreEntry<K,V,M> prevRecord;
             try (TxnContext tx = this.corfuStore.txn(namespace, IsolationLevel.snapshot(prevTimestamp))) {
                 prevRecord = tx.getRecord(tableName, entry.getKey());
                 tx.commit();
@@ -980,7 +981,7 @@ public class StreamingIT extends AbstractIT {
             assertThat(entry.getPayload()).isEqualTo(firstValue);
             snapshotTs = txn.commit();
             assertThat(snapshotTs.getSequence()).isEqualTo(runtime.getSequencerView()
-                    .query(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, defaultTableName))));
+                    .query(FullyQualifiedTableName.streamId(namespace, defaultTableName).getId()));
         }
 
         // Subscribe from latest full sync

@@ -753,7 +753,8 @@ public class CheckpointTest extends AbstractObjectTest {
         CorfuRuntime newRt = getNewRuntime();
 
         persistenceOptions.dataPath(Paths.get(path + tableId + "reader"));
-        try (PersistedCorfuTable<String, String> table = newRt.getObjectsView().build()
+        try (PersistedCorfuTable<String, String> table = newRt.getObjectsView()
+                .build()
                 .setTypeToken(PersistedCorfuTable.<String, String>getTypeToken())
                 .setStreamID(tableId)
                 .setSerializer(Serializers.JSON)

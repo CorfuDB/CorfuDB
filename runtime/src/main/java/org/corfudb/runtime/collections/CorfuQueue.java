@@ -53,8 +53,8 @@ public class CorfuQueue {
     @VisibleForTesting
     CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer) {
         corfuTable = runtime.getObjectsView()
-                .<PersistentCorfuTable<CorfuRecordId, ByteString>>build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .build()
+                .setTypeToken(PersistentCorfuTable.<CorfuRecordId, ByteString>getTypeToken())
                 .setStreamName(streamName)
                 .setSerializer(serializer)
                 .open();

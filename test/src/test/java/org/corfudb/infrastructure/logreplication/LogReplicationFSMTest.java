@@ -47,6 +47,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -979,7 +980,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     private void initLogReplicationFSM(ReaderImplementation readerImpl, boolean waitInSnapshotSync) {
 
-        String fullyQualifiedStreamName = TableRegistry.getFullyQualifiedTableName(TEST_NAMESPACE, TEST_STREAM_NAME);
+        String fullyQualifiedStreamName = FullyQualifiedTableName.build(TEST_NAMESPACE, TEST_STREAM_NAME).toFqdn();
         LogEntryReader logEntryReader = new TestLogEntryReader();
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
                 TEST_LOCAL_CLUSTER_ID);

@@ -463,16 +463,16 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         UUID streamB = UUID.randomUUID();
 
         PersistentCorfuTable<String, String> tableA = rt.getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
+                .build()
                 .setStreamID(streamA)
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .addOpenOption(ObjectOpenOption.CACHE)
                 .open();
 
         PersistentCorfuTable<String, String> tableB = rt.getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
+                .build()
                 .setStreamID(streamB)
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
@@ -1220,14 +1220,14 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     @Test
     public void testTableNoUpdateInterleave() {
         PersistentCorfuTable<String, String> table1 = getDefaultRuntime().getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .build()
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("t1")
                 .open();
 
         PersistentCorfuTable<String, String> table2 = getDefaultRuntime().getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .build()
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("t2")
                 .open();
 
@@ -1305,8 +1305,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .connect();
 
         PersistentCorfuTable<String, String> table1 = rt.getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .build()
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("t1")
                 .open();
 
@@ -1332,8 +1332,8 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
                 .read(eq(triggerAddress), any(), any());
 
         table1 = spyRt.getObjectsView()
-                .<PersistentCorfuTable<String, String>>build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
+                .build()
+                .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                 .setStreamName("t1")
                 .open();
 

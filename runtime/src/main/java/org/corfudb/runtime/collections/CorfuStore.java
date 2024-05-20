@@ -144,6 +144,11 @@ public class CorfuStore {
         return runtime.getTableRegistry().getTable(fqTableName);
     }
 
+    public <K extends Message, V extends Message, M extends Message>
+    Table<K, V, M> getTable(String namespace, String tableName) {
+        return getTable(FullyQualifiedTableName.build(namespace, tableName));
+    }
+
     /**
      * Creates and registers a Queue backed by a Table.
      * A table needs to be registered before it is used.

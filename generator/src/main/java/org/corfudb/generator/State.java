@@ -78,9 +78,9 @@ public class State {
         for (String id : streams.getDataSet()) {
             UUID uuid = CorfuRuntime.getStreamID(id);
             PersistentCorfuTable<String, String> map = runtime.getObjectsView()
-                    .<PersistentCorfuTable<String, String>>build()
+                    .build()
                     .setStreamID(uuid)
-                    .setTypeToken(PersistentCorfuTable.getTypeToken())
+                    .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                     .setArguments(new StringIndexer())
                     .open();
 

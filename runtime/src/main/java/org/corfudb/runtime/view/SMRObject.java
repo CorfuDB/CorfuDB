@@ -136,9 +136,10 @@ public class SMRObject<T extends ICorfuSMR<?>> {
             return this;
         }
 
-        public SMRObject.Builder<T> setTypeToken(TypeToken<T> typeToken) {
-            configBuilder.type(typeToken);
-            return this;
+        @SuppressWarnings("unchecked")
+        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
+            configBuilder.type = (TypeToken<T>) typeToken;
+            return (SMRObject.Builder<R>) this;
         }
 
         public SMRObject.Builder<T> setArguments(Object ... arguments) {

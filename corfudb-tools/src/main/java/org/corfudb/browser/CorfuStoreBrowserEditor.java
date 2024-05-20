@@ -23,7 +23,6 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
@@ -32,6 +31,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.SMRObject.SmrObjectConfig;
+import org.corfudb.runtime.view.SMRObject.SmrTableConfig;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
@@ -134,12 +134,16 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
             arguments = new Object[]{opts, dynamicProtobufSerializer};
         }
 
+        var tableCfg = SmrTableConfig.builder()
+                .streamName(fullTableName.toStreamName())
+                .arguments(arguments)
+                .build();
+
         var smrCfg = SmrObjectConfig
                 .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
                 .type(PersistentCorfuTable.getTypeToken())
-                .streamName(fullTableName.toStreamName())
                 .serializer(dynamicProtobufSerializer)
-                .arguments(arguments)
+                .tableConfig(tableCfg)
                 .build();
 
         return runtime.getObjectsView().open(smrCfg);

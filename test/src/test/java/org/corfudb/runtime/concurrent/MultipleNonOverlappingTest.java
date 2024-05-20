@@ -1,5 +1,6 @@
 package org.corfudb.runtime.concurrent;
 
+import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -233,17 +234,17 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     }
 
     @Override
-    protected <T extends ICorfuSMR> T instantiateCorfuObject(Class<T> tClass, String name) {
+    protected <T extends ICorfuSMR<?>> T instantiateCorfuObject(Class<T> tClass, String name) {
 
         // TODO: Does not work at the moment.
         // corfudb.runtime.exceptions.NoRollbackException: Can't roll back due to non-undoable exception
         // getRuntime().getParameters().setUndoDisabled(true).setOptimisticUndoDisabled(true);
 
-        return (T) getRuntime()
+        return getRuntime()
                 .getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name
-                .setType(tClass)        // object class backed by this stream\
+                .setTypeToken(new TypeToken<T>() {})        // object class backed by this stream\
                 .open();                // instantiate the object!
     }
 }
