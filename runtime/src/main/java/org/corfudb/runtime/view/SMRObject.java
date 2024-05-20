@@ -31,6 +31,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -148,12 +149,17 @@ public class SMRObject<T extends ICorfuSMR<?>> {
         }
 
         public SMRObject.Builder<T> setStreamName(String streamName) {
-            tableConfigBuilder.streamName = StreamName.build(streamName);
+            tableConfigBuilder.streamName(StreamName.build(streamName));
             return this;
         }
 
         public SMRObject.Builder<T> setStreamID(UUID streamId) {
-            tableConfigBuilder.streamName.withId(new StreamId(streamId));
+            if (tableConfigBuilder.streamName == null){
+                var streamName = new StreamName(new StreamId(streamId), Optional.empty());
+                tableConfigBuilder.streamName(streamName);
+            } else {
+                tableConfigBuilder.streamName.withId(new StreamId(streamId));
+            }
             return this;
         }
 
@@ -168,7 +174,7 @@ public class SMRObject<T extends ICorfuSMR<?>> {
         }
 
         public SMRObject.Builder<T> setStreamTags(Set<UUID> tags) {
-            tableConfigBuilder.streamTags(new HashSet<>(tags));
+            tableConfigBuilder.streamTags(tags);
             return this;
         }
 
