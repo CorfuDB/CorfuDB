@@ -149,7 +149,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         final Table<Uuid, Uuid, ManagedResources> table = store.openTable(
                 defaultTableName,
-                new TableDescriptor<>(Uuid.class, Uuid.class, ManagedResources.class, true),
+                TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class),
                 TableOptions.fromProtoSchema(Uuid.class)
         );
 
@@ -251,7 +251,7 @@ public class CorfuStoreIT extends AbstractIT {
         assertThatThrownBy(() -> store3.getTable(nonExistingTableName)).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
-        var descr = new TableDescriptor<>(Uuid.class, Uuid.class, ManagedResources.class, true);
+        var descr = TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class);
         var table1 = store3.openTable(defaultTableName, descr, TableOptions.fromProtoSchema(Uuid.class));
         try (TxnContext txn = store3.txn(defaultTableName.rawNamespace())) {
             CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn

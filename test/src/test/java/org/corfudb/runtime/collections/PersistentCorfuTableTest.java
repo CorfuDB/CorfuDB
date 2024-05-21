@@ -511,7 +511,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var descriptor = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, false);
+        var descriptor = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
         PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(rt, descriptor);
 
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
@@ -549,7 +549,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         rt.getObjectsView().TXBegin();
@@ -575,7 +575,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         final UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
@@ -627,7 +627,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
@@ -711,7 +711,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleValue.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         // Create 100 records.
@@ -795,7 +795,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, Company.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, Company.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         final int totalCompanies = 100;
@@ -911,7 +911,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Person.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleSchemas.Person.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         // Create 10 records.
@@ -972,7 +972,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Office.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleSchemas.Office.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         // Create 6 records.
@@ -1055,7 +1055,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, ExampleSchemas.Adult.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, ExampleSchemas.Adult.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
@@ -1142,7 +1142,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var desc = new TableDescriptor<>(Uuid.class, SportsProfessional.class, ManagedMetadata.class, true);
+        var desc = TableDescriptor.build(Uuid.class, SportsProfessional.class, ManagedMetadata.class);
         var table = openTable(rt, desc);
 
         // Define a player and set only (1) oneOf type, then query for the unset field to confirm this

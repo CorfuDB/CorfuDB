@@ -71,11 +71,7 @@ public class ProtobufSerializer implements ISerializer {
         V defaultValueMessage = descriptor.getDefaultValueMessage();
         addTypeToClassMap(defaultValueMessage);
 
-        M defaultMetadataMessage;
-        if (descriptor.getMClass() != null) {
-            defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
-            addTypeToClassMap(defaultMetadataMessage);
-        }
+        descriptor.metadataHandler(this::addTypeToClassMap);
     }
 
     enum MessageType {

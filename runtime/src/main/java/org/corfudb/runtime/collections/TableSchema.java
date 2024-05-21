@@ -30,7 +30,7 @@ public class TableSchema<K extends Message, V extends Message, M extends Message
     @Deprecated
     public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass, @Nullable Class<M> metadataClass) {
-        this(tableName, new TableDescriptor<>(keyClass, payloadClass, metadataClass, true));
+        this(tableName, TableDescriptor.build(keyClass, payloadClass, metadataClass));
     }
 
     public String getTableName() {

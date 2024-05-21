@@ -5,7 +5,6 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
@@ -66,6 +65,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -234,13 +234,12 @@ public class TableRegistry {
         FileDescriptor valueFileDescriptor = defaultValueMessage.getDescriptorForType().getFile();
         insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, valueFileDescriptor, allDescriptors);
 
-        if (descriptor.mClass != null) {
-            M defaultMetadataMessage = descriptor.getDefaultMetadataMessage();
+        descriptor.metadataHandler(defaultMetadataMessage -> {
             FileDescriptor metaFileDescriptor = defaultMetadataMessage.getDescriptorForType().getFile();
             insertAllDependingFileDescriptorProtos(tableDescriptorsBuilder, metaFileDescriptor, allDescriptors);
             // Add Any for the metadata
             tableDescriptorsBuilder.setMetadata(Any.pack(defaultMetadataMessage));
-        }
+        });
 
         // Add the Any for the key and value
         tableDescriptorsBuilder.setKey(Any.pack(defaultKeyMessage))
@@ -884,7 +883,6 @@ public class TableRegistry {
     }
 
     @Builder
-    @AllArgsConstructor
     @Getter
     public static class TableDescriptor<K extends Message, V extends Message, M extends Message> {
         public static final String DEFAULT_METHOD_NOT_FOUND_ERR_MSG = "The instance doesn't provide the default value";
@@ -898,6 +896,17 @@ public class TableRegistry {
         private final boolean withSchema = true;
 
         private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
+
+        public static <K extends Message, V extends Message, M extends Message>
+        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass) {
+            return TableDescriptor
+                    .<K, V, M>builder()
+                    .kClass(kClass)
+                    .vClass(vClass)
+                    .mClass(mClass)
+                    .withSchema(mClass != null)
+                    .build();
+        }
 
         public SchemaOptions getSchemaOptions() throws Exception {
             return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
@@ -919,7 +928,16 @@ public class TableRegistry {
             }
         }
 
-        public M getDefaultMetadataMessage() {
+        public void metadataHandler(Consumer<M> defaultMetadataHandler) {
+            if (mClass == null) {
+                return;
+            }
+
+            M defaultMessage = getDefaultMetadataMessage();
+            defaultMetadataHandler.accept(defaultMessage);
+        }
+
+        private M getDefaultMetadataMessage() {
             try {
                 return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
             } catch (Exception ex) {

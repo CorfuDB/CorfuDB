@@ -67,6 +67,6 @@ public class TableParameters<K extends Message, V extends Message, M extends Mes
     private final boolean secondaryIndexesDisabled;
 
     public TableDescriptor<K, V, M> getDescriptor() {
-        return new TableDescriptor<>(kClass, vClass, mClass, true);
+        return TableDescriptor.build(kClass, vClass, mClass);
     }
 }

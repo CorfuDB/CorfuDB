@@ -115,6 +115,7 @@ public class CorfuStore {
      * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
      * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
      */
+    @Deprecated
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull final String namespace,
@@ -126,7 +127,7 @@ public class CorfuStore {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                new TableDescriptor<>(kClass, vClass, mClass, true),
+                TableDescriptor.build(kClass, vClass, mClass),
                 tableOptions
         );
     }
@@ -168,7 +169,7 @@ public class CorfuStore {
 
         return runtime.getTableRegistry().openTable(
                 FullyQualifiedTableName.build(namespace, queueName),
-                new TableDescriptor<>(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class, true),
+                TableDescriptor.build(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class),
                 tableOptions
         );
     }
