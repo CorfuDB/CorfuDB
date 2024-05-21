@@ -938,10 +938,14 @@ public class TableRegistry {
         }
 
         private M getDefaultMetadataMessage() {
+            if (mClass == null) {
+                return null;
+            }
+
             try {
                 return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
             } catch (Exception ex) {
-                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
+                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG, ex);
             }
         }
 
