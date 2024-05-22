@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections.streaming;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Message;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -55,12 +56,14 @@ public class StreamingTaskTest {
 
         StreamListener listener = mock(StreamListener.class);
 
-        Table table = mock(Table.class);
+        Table<Message, Message, Message> table = mock(Table.class);
         TableRegistry registry = mock(TableRegistry.class);
         when(runtime.getTableRegistry()).thenReturn(registry);
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+        when(table.getKeyClass()).thenReturn(Message.class);
+        when(table.getValueClass()).thenReturn(Message.class);
 
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
@@ -105,6 +108,8 @@ public class StreamingTaskTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+        when(table.getKeyClass()).thenReturn(Message.class);
+        when(table.getValueClass()).thenReturn(Message.class);
 
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);

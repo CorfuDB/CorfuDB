@@ -901,7 +901,7 @@ public class TableRegistry {
         private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
 
         public static <K extends Message, V extends Message, M extends Message>
-        TableDescriptor<K, V, M> build(@Nonnull Class<K> kClass, Class<V> vClass, Class<M> mClass) {
+        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass) {
             return TableDescriptor
                     .<K, V, M>builder()
                     .kClass(kClass)

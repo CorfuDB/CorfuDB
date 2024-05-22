@@ -54,10 +54,10 @@ public class ObjectBuilderTest {
         assertThatThrownBy(() -> {
             SMRObject.builder()
                     .setCorfuRuntime(rt)
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                    .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                     .open();
         }).isInstanceOf(NullPointerException.class)
-          .hasMessageStartingWith("streamID is marked non-null but is null");
+          .hasMessageStartingWith("streamName is marked non-null but is null");
     }
 
     /**
