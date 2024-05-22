@@ -5,6 +5,8 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors.FileDescriptor;
 import com.google.protobuf.Message;
 import com.google.protobuf.ProtocolStringList;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
@@ -162,13 +164,13 @@ public class TableRegistry {
         try {
             registerTable(
                     FQ_REGISTRY_TABLE_NAME,
-                    new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class, true),
+                    TableDescriptor.build(TableName.class, TableDescriptors.class, TableMetadata.class),
                     TableOptions.fromProtoSchema(TableDescriptors.class)
             );
 
             registerTable(
                     FQ_PROTO_DESC_TABLE_NAME,
-                    new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class, true),
+                    TableDescriptor.build(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
                     TableOptions.fromProtoSchema(ProtobufFileDescriptor.class)
             );
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
@@ -569,7 +571,7 @@ public class TableRegistry {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                new TableDescriptor<>(kClass, vClass, mClass, true),
+                TableDescriptor.build(kClass, vClass, mClass),
                 tableOptions
         );
     }
@@ -801,14 +803,14 @@ public class TableRegistry {
         try {
             allTables.add(wrapInternalTable(
                     REGISTRY_TABLE_NAME,
-                    new TableDescriptor<>(TableName.class, TableDescriptors.class, TableMetadata.class, true),
+                    TableDescriptor.build(TableName.class, TableDescriptors.class, TableMetadata.class),
                     TableOptions.builder().build()
             ));
 
             allTables.add(wrapInternalTable(
                     PROTOBUF_DESCRIPTOR_TABLE_NAME,
-                    new TableDescriptor<>(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class, true),
-                    TableOptions.<TableName, TableDescriptors>builder().build()
+                    TableDescriptor.build(ProtobufFileName.class, ProtobufFileDescriptor.class, TableMetadata.class),
+                    TableOptions.builder().build()
             ));
         } catch (Exception e) {
             log.warn("Unable to wrap into Table object due to {}. StackTrace: {}", e.getMessage(), e.getStackTrace());
@@ -883,6 +885,7 @@ public class TableRegistry {
     }
 
     @Builder
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @Getter
     public static class TableDescriptor<K extends Message, V extends Message, M extends Message> {
         public static final String DEFAULT_METHOD_NOT_FOUND_ERR_MSG = "The instance doesn't provide the default value";
@@ -898,7 +901,7 @@ public class TableRegistry {
         private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
 
         public static <K extends Message, V extends Message, M extends Message>
-        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass) {
+        TableDescriptor<K, V, M> build(@Nonnull Class<K> kClass, Class<V> vClass, Class<M> mClass) {
             return TableDescriptor
                     .<K, V, M>builder()
                     .kClass(kClass)
