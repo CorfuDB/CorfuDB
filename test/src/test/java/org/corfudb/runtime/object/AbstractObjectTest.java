@@ -30,7 +30,7 @@ public class AbstractObjectTest extends AbstractViewTest {
         return r.getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name
-                .setTypeToken(new TypeToken<T>(){})        // object class backed by this stream
+                .setTypeToken(TypeToken.of(tClass))        // object class backed by this stream
                 .open();                // instantiate the object!
     }
 
