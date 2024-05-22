@@ -12,11 +12,9 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.CorfuGuidMsg;
 import org.corfudb.runtime.Queue.CorfuQueueMetadataMsg;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -127,7 +125,7 @@ public class CorfuStore {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                TableDescriptor.build(kClass, vClass, mClass),
+                TableDescriptor.build(kClass, vClass, mClass, tableOptions),
                 tableOptions
         );
     }
@@ -169,7 +167,7 @@ public class CorfuStore {
 
         return runtime.getTableRegistry().openTable(
                 FullyQualifiedTableName.build(namespace, queueName),
-                TableDescriptor.build(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class),
+                TableDescriptor.build(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class, tableOptions),
                 tableOptions
         );
     }

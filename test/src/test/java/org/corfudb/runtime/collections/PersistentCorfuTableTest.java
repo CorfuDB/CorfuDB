@@ -73,13 +73,7 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     private static final String someTable = "some-table";
     private static final FullyQualifiedTableName fqTableName = FullyQualifiedTableName.build(someNamespace, someTable);
     private static final TableDescriptor<TestSchema.Uuid, TestSchema.Uuid, TestSchema.Uuid> UUID_DESCRIPTOR =
-            TableDescriptor
-                    .<TestSchema.Uuid, TestSchema.Uuid, TestSchema.Uuid>builder()
-                    .kClass(TestSchema.Uuid.class)
-                    .vClass(TestSchema.Uuid.class)
-                    .mClass(TestSchema.Uuid.class)
-                    .withSchema(false)
-                    .build();
+            TableDescriptor.build(TestSchema.Uuid.class, TestSchema.Uuid.class, TestSchema.Uuid.class);
 
     /**
      * Register a giver serializer with a given runtime.
@@ -511,7 +505,15 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
 
         setupSerializer();
 
-        var descriptor = TableDescriptor.build(Uuid.class, ExampleValue.class, ManagedMetadata.class);
+        var descriptor = TableDescriptor
+                .<Uuid, ExampleValue, ManagedMetadata>builder()
+                .kClass(Uuid.class)
+                .vClass(ExampleValue.class)
+                .mClass(ManagedMetadata.class)
+                .withSchema(false)
+                .tableOptions(TableOptions.fromProtoSchema(ExampleValue.class))
+                .build();
+
         PersistentCorfuTable<Uuid, CorfuRecord<ExampleValue, ManagedMetadata>> table = openTable(rt, descriptor);
 
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();

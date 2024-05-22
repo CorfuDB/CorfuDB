@@ -26,6 +26,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.ProtobufFileName;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
@@ -71,6 +72,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static org.corfudb.runtime.collections.TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 
 /**
@@ -174,7 +176,7 @@ public class TableRegistry {
                     TableOptions.fromProtoSchema(ProtobufFileDescriptor.class)
             );
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            throw new RuntimeException(e);
+            throw new IllegalStateException(e);
         }
     }
 
@@ -571,7 +573,7 @@ public class TableRegistry {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                TableDescriptor.build(kClass, vClass, mClass),
+                TableDescriptor.build(kClass, vClass, mClass, tableOptions),
                 tableOptions
         );
     }
@@ -898,34 +900,48 @@ public class TableRegistry {
         @Default
         private final boolean withSchema = true;
 
-        private final String defaultInstanceMethodName = TableOptions.DEFAULT_INSTANCE_METHOD_NAME;
+        @NonNull
+        private final TableOptions tableOptions;
 
         public static <K extends Message, V extends Message, M extends Message>
-        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass) {
+        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass, TableOptions tableOpts) {
             return TableDescriptor
                     .<K, V, M>builder()
                     .kClass(kClass)
                     .vClass(vClass)
                     .mClass(mClass)
                     .withSchema(mClass != null)
+                    .tableOptions(tableOpts)
                     .build();
         }
 
-        public SchemaOptions getSchemaOptions() throws Exception {
-            return TableOptions.fromProtoSchema(vClass).getSchemaOptions();
+        public static <K extends Message, V extends Message, M extends Message>
+        TableDescriptor<K, V, M> build(Class<K> kClass, Class<V> vClass, Class<M> mClass) {
+            TableOptions defaultOpts;
+            try {
+                defaultOpts = TableOptions.fromProtoSchema(vClass);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+
+            return build(kClass, vClass, mClass, defaultOpts);
+        }
+
+        public SchemaOptions getSchemaOptions() {
+            return tableOptions.getSchemaOptions();
         }
 
         public V getDefaultValueMessage() {
-            try {
-                return ClassUtils.cast(vClass.getMethod(defaultInstanceMethodName).invoke(null));
-            } catch (Exception ex) {
-                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
-            }
+            return getDefaultMessage(vClass);
         }
 
         public K getDefaultKeyMessage() {
+            return getDefaultMessage(kClass);
+        }
+
+        private static <T> T getDefaultMessage(Class<T> clazz) {
             try {
-                return ClassUtils.cast(kClass.getMethod(defaultInstanceMethodName).invoke(null));
+                return ClassUtils.cast(clazz.getMethod(DEFAULT_INSTANCE_METHOD_NAME).invoke(null));
             } catch (Exception ex) {
                 throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG);
             }
@@ -945,11 +961,7 @@ public class TableRegistry {
                 return null;
             }
 
-            try {
-                return ClassUtils.cast(mClass.getMethod(defaultInstanceMethodName).invoke(null));
-            } catch (Exception ex) {
-                throw new IllegalStateException(DEFAULT_METHOD_NOT_FOUND_ERR_MSG, ex);
-            }
+            return getDefaultMessage(mClass);
         }
 
         public Object[] getArgs() throws Exception {

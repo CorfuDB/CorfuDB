@@ -1163,7 +1163,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 UuidMsg.class,
                 null,
                 null,
-                TableOptions.builder().build())).isExactlyInstanceOf(IllegalArgumentException.class);
+                TableOptions.builder().build())).isExactlyInstanceOf(NullPointerException.class);
 
         assertThatThrownBy(() -> shimStore.openTable(
                 someNamespace,
@@ -1171,7 +1171,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 null,
                 ManagedMetadata.class,
                 null,
-                TableOptions.builder().build())).isExactlyInstanceOf(IllegalArgumentException.class);
+                TableOptions.builder().build())).isExactlyInstanceOf(NullPointerException.class);
     }
 
     /**

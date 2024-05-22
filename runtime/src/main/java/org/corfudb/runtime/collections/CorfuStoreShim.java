@@ -5,6 +5,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -43,15 +44,17 @@ public class CorfuStoreShim {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull String namespace,
-                             @Nonnull String tableName,
-                             @Nonnull Class<K> kClass,
-                             @Nonnull Class<V> vClass,
-                             @Nullable Class<M> mClass,
-                             @Nonnull TableOptions tableOptions)
+    Table<K, V, M> openTable(
+            @Nonnull String namespace, @Nonnull String tableName,
+            @Nonnull Class<K> kClass, @Nonnull Class<V> vClass,
+            @Nullable Class<M> mClass, @Nonnull TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass,
-                TableOptions.fromProtoSchema(vClass, tableOptions));
+        TableOptions tableOpts = TableOptions.fromProtoSchema(vClass, tableOptions);
+        return corfuStore.openTable(
+                FullyQualifiedTableName.build(namespace, tableName),
+                TableDescriptor.build(kClass, vClass, mClass, tableOpts),
+                tableOpts
+        );
     }
 
     /**

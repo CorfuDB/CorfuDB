@@ -17,11 +17,10 @@ public class PersistentCorfuTable<K, V> implements GenericCorfuTable<ImmutableCo
     private ICorfuSMRProxy<ImmutableCorfuTable<K, V>> proxy;
 
     private final Map<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>> upcallTargetMap
-        = ImmutableMap
-            .<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
-            .put("put", (obj, args) -> obj.put(ClassUtils.cast(args[0]), ClassUtils.cast(args[1])))
+            = ImmutableMap.<String, ICorfuSMRUpcallTarget<ImmutableCorfuTable<K, V>>>builder()
+            .put("put", (obj, args) -> obj.put((K) args[0], (V) args[1]))
             .put("clear", (obj, args) -> obj.clear())
-            .put("remove", (obj, args) -> obj.remove(ClassUtils.cast(args[0])))
+            .put("remove", (obj, args) -> obj.remove((K) args[0]))
             .build();
 
     public static <K, V> TypeToken<PersistentCorfuTable<K, V>> getTypeToken() {

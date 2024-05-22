@@ -13,6 +13,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ReadOptions;
@@ -56,14 +57,15 @@ public class StreamingTaskTest {
 
         StreamListener listener = mock(StreamListener.class);
 
-        Table<Message, Message, Message> table = mock(Table.class);
+        Table table = mock(Table.class);
         TableRegistry registry = mock(TableRegistry.class);
         when(runtime.getTableRegistry()).thenReturn(registry);
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
-        when(table.getKeyClass()).thenReturn(Message.class);
-        when(table.getValueClass()).thenReturn(Message.class);
+
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
 
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
@@ -108,8 +110,9 @@ public class StreamingTaskTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
-        when(table.getKeyClass()).thenReturn(Message.class);
-        when(table.getValueClass()).thenReturn(Message.class);
+
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
 
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);

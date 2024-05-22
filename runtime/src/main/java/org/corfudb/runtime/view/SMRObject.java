@@ -101,8 +101,7 @@ public class SMRObject<T extends ICorfuSMR<?>> {
 
     private T getWrapper() {
         try {
-            return new CorfuCompileWrapperBuilder<T>()
-                    .getWrapper(this);
+            return new CorfuCompileWrapperBuilder<T>().getWrapper(this);
         } catch (Exception ex) {
             var errMsg = "Runtime instrumentation no longer supported and no compiled class found for {}";
             log.error(errMsg, smrConfig.type, ex);
