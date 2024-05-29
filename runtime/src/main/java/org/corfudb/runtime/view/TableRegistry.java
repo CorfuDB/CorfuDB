@@ -969,7 +969,7 @@ public class TableRegistry {
             return getDefaultMessage(mClass);
         }
 
-        public Object[] getArgs() throws Exception {
+        public Object[] getArgs() {
             if (withSchema) {
                 return new Object[]{getIndexer()};
             } else {
@@ -977,7 +977,7 @@ public class TableRegistry {
             }
         }
 
-        public ProtobufIndexer getIndexer() throws Exception {
+        public ProtobufIndexer getIndexer() {
             SchemaOptions schemaOptions = getSchemaOptions();
             V msg = getDefaultValueMessage();
             return new ProtobufIndexer(msg, schemaOptions);

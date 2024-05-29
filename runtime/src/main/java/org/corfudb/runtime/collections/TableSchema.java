@@ -3,10 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
-import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Definition of the fully qualified Corfu Store Table initialized with default protobuf instances.
@@ -25,27 +22,11 @@ import javax.annotation.Nullable;
 public class TableSchema<K extends Message, V extends Message, M extends Message> {
     private final String tableName;
 
-    private final TableDescriptor<K, V, M> descriptor;
-
-    @Deprecated
-    public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
-                       @Nonnull Class<V> payloadClass, @Nullable Class<M> metadataClass) {
-        this(tableName, TableDescriptor.build(keyClass, payloadClass, metadataClass));
-    }
+    private final Class<K> keyClass;
+    private final Class<V> payloadClass;
+    private final Class<M> metadataClass;
 
     public String getTableName() {
         return this.tableName;
-    }
-
-    public Class<K> getKeyClass() {
-        return descriptor.getKClass();
-    }
-
-    public Class<V> getPayloadClass() {
-        return descriptor.getVClass();
-    }
-
-    public Class<M> getMetadataClass() {
-        return descriptor.getMClass();
     }
 }
