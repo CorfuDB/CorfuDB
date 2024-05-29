@@ -139,6 +139,8 @@ public class CorfuStoreIT extends AbstractIT {
      */
     @Test
     public void readDataWithDynamicMessages() throws Exception {
+        String namespace = defaultTableName.rawNamespace();
+
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // PHASE 1
@@ -147,10 +149,11 @@ public class CorfuStoreIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
+        var descriptor = TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class);
         final Table<Uuid, Uuid, ManagedResources> table = store.openTable(
                 defaultTableName,
-                TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class),
-                TableOptions.fromProtoSchema(Uuid.class)
+                descriptor,
+                descriptor.getTableOptions()
         );
 
         final long keyUuid = 1L;
@@ -168,7 +171,7 @@ public class CorfuStoreIT extends AbstractIT {
         ManagedResources metadata = ManagedResources.newBuilder()
                 .setCreateTimestamp(keyUuid)
                 .build();
-        TxnContext tx = store.txn(defaultTableName.rawNamespace());
+        TxnContext tx = store.txn(namespace);
         tx.putRecord(table, uuidKey, uuidVal, metadata);
         tx.commit();
 
@@ -181,7 +184,7 @@ public class CorfuStoreIT extends AbstractIT {
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtime);
         runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
 
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>  corfuTable = createCorfuTable(
+        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable = createCorfuTable(
                 runtime, defaultTableName.rawTableName(), dynamicProtobufSerializer
         );
 
@@ -198,26 +201,28 @@ public class CorfuStoreIT extends AbstractIT {
                 }
             });
 
-            corfuTable.insert(key, new CorfuDynamicRecord(
+            CorfuDynamicRecord record = new CorfuDynamicRecord(
                     value.getPayloadTypeUrl(),
                     value.getPayload(),
                     value.getMetadataTypeUrl(),
-                    newMetaBuilder.build()));
-
+                    newMetaBuilder.build()
+            );
+            corfuTable.insert(key, record);
         }
 
         assertThat(corfuTable.size()).isEqualTo(1);
         var mcw = new MultiCheckpointWriter<>();
 
         var tableRegistry = runtime.getObjectsView()
-                .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                .build()
                 .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
+
         var descriptorTable = runtime.getObjectsView()
-                .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>build()
+                .build()
                 .setTypeToken(PersistentCorfuTable.getTypeToken())
                 .setStreamName(FQ_PROTO_DESC_TABLE_NAME.toFqdn())
                 .setSerializer(dynamicProtobufSerializer)
@@ -245,15 +250,15 @@ public class CorfuStoreIT extends AbstractIT {
 
         // Attempting to open a non-existent table should throw NoSuchElementException
         FullyQualifiedTableName nonExistingTableName = FullyQualifiedTableName.build(
-                defaultTableName.rawNamespace(), "NonExistingTableName"
+                namespace, "NonExistingTableName"
         );
 
         assertThatThrownBy(() -> store3.getTable(nonExistingTableName)).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
-        var descr = TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class);
+        var descr = descriptor;
         var table1 = store3.openTable(defaultTableName, descr, TableOptions.fromProtoSchema(Uuid.class));
-        try (TxnContext txn = store3.txn(defaultTableName.rawNamespace())) {
+        try (TxnContext txn = store3.txn(namespace)) {
             CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn
                     .getRecord(defaultTableName.rawTableName(), uuidKey);
 

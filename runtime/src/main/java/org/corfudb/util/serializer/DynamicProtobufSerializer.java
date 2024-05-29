@@ -106,9 +106,8 @@ public class DynamicProtobufSerializer implements ISerializer {
         ISerializer protobufSerializer = configureSerializer(corfuRuntime);
 
         // Open the Registry Table and cache its contents
-        var token = new TypeToken<PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
-        };
-        PersistentCorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable = corfuRuntime
+        var token = PersistentCorfuTable.<TableName, CorfuRecord<TableDescriptors, TableMetadata>>getTypeToken();
+        var registryTable = corfuRuntime
                 .getObjectsView()
                 .build()
                 .setTypeToken(token)
@@ -117,7 +116,7 @@ public class DynamicProtobufSerializer implements ISerializer {
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
 
-        Iterator<Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>>> registryIt = registryTable
+        var registryIt = registryTable
                 .entryStream()
                 .iterator();
 
@@ -127,7 +126,7 @@ public class DynamicProtobufSerializer implements ISerializer {
         }
 
         // Open the Protobuf Descriptor Table.
-        PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>> descriptorTable = corfuRuntime
+        var descriptorTable = corfuRuntime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<PersistentCorfuTable<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>>() {})
