@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
+import lombok.EqualsAndHashCode.Exclude;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
@@ -889,6 +890,7 @@ public class TableRegistry {
 
     @Builder
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @EqualsAndHashCode
     @Getter
     public static class TableDescriptor<K extends Message, V extends Message, M extends Message> {
         public static final String DEFAULT_METHOD_NOT_FOUND_ERR_MSG = "The instance doesn't provide the default value";
@@ -899,9 +901,11 @@ public class TableRegistry {
         private final Class<M> mClass;
 
         @Default
+        @Exclude
         private final boolean withSchema = true;
 
         @NonNull
+        @Exclude
         private final TableOptions tableOptions;
 
         public static <K extends Message, V extends Message, M extends Message>

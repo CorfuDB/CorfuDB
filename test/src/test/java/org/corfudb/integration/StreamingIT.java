@@ -47,7 +47,7 @@ import static org.junit.Assert.fail;
  * Simple test that inserts data into CorfuStore and tests Streaming.
  */
 @Slf4j
-public class StreamingIT extends AbstractIT {
+public class    StreamingIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
