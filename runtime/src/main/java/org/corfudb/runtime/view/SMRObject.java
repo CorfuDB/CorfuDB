@@ -265,4 +265,3 @@ public class SMRObject<T extends ICorfuSMR<?>> {
         }
     }
 }
-
