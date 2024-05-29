@@ -80,13 +80,9 @@ public class ObjectBuilderTest {
      * Make sure that the correct constructor is being used
      * in case of constructor overloading (interface version).
      *
-     * @throws IllegalAccessException should not be thrown
-     * @throws InstantiationException should not be thrown
-     * @throws InvocationTargetException should not be thrown
      */
     @Test
-    public void constructorInterfaceMatching()
-            throws IllegalAccessException, InstantiationException, InvocationTargetException {
+    public void constructorInterfaceMatching() {
         Object[] args = { new ChildImpl() };
         ReflectionUtils.findMatchingConstructor(
                 ExampleInterface.class.getDeclaredConstructors(), args);
@@ -96,15 +92,10 @@ public class ObjectBuilderTest {
      * Make sure that the correct constructor is being used
      * in case of a zero-arg constructor.
      *
-     * @throws IllegalAccessException should not be thrown
-     * @throws InstantiationException should not be thrown
-     * @throws InvocationTargetException should not be thrown
      */
     @Test
-    public void noArgeConstructorMatch()
-            throws IllegalAccessException, InstantiationException, InvocationTargetException {
+    public void noArgeConstructorMatch() {
         Object[] args = { };
-        ReflectionUtils.findMatchingConstructor(
-                Example.class.getDeclaredConstructors(), args);
+        ReflectionUtils.findMatchingConstructor(Example.class.getDeclaredConstructors(), args);
     }
 }

@@ -13,6 +13,7 @@ import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.collections.ImmutableCorfuTable;
+import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
@@ -69,15 +70,14 @@ public class SMRObject<T extends ICorfuSMR<?>> {
 
         var oid = smrConfig.getObjectId();
 
-        final T result = getWrapper();
-
         if (smrConfig.isCacheDisabled()) {
-            return result;
+            return getWrapper();
         }
 
         Function<ObjectID, T> tableFactory = x -> {
             // Get object serializer to check if we didn't attempt to set another serializer
             // to an already existing map
+            final T result = getWrapper();
             ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
             if (smrConfig.getSerializer() != objectSerializer) {
                 log.warn("open: Attempt to open an existing object with a different serializer {}. " +
@@ -101,7 +101,8 @@ public class SMRObject<T extends ICorfuSMR<?>> {
 
     private T getWrapper() {
         try {
-            return new CorfuCompileWrapperBuilder<T>().getWrapper(this);
+            return new CorfuCompileWrapperBuilder<T>()
+                    .getWrapper(this);
         } catch (Exception ex) {
             var errMsg = "Runtime instrumentation no longer supported and no compiled class found for {}";
             log.error(errMsg, smrConfig.type, ex);
@@ -255,10 +256,12 @@ public class SMRObject<T extends ICorfuSMR<?>> {
             throw new IllegalStateException("Unknown table type");
         }
 
-        public T newSmrTableInstance() throws InvocationTargetException, IllegalAccessException, InstantiationException {
-            Constructor<?>[] constructors = type.getRawType().getDeclaredConstructors();
-            var rawInstance = ReflectionUtils.findMatchingConstructor(constructors, new Object[0]);
-            return ClassUtils.cast(rawInstance);
+        public T newSmrTableInstance() {
+            Constructor<?>[] constructors = type
+                    .getRawType()
+                    .getDeclaredConstructors();
+
+            return ReflectionUtils.findMatchingConstructor(constructors, new Object[0]);
         }
     }
 }

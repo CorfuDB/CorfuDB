@@ -612,7 +612,8 @@ public class TableRegistry {
             tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
         }
         final Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
-                .getStreamTagList().stream()
+                .getStreamTagList()
+                .stream()
                 .map(tag -> new StreamTagInfo(tag, getStreamIdForStreamTag(fqTableName.rawNamespace(), tag)))
                 .collect(Collectors.toSet());
 

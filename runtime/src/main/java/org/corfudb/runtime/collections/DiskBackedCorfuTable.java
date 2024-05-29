@@ -45,6 +45,7 @@ import org.rocksdb.WriteOptions;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -161,36 +162,40 @@ public class DiskBackedCorfuTable<K, V> implements
             this.indexToId.put(index.getName().get(), indexId++);
         }
 
+        this.statistics = new Statistics();
+        this.statistics.setStatsLevel(StatsLevel.ALL);
+        this.rocksDbOptions.setStatistics(statistics);
+        persistenceOptions.getWriteBufferSize().map(this.rocksDbOptions::setWriteBufferSize);
+
+        final BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
+        if (persistenceOptions.isDisableBlockCache()) {
+            tableConfig.setNoBlockCache(true);
+        } else {
+            // If not set, the default behaviour is 64MB block cache per table.
+            persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
+        }
+        this.rocksDbOptions.setTableFormatConfig(tableConfig);
+        this.reportingFrequency = persistenceOptions.getReportingFrequency();
+        rocksDbOptions.setStatistics(statistics);
+        persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+
+        RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore;
         try {
-            this.statistics = new Statistics();
-            this.statistics.setStatsLevel(StatsLevel.ALL);
-            this.rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(this.rocksDbOptions::setWriteBufferSize);
-
-            final BlockBasedTableConfig tableConfig = new BlockBasedTableConfig();
-            if (persistenceOptions.isDisableBlockCache()) {
-                tableConfig.setNoBlockCache(true);
-            } else {
-                // If not set, the default behaviour is 64MB block cache per table.
-                persistenceOptions.getBlockCache().map(tableConfig::setBlockCache);
-            }
-            this.rocksDbOptions.setTableFormatConfig(tableConfig);
-            this.reportingFrequency = persistenceOptions.getReportingFrequency();
-            rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
-
-            final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
-                    persistenceOptions.getDataPath(), this.rocksDbOptions, writeOptions);
-
-            this.rocksApi = rocksDbStore;
-            this.columnFamilyRegistry = rocksDbStore;
-            this.rocksDbSnapshotGenerator = rocksDbStore;
-            this.metricsId = String.format("%s.%s.",
-                    persistenceOptions.getDataPath().getFileName(), System.identityHashCode(this));
-            MeterRegistryProvider.registerExternalSupplier(metricsId, this::statisticsProvider);
+            rocksDbStore = new RocksDbStore<>(
+                    persistenceOptions.getDataPath(),
+                    this.rocksDbOptions,
+                    writeOptions
+            );
         } catch (RocksDBException e) {
             throw new UnrecoverableCorfuError(e);
         }
+
+        this.rocksApi = rocksDbStore;
+        this.columnFamilyRegistry = rocksDbStore;
+        this.rocksDbSnapshotGenerator = rocksDbStore;
+        Path fileName = persistenceOptions.getDataPath().getFileName();
+        this.metricsId = String.format("%s.%s.", fileName, System.identityHashCode(this));
+        MeterRegistryProvider.registerExternalSupplier(metricsId, this::statisticsProvider);
 
         this.serializer = serializer;
     }

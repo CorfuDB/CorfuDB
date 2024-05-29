@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.common.util.ClassUtils;
@@ -44,7 +45,10 @@ public class MVOCorfuCompileProxy<S extends SnapshotGenerator<S>>
     ) {
         this.rt = rt;
         this.config = cfg;
-        Supplier<S> newInstanceAction = () -> ClassUtils.cast(getNewInstance());
+        Supplier<S> newInstanceAction = () -> {
+            var instance = getNewInstance();
+            return ClassUtils.cast(instance);
+        };
 
         this.underlyingMVO = new MultiVersionObject<>(
                 rt,
@@ -133,13 +137,12 @@ public class MVOCorfuCompileProxy<S extends SnapshotGenerator<S>>
     }
 
     private S getNewInstance() {
-        try {
-            var constructors = config.tableImplementationType().getDeclaredConstructors();
-            Object ret = ReflectionUtils.findMatchingConstructor(constructors, config.getTableConfig().getArguments());
-            return ClassUtils.cast(ret);
-        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException(e);
-        }
+        var constructors = config
+                .tableImplementationType()
+                .getDeclaredConstructors();
+
+        Object[] args = config.getTableConfig().getArguments();
+        return ReflectionUtils.findMatchingConstructor(constructors, args);
     }
 
     @Override

@@ -35,11 +35,8 @@ public class CorfuCompileWrapperBuilder<T extends ICorfuSMR<?>> {
      *
      * @param rt Connected instance of the CorfuRuntime.
      * @return Returns the wrapper to the object.
-     * @throws ClassNotFoundException Class T not found.
-     * @throws IllegalAccessException Illegal Access to the Object.
-     * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
-    private T getWrapper(CorfuRuntime rt, SmrObjectConfig<T> smrConfig) throws Exception {
+    private T getWrapper(CorfuRuntime rt, SmrObjectConfig<T> smrConfig) {
         MVOCache<?> mvoCache = rt.getMvoCache(smrConfig.getTableType());
         var smrInstance = smrConfig.newSmrTableInstance();
         MVOCorfuCompileProxy<?> proxy = new MVOCorfuCompileProxy<>(rt, smrConfig, smrInstance, ClassUtils.cast(mvoCache));
@@ -48,7 +45,7 @@ public class CorfuCompileWrapperBuilder<T extends ICorfuSMR<?>> {
         return smrInstance;
     }
 
-    public T getWrapper(SMRObject<T> smrObject) throws Exception {
+    public T getWrapper(SMRObject<T> smrObject) {
         var smrConfig = smrObject.getSmrConfig();
         return getWrapper(smrObject.getRuntime(), smrConfig);
     }
