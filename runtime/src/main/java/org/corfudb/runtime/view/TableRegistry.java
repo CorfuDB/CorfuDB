@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CheckpointWriter;
@@ -1015,8 +1016,15 @@ public class TableRegistry {
         }
 
         public static FullyQualifiedTableName build(String ns, String name) {
+            Optional<String> maybeNs;
+            if (StringUtils.isEmpty(ns)) {
+                maybeNs = Optional.empty();
+            } else {
+                maybeNs = Optional.of(ns);
+            }
+
             return FullyQualifiedTableName.builder()
-                    .namespace(Optional.of(ns))
+                    .namespace(maybeNs)
                     .tableName(name)
                     .build();
         }

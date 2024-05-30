@@ -18,6 +18,8 @@ import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.view.StreamsView.StreamId;
+import org.corfudb.runtime.view.StreamsView.StreamName;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.test.SampleSchema;
@@ -301,6 +303,19 @@ public class BackupRestoreIT extends AbstractIT {
         return streamIDs;
     }
 
+    private List<StreamName> getStreamNamesFromTarFile(String tarFile) throws IOException {
+        List<StreamName> streamIDs = new ArrayList<>();
+        FileInputStream fileInput = new FileInputStream(tarFile);
+        TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput);
+        TarArchiveEntry entry;
+        while ((entry = tarInput.getNextTarEntry()) != null) {
+            String streamId = entry.getName().substring(0, entry.getName().indexOf("."));
+            var streamName = StreamName.build(new StreamId(UUID.fromString(streamId)));
+            streamIDs.add(streamName);
+        }
+        return streamIDs;
+    }
+
     /**
      * An end-to-end Backup and Restore test for multiple tables specified by stream ids
      *
@@ -437,7 +452,7 @@ public class BackupRestoreIT extends AbstractIT {
         // Obtain the corresponding streamIDs for the tables in sourceServer
         List<UUID> streamIDs = new ArrayList<>();
         for (String tableName : tableNames) {
-            streamIDs.add(FullyQualifiedTableName.streamId(NAMESPACE, tableName).getId());
+            streamIDs.add(CorfuRuntime.getStreamID(FullyQualifiedTableName.build(NAMESPACE, tableName).toFqdn()));
         }
 
         // Backup
@@ -477,7 +492,7 @@ public class BackupRestoreIT extends AbstractIT {
         CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
 
         List<String> tableNames = getTableNames(numTables);
-        List<UUID> streamIDs = new ArrayList<>();
+        List<StreamName> streamIDs = new ArrayList<>();
 
         // Generate random entries and save into sourceServer.
         // 1/3 of the tables belong to NAMESPACE,
@@ -496,7 +511,8 @@ public class BackupRestoreIT extends AbstractIT {
             i++;
 
             generateData(srcDataCorfuStore, namespace, tableName, false);
-            streamIDs.add(FullyQualifiedTableName.streamId(namespace, tableName).getId());
+            var streamName = StreamName.build(FullyQualifiedTableName.build(namespace, tableName).toFqdn());
+            streamIDs.add(streamName);
         }
 
         // Back up tables belonging to NAMESPACE, regardless of the tag
@@ -508,7 +524,10 @@ public class BackupRestoreIT extends AbstractIT {
         for (i = 0; i < streamIDs.size(); i++) {
             if (i % 3 == 0) {
                 // tables with requires_backup_support tag
-                assertThat(streamIDs.get(i)).isIn(backupStreamIDs);
+                StreamName streamName = streamIDs.get(i);
+                assertThat(streamName.getId().getId())
+                        .withFailMessage("Stream: %s, not in the backup list: %s", streamName, backupStreamIDs)
+                        .isIn(backupStreamIDs);
             } else {
                 // tables without requires_backup_support tag
                 assertThat(streamIDs.get(i)).isNotIn(backupStreamIDs);
@@ -528,7 +547,8 @@ public class BackupRestoreIT extends AbstractIT {
         for (i = 0; i < streamIDs.size(); i++) {
             if (i % 3 == 2) {
                 // tables with requires_backup_support tag
-                assertThat(streamIDs.get(i)).isIn(backupStreamIDs);
+                StreamName streamName = streamIDs.get(i);
+                assertThat(streamName.getId().getId()).isIn(backupStreamIDs);
             } else {
                 // tables without requires_backup_support tag
                 assertThat(streamIDs.get(i)).isNotIn(backupStreamIDs);
@@ -575,7 +595,7 @@ public class BackupRestoreIT extends AbstractIT {
             i++;
 
             generateData(srcDataCorfuStore, namespace, tableName, taggedTables);
-            streamIDs.add(FullyQualifiedTableName.streamId(namespace, tableName).getId());
+            streamIDs.add(CorfuRuntime.getStreamID(FullyQualifiedTableName.build(namespace, tableName).toFqdn()));
         }
 
         // Back up tables belonging to ANOTHER_NAMESPACE and has the tag
@@ -637,13 +657,15 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         String emptyTableName = "emptyTableName";
-        UUID emptyTableUuid = FullyQualifiedTableName.streamId(NAMESPACE, emptyTableName).getId();
+        UUID emptyTableUuid = CorfuRuntime.getStreamID(FullyQualifiedTableName.build(NAMESPACE, emptyTableName).toFqdn());
         streamIDs.add(emptyTableUuid);
         openTableWithoutBackupTag(srcDataCorfuStore, NAMESPACE, emptyTableName);
 
         // Add two CorfuSystem tables
-        streamIDs.add(TableRegistry.FQ_REGISTRY_TABLE_NAME.toStreamId().getId());
-        streamIDs.add(TableRegistry.FQ_PROTO_DESC_TABLE_NAME.toStreamId().getId());
+        streamIDs.add(CorfuRuntime.getStreamID(FullyQualifiedTableName.build(
+                TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME).toFqdn()));
+        streamIDs.add(CorfuRuntime.getStreamID(FullyQualifiedTableName.build(
+                TableRegistry.CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME).toFqdn()));
 
         // Backup all tables
         Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false, null);
@@ -972,7 +994,7 @@ public class BackupRestoreIT extends AbstractIT {
             } else {
                 // tables that don't have requires_backup_support tag are not restored and should remain empty
                 openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-                assertThat(destDataCorfuStore.getTable(FullyQualifiedTableName.build(NAMESPACE, tableName)).count()).isZero();
+                assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isZero();
             }
         }
 
@@ -1032,8 +1054,7 @@ public class BackupRestoreIT extends AbstractIT {
             if (i++ % 2 == 0) {
                 // Tables in other namespaces should not be affected
                 openTableWithoutBackupTag(destDataCorfuStore, NAMESPACE, tableName);
-                assertThat(destDataCorfuStore.getTable(FullyQualifiedTableName.build(NAMESPACE, tableName)).count())
-                        .isEqualTo(numEntries);
+                assertThat(destDataCorfuStore.getTable(NAMESPACE, tableName).count()).isEqualTo(numEntries);
             } else {
                 // Only tables in ANOTHER_NAMESPACE are restored
                 openTableWithoutBackupTag(destDataCorfuStore, ANOTHER_NAMESPACE, tableName);
