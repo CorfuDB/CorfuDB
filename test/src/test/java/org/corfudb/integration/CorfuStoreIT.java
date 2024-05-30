@@ -93,7 +93,6 @@ public class CorfuStoreIT extends AbstractIT {
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;
     private CorfuStore corfuStore;
-    private final FullyQualifiedTableName defaultTableName = FullyQualifiedTableName.build("namespace", "table");
 
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
