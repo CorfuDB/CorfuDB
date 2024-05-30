@@ -7,13 +7,13 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.With;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.DiskBackedCorfuTable;
 import org.corfudb.runtime.collections.ImmutableCorfuTable;
-import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
@@ -200,6 +200,7 @@ public class SMRObject<T extends ICorfuSMR<?>> {
     @AllArgsConstructor
     @EqualsAndHashCode
     @Getter
+    @ToString
     public static class SmrTableConfig {
         @NonNull
         @With
@@ -222,6 +223,7 @@ public class SMRObject<T extends ICorfuSMR<?>> {
     @AllArgsConstructor
     @EqualsAndHashCode
     @Getter
+    @ToString
     public static class SmrObjectConfig<T extends ICorfuSMR<?>> {
         @NonNull
         private final TypeToken<T> type;

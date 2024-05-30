@@ -23,6 +23,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.PersistedCorfuTable;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
@@ -122,6 +123,30 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         System.out.println("Namespace: " + namespace);
         System.out.println("TableName: " + tableName);
 
+        SmrTableConfig tableCfg = getTableConfig(namespace, tableName);
+
+        if (diskPath == null) {
+            var smrCfg = SmrObjectConfig
+                    .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
+                    .type(PersistentCorfuTable.getTypeToken())
+                    .serializer(dynamicProtobufSerializer)
+                    .tableConfig(tableCfg)
+                    .build();
+
+            return runtime.getObjectsView().open(smrCfg);
+        } else {
+            var smrCfg = SmrObjectConfig
+                    .<PersistedCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
+                    .type(PersistedCorfuTable.getTypeToken())
+                    .serializer(dynamicProtobufSerializer)
+                    .tableConfig(tableCfg)
+                    .build();
+
+            return runtime.getObjectsView().open(smrCfg);
+        }
+    }
+
+    private SmrTableConfig getTableConfig(String namespace, String tableName) {
         var fullTableName = FullyQualifiedTableName.build(namespace, tableName);
 
         Object[] arguments;
@@ -134,19 +159,10 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
             arguments = new Object[]{opts, dynamicProtobufSerializer};
         }
 
-        var tableCfg = SmrTableConfig.builder()
+        return SmrTableConfig.builder()
                 .streamName(fullTableName.toStreamName())
                 .arguments(arguments)
                 .build();
-
-        var smrCfg = SmrObjectConfig
-                .<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>builder()
-                .type(PersistentCorfuTable.getTypeToken())
-                .serializer(dynamicProtobufSerializer)
-                .tableConfig(tableCfg)
-                .build();
-
-        return runtime.getObjectsView().open(smrCfg);
     }
 
     /**
