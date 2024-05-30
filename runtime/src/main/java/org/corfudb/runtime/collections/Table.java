@@ -88,6 +88,15 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     private final MetadataOptions metadataOptions;
 
     @Getter
+    private final Class<K> keyClass;
+
+    @Getter
+    private final Class<V> valueClass;
+
+    @Getter
+    private final Class<M> metadataClass;
+
+    @Getter
     private final Set<UUID> streamTags;
 
     private final TableParameters<K, V, M> tableParameters;
@@ -131,30 +140,16 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
 
         initializeCorfuTable(corfuRuntime);
 
-        TableDescriptor<K, V, M> descriptor = tableParameters.getDescriptor();
+        this.keyClass = tableParameters.getKClass();
+        this.valueClass = tableParameters.getVClass();
+        this.metadataClass = tableParameters.getMClass();
 
-        if (descriptor.getKClass() == Queue.CorfuGuidMsg.class &&
-                descriptor.getMClass() == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
+        if (keyClass == Queue.CorfuGuidMsg.class &&
+                metadataClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
             this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
         } else {
             this.guidGenerator = null;
         }
-    }
-
-    public Class<K> getKeyClass() {
-        return getDescriptor().getKClass();
-    }
-
-    public Class<V> getValueClass() {
-        return getDescriptor().getVClass();
-    }
-
-    public Class<M> getMetadataClass() {
-        return getDescriptor().getMClass();
-    }
-
-    public TableDescriptor<K, V, M> getDescriptor() {
-        return tableParameters.getDescriptor();
     }
 
     /**

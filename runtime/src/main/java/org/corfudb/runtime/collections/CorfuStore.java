@@ -76,14 +76,13 @@ public class CorfuStore {
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull FullyQualifiedTableName fqTableName,
-                             @Nonnull final TableDescriptor<K, V, M> descriptor,
-                             @Nonnull final TableOptions tableOptions)
+                             @Nonnull final TableDescriptor<K, V, M> descriptor)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         long startTime = System.currentTimeMillis();
 
         Table<K, V, M> table = runtime
                 .getTableRegistry()
-                .openTable(fqTableName, descriptor, tableOptions);
+                .openTable(fqTableName, descriptor);
 
         corfuStoreMetrics.recordTableCount();
 
@@ -125,8 +124,7 @@ public class CorfuStore {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                TableDescriptor.build(kClass, vClass, mClass, tableOptions),
-                tableOptions
+                TableDescriptor.build(kClass, vClass, mClass, tableOptions)
         );
     }
 
@@ -167,8 +165,7 @@ public class CorfuStore {
 
         return runtime.getTableRegistry().openTable(
                 FullyQualifiedTableName.build(namespace, queueName),
-                TableDescriptor.build(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class, tableOptions),
-                tableOptions
+                TableDescriptor.build(CorfuGuidMsg.class, vClass, CorfuQueueMetadataMsg.class, tableOptions)
         );
     }
 

@@ -574,8 +574,7 @@ public class TableRegistry {
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                TableDescriptor.build(kClass, vClass, mClass, tableOptions),
-                tableOptions
+                TableDescriptor.build(kClass, vClass, mClass, tableOptions)
         );
     }
 
@@ -584,7 +583,6 @@ public class TableRegistry {
      *
      * @param fqTableName    Name of the table.
      * @param descriptor   Table Descriptor.
-     * @param tableOptions Table options.
      * @param <K>          Key type.
      * @param <V>          Value type.
      * @param <M>          Metadata type.
@@ -592,12 +590,12 @@ public class TableRegistry {
      */
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> openTable(@Nonnull FullyQualifiedTableName fqTableName,
-                             @Nonnull final TableDescriptor<K, V, M> descriptor,
-                             @Nonnull final TableOptions tableOptions) {
+                             @Nonnull final TableDescriptor<K, V, M> descriptor) {
 
         getSerializer().registerTypes(descriptor);
 
         // persistentDataPath is deprecated and needs to be removed.
+        TableOptions tableOptions = descriptor.getTableOptions();
         PersistenceOptions persistenceOptions = tableOptions.getPersistenceOptions();
         if (tableOptions.getPersistentDataPath().isPresent()) {
             persistenceOptions = persistenceOptions
@@ -612,6 +610,7 @@ public class TableRegistry {
         } else {
             tableSchemaOptions = CorfuOptions.SchemaOptions.getDefaultInstance();
         }
+
         final Set<StreamTagInfo> streamTagInfoForTable = tableSchemaOptions
                 .getStreamTagList()
                 .stream()

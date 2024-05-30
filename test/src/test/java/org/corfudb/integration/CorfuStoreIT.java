@@ -29,7 +29,6 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -38,7 +37,6 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
@@ -150,11 +148,7 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuStore store = new CorfuStore(runtime);
 
         var descriptor = TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class);
-        final Table<Uuid, Uuid, ManagedResources> table = store.openTable(
-                defaultTableName,
-                descriptor,
-                descriptor.getTableOptions()
-        );
+        var table = store.openTable(defaultTableName, descriptor);
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -256,8 +250,7 @@ public class CorfuStoreIT extends AbstractIT {
         assertThatThrownBy(() -> store3.getTable(nonExistingTableName)).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
-        var descr = descriptor;
-        var table1 = store3.openTable(defaultTableName, descr, TableOptions.fromProtoSchema(Uuid.class));
+        var table1 = store3.openTable(defaultTableName, descriptor);
         try (TxnContext txn = store3.txn(namespace)) {
             CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn
                     .getRecord(defaultTableName.rawTableName(), uuidKey);

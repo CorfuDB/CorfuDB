@@ -52,8 +52,7 @@ public class CorfuStoreShim {
         TableOptions tableOpts = TableOptions.fromProtoSchema(vClass, tableOptions);
         return corfuStore.openTable(
                 FullyQualifiedTableName.build(namespace, tableName),
-                TableDescriptor.build(kClass, vClass, mClass, tableOpts),
-                tableOpts
+                TableDescriptor.build(kClass, vClass, mClass, tableOpts)
         );
     }
 
