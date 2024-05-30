@@ -63,10 +63,10 @@ public class SMRObject<T extends ICorfuSMR<?>> {
     }
 
     private T open() {
-        String msg = "ObjectBuilder: open Corfu stream {}";
+        String msg = "ObjectBuilder: open Corfu stream {} id {}";
 
         StreamName streamName = smrConfig.tableConfig.streamName;
-        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, msg, streamName);
+        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, msg, streamName.getName(), streamName.getId().getId());
 
         var oid = smrConfig.getObjectId();
 

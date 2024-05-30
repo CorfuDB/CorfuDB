@@ -137,7 +137,9 @@ public class CorfuStoreIT extends AbstractIT {
      */
     @Test
     public void readDataWithDynamicMessages() throws Exception {
-        String namespace = defaultTableName.rawNamespace();
+
+        final String namespace = "namespace";
+        final String tableName = "table";
 
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
@@ -147,8 +149,13 @@ public class CorfuStoreIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        var descriptor = TableDescriptor.build(Uuid.class, Uuid.class, ManagedResources.class);
-        var table = store.openTable(defaultTableName, descriptor);
+        final Table<Uuid, Uuid, ManagedResources> table = store.openTable(
+                namespace,
+                tableName,
+                Uuid.class,
+                Uuid.class,
+                ManagedResources.class,
+                TableOptions.fromProtoSchema(Uuid.class));
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -178,12 +185,11 @@ public class CorfuStoreIT extends AbstractIT {
         ISerializer dynamicProtobufSerializer = new DynamicProtobufSerializer(runtime);
         runtime.getSerializers().registerSerializer(dynamicProtobufSerializer);
 
-        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable = createCorfuTable(
-                runtime, defaultTableName.rawTableName(), dynamicProtobufSerializer
-        );
+        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
+                createCorfuTable(runtime, FullyQualifiedTableName.build(namespace, tableName).toFqdn(), dynamicProtobufSerializer);
 
-        for (var it = corfuTable.entryStream().iterator(); it.hasNext(); ) {
-            var entry = it.next();
+        for (Iterator<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> it = corfuTable.entryStream().iterator(); it.hasNext(); ) {
+            Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry = it.next();
             CorfuDynamicKey key = entry.getKey();
             CorfuDynamicRecord value = entry.getValue();
             DynamicMessage metaMsg = value.getMetadata();
@@ -195,30 +201,28 @@ public class CorfuStoreIT extends AbstractIT {
                 }
             });
 
-            CorfuDynamicRecord record = new CorfuDynamicRecord(
+            corfuTable.insert(key, new CorfuDynamicRecord(
                     value.getPayloadTypeUrl(),
                     value.getPayload(),
                     value.getMetadataTypeUrl(),
-                    newMetaBuilder.build()
-            );
-            corfuTable.insert(key, record);
+                    newMetaBuilder.build()));
+
         }
 
         assertThat(corfuTable.size()).isEqualTo(1);
-        var mcw = new MultiCheckpointWriter<>();
+        MultiCheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> mcw = new MultiCheckpointWriter<>();
 
-        var tableRegistry = runtime.getObjectsView()
-                .build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
-                .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
+        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> tableRegistry = runtime.getObjectsView().build()
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                .setStreamName(FullyQualifiedTableName.build(CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.REGISTRY_TABLE_NAME).toFqdn())
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
-
-        var descriptorTable = runtime.getObjectsView()
-                .build()
-                .setTypeToken(PersistentCorfuTable.getTypeToken())
-                .setStreamName(FQ_PROTO_DESC_TABLE_NAME.toFqdn())
+        PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> descriptorTable = runtime.getObjectsView().build()
+                .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, CorfuDynamicRecord>getTypeToken())
+                .setStreamName(FullyQualifiedTableName.build(CORFU_SYSTEM_NAMESPACE,
+                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME).toFqdn())
                 .setSerializer(dynamicProtobufSerializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -239,22 +243,18 @@ public class CorfuStoreIT extends AbstractIT {
         final CorfuStore store3 = new CorfuStore(runtime);
 
         // Attempting to open an unopened table with the short form should throw the IllegalArgumentException
-        assertThatThrownBy(() -> store3.getTable(defaultTableName)).
+        assertThatThrownBy(() -> store3.getTable(namespace, tableName)).
         isExactlyInstanceOf(IllegalArgumentException.class);
 
         // Attempting to open a non-existent table should throw NoSuchElementException
-        FullyQualifiedTableName nonExistingTableName = FullyQualifiedTableName.build(
-                namespace, "NonExistingTableName"
-        );
-
-        assertThatThrownBy(() -> store3.getTable(nonExistingTableName)).
+        assertThatThrownBy(() -> store3.getTable(namespace, "NonExistingTableName")).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
-        var table1 = store3.openTable(defaultTableName, descriptor);
+        Table<Uuid, Uuid, ManagedResources> table1 = store3.openTable(namespace,
+                tableName, Uuid.class, Uuid.class, ManagedResources.class,
+                TableOptions.fromProtoSchema(Uuid.class));
         try (TxnContext txn = store3.txn(namespace)) {
-            CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn
-                    .getRecord(defaultTableName.rawTableName(), uuidKey);
-
+            CorfuStoreEntry<Uuid, Uuid, ManagedResources> record = txn.getRecord(tableName, uuidKey);
             assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
             txn.putRecord(table1, uuidKey, uuidVal, metadata);
             txn.commit();

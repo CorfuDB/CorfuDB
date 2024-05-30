@@ -631,7 +631,7 @@ public class TableRegistry {
 
         log.info(
                 CorfuRuntime.LOG_NOT_IMPORTANT,
-                "openTable: opening {} with stream tags {}", fqTableName,
+                "openTable: opening {} with stream tags {}", fqTableName.toFqdn(),
                 streamTagInfoForTable
         );
 
