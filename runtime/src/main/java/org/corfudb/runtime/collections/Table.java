@@ -98,6 +98,7 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     @Getter
     private final Set<UUID> streamTags;
 
+    @Getter
     private final TableParameters<K, V, M> tableParameters;
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
@@ -372,6 +373,30 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         corfuTable.close();
     }
 
+    public boolean matchesParams(@Nonnull final Class<K> kClass,
+                                 @Nonnull final Class<V> vClass,
+                                 @Nullable final Class<M> mClass,
+                                 @Nonnull final TableOptions tableOptions) {
+        if (this.keyClass != kClass) {
+            return false;
+        }
+        if (this.valueClass != vClass) {
+            return false;
+        }
+        if (this.metadataClass != mClass) {
+            return false;
+        }
+        if (!this.tableParameters.getPersistenceOptions().equals(tableOptions.getPersistenceOptions())) {
+            return false;
+        }
+        if (this.tableParameters.isSecondaryIndexesDisabled() != tableOptions.isSecondaryIndexesDisabled()) {
+            return false;
+        }
+        if (!this.tableParameters.getSchemaOptions().equals(tableOptions.getSchemaOptions())) {
+            return false;
+        }
+        return true;
+    }
     /**
      * CorfuQueueRecord encapsulates each entry enqueued into CorfuQueue with its unique ID.
      * It is a read-only type returned by the entryList() method.
