@@ -13,13 +13,7 @@ fi
 ./mvnw clean
 
 # Build cmdlets
-./mvnw -pl cmdlets,corfudb-tools,infrastructure \
-  --also-make \
-  -DskipTests \
-  -Dmaven.javadoc.skip=true \
-  -Dorg.slf4j.simpleLogger.defaultLogLevel=error \
-  -T 1C \
-  package
+./mvnw -pl cmdlets,corfudb-tools,infrastructure --also-make -DskipTests -Dmaven.javadoc.skip=true -Dorg.slf4j.simpleLogger.defaultLogLevel=error -T 1C package
 
 # Copy corfu binaries into target directory
 cp -r ./bin ./infrastructure/target/
