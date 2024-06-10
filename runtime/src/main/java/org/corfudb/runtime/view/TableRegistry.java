@@ -533,6 +533,20 @@ public class TableRegistry {
     }
 
     /**
+     * Fully qualified table name created to produce the stream uuid.
+     *
+     * @deprecated please use FullyQualifiedTableName object
+     *
+     * @param namespace Namespace of the table.
+     * @param tableName Table name of the table.
+     * @return Fully qualified table name.
+     */
+    @Deprecated
+    public static String getFullyQualifiedTableName(String namespace, String tableName) {
+        return FullyQualifiedTableName.build(namespace, tableName).toFqdn();
+    }
+
+    /**
      * Return the stream Id for the provided stream tag.
      *
      * @param namespace namespace of the stream
