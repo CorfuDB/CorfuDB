@@ -33,6 +33,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -931,9 +932,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             if (tableName.getTableName().equals(TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)) {
                 continue;
             }
-            String fullTableName = TableRegistry.getFullyQualifiedTableName(
-                    tableName.getNamespace(), tableName.getTableName()
-            );
+            String fullTableName = FullyQualifiedTableName.build(tableName).toFqdn();
 
             PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
                     createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer);

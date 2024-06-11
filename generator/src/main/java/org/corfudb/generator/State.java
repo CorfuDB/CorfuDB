@@ -80,7 +80,7 @@ public class State {
             PersistentCorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
-                    .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                    .setTypeToken(PersistentCorfuTable.<String, String>getTypeToken())
                     .setArguments(new StringIndexer())
                     .open();
 

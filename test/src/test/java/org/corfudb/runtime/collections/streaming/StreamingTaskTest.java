@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections.streaming;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Message;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -12,11 +13,13 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.TestSchema;
@@ -60,6 +63,9 @@ public class StreamingTaskTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
 
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
@@ -105,6 +111,9 @@ public class StreamingTaskTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
+
         StreamingTask task = new StreamingTask(runtime, workers, namespace, streamTag, listener,
                 Collections.singletonList(tableName), Address.NON_ADDRESS, 10);
 
@@ -137,7 +146,7 @@ public class StreamingTaskTest {
         // Since there are items to read, verify that the task re-submits itself (i.e., keeps syncing)
         verify(workers, times(1)).execute(task);
 
-        UUID tableStream = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+        UUID tableStream = FullyQualifiedTableName.streamId(namespace, tableName).getId();
 
         MultiObjectSMREntry multiObject = new MultiObjectSMREntry();
         TestSchema.Uuid key = TestSchema.Uuid

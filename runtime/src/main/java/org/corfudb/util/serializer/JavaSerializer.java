@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -17,6 +18,10 @@ import java.io.ObjectOutputStream;
 @Slf4j
 public class JavaSerializer implements ISerializer {
     private final byte type;
+
+    public JavaSerializer() {
+        this.type = SerializerType.JAVA.toByte();
+    }
 
     public JavaSerializer(byte type) {
         this.type = type;

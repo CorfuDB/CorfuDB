@@ -16,6 +16,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.SafeProtobufSerializer;
 
@@ -258,7 +259,8 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             }
 
             ISerializer safeSerializer = new SafeProtobufSerializer(serializer);
-            builder = runtime.getObjectsView().<PersistedCorfuTable<K, CorfuRecord<V, M>>>build()
+            builder = runtime.getObjectsView()
+                    .build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
                     .setSerializer(safeSerializer)
@@ -269,7 +271,8 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             arguments.add(safeSerializer);
         } else {
             // Default in-memory implementation.
-            builder = runtime.getObjectsView().<PersistentCorfuTable<K, CorfuRecord<V, M>>>build()
+            builder = runtime.getObjectsView()
+                    .build()
                     .setStreamName(fullyQualifiedTableName)
                     .setStreamTags(streamTags)
                     .setSerializer(serializer)
@@ -277,9 +280,11 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         }
 
         if (!tableParameters.isSecondaryIndexesDisabled()) {
-            arguments.add(new ProtobufIndexer(
+            var indexer = new ProtobufIndexer(
                     tableParameters.getValueSchema(),
-                    tableParameters.getSchemaOptions()));
+                    tableParameters.getSchemaOptions()
+            );
+            arguments.add(indexer);
         }
 
         builder.setArguments(arguments.toArray());

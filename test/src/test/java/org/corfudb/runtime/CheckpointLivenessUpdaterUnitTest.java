@@ -30,8 +30,8 @@ import static org.mockito.Mockito.when;
 public class CheckpointLivenessUpdaterUnitTest {
     private final CorfuStore corfuStore = mock(CorfuStore.class);
     private final TxnContext txn = mock(TxnContext.class);
-    private final CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message> corfuStoreEntry =
-            (CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>) mock(CorfuStoreEntry.class);
+    private final CorfuStoreEntry<Message, Message, Message> corfuStoreEntry =
+            (CorfuStoreEntry<Message, Message, Message>) mock(CorfuStoreEntry.class);
 
     private static final Duration INTERVAL = Duration.ofSeconds(15);
     private static final TableName tableName = TableName.newBuilder().setNamespace("TestNamespace").setTableName("TestTableName").build();

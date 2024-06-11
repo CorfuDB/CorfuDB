@@ -4,7 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.collections.table.GenericCorfuTable;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
 
@@ -15,9 +15,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
-public class PersistedCorfuTable<K, V> implements
-        ICorfuTable<K, V>,
-        ICorfuSMR<DiskBackedCorfuTable<K, V>> {
+public class PersistedCorfuTable<K, V> implements GenericCorfuTable<DiskBackedCorfuTable<K, V>, K, V> {
 
     private ICorfuSMRProxy<DiskBackedCorfuTable<K, V>> proxy;
 
@@ -29,7 +27,8 @@ public class PersistedCorfuTable<K, V> implements
             .build();
 
     public static <K, V> TypeToken<PersistedCorfuTable<K, V>> getTypeToken() {
-        return new TypeToken<PersistedCorfuTable<K, V>>() {};
+        return new TypeToken<>() {
+        };
     }
 
     public PersistedCorfuTable() {}

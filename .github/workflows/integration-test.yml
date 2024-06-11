@@ -33,7 +33,7 @@ jobs:
           check-latest: true
 
       - name: build corfu
-        run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
+        run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -Dorg.slf4j.simpleLogger.defaultLogLevel=error -B -V -T 1C -q
 
       - name: run integration tests
-        run: ./mvnw -pl :test clean verify -Pit -DskipTests
+        run: ./mvnw -pl :test clean verify -Pit -DskipTests -Dorg.slf4j.simpleLogger.defaultLogLevel=error

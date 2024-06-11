@@ -1,6 +1,7 @@
 package org.corfudb.util.serializer;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Message;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -11,10 +12,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.exceptions.SerializerException;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -31,9 +37,10 @@ import java.util.concurrent.ConcurrentMap;
 @Slf4j
 public class ProtobufSerializer implements ISerializer {
 
+    @Getter
     private final byte type;
 
-    public static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
+    public static final byte PROTOBUF_SERIALIZER_CODE = SerializerType.PROTOBUF.toByte();
 
     @Getter
     private final ConcurrentMap<String, Class<? extends Message>> classMap;
@@ -41,6 +48,30 @@ public class ProtobufSerializer implements ISerializer {
     public ProtobufSerializer(ConcurrentMap<String, Class<? extends Message>> classMap) {
         this.type = PROTOBUF_SERIALIZER_CODE;
         this.classMap = classMap;
+    }
+
+    public ProtobufSerializer() {
+        this.type = PROTOBUF_SERIALIZER_CODE;
+        this.classMap = new ConcurrentHashMap<>();
+    }
+
+    public <K extends Message, M extends Message, V extends Message>
+    ProtobufSerializer(TableDescriptor<K, V, M> descriptor) {
+        this.type = PROTOBUF_SERIALIZER_CODE;
+        this.classMap = new ConcurrentHashMap<>();
+        registerTypes(descriptor);
+    }
+
+    public <K extends Message, M extends Message, V extends Message>
+    void registerTypes(TableDescriptor<K, V, M> descriptor) {
+
+        K defaultKeyMessage = descriptor.getDefaultKeyMessage();
+        addTypeToClassMap(defaultKeyMessage);
+
+        V defaultValueMessage = descriptor.getDefaultValueMessage();
+        addTypeToClassMap(defaultValueMessage);
+
+        descriptor.metadataHandler(this::addTypeToClassMap);
     }
 
     enum MessageType {
@@ -66,9 +97,23 @@ public class ProtobufSerializer implements ISerializer {
         }
     }
 
-    @Override
-    public byte getType() {
-        return type;
+    /**
+     * Adds the schema to the class map to enable serialization of this table data.
+     */
+    public void addTypeToClassMap(Message msg) {
+        String typeUrl = getTypeUrl(msg.getDescriptorForType());
+        getClassMap().put(typeUrl, msg.getClass());
+    }
+
+    /**
+     * Gets the type Url of the protobuf descriptor. Used to identify the message during serialization.
+     * Note: This is same as used in Any.proto.
+     *
+     * @param descriptor Descriptor of the protobuf.
+     * @return Type url string.
+     */
+    public static String getTypeUrl(Descriptor descriptor) {
+        return "type.googleapis.com/" + descriptor.getFullName();
     }
 
     /**
@@ -121,7 +166,7 @@ public class ProtobufSerializer implements ISerializer {
                     }
                     metadata = anyMetadata.unpack(metadataClass);
                 }
-                return new CorfuRecord(value, metadata);
+                return new CorfuRecord<>(value, metadata);
             }
         } catch (IOException ie) {
             log.error("Exception during deserialization!", ie);

@@ -15,6 +15,11 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.common.util.ClassUtils;
+import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
+import org.corfudb.runtime.object.MVOCache;
+import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.view.StreamsView.StreamId;
 import org.corfudb.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -855,6 +860,22 @@ public class CorfuRuntime {
         }
     }
 
+    public <S extends SnapshotGenerator<S>> MVOCache<S> getMvoCache(CorfuTableType tableType) {
+        switch (tableType) {
+            case PERSISTENT:
+                return ClassUtils.cast(getObjectsView().getMvoCache());
+            case PERSISTED:
+                // In the context of PersistedCorfuTable, there is one-to-one mapping between
+                // the cache and the underlying table/stream. In this case the cache is used to
+                // store the underlying Snapshot references and not the data itself. Since
+                // there is no contention for the underlying resource (memory), there is no
+                // good reason to enforce a global cache.
+                return new MVOCache<>(getParameters().getMvoCacheExpiry());
+            default:
+                throw new UnsupportedOperationException(tableType + " not supported.");
+        }
+    }
+
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -1113,21 +1134,21 @@ public class CorfuRuntime {
      */
     @SuppressWarnings("checkstyle:abbreviation")
     public static UUID getStreamID(String string) {
-        return UUID.nameUUIDFromBytes(string.getBytes());
+        return StreamId.build(string).getId();
     }
 
     public static UUID getCheckpointStreamIdFromId(UUID streamId) {
-        return getStreamID(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+        return StreamId.buildCkpStreamId(streamId).getId();
     }
 
     public static UUID getCheckpointStreamIdFromName(String streamName) {
-        return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
+        return StreamId.buildCkpStreamId(streamName).getId();
     }
 
     /**
      * Parse a configuration string and get a CorfuRuntime.
      * Both Pure IPv6 and Pure IPv4 addresses are supported.
-     *
+     * <p>
      *
      * @param configurationString The configuration string to parse.
      * @return A CorfuRuntime Configured based on the configuration string.

@@ -34,4 +34,4 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: run unit tests
-        run: ./mvnw clean test -pl \!samples -am -Dmaven.javadoc.skip=true -T 1C
+        run: ./mvnw clean test -pl \!samples -am -Dmaven.javadoc.skip=true -Dorg.slf4j.simpleLogger.defaultLogLevel=error -T 1C

@@ -34,6 +34,7 @@ import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -664,9 +665,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         Token trimMark = null;
 
         for (CorfuStoreMetadata.TableName tableName : tableRegistry.listTables(null)) {
-            String fullTableName = TableRegistry.getFullyQualifiedTableName(
-                tableName.getNamespace(), tableName.getTableName()
-            );
+            String fullTableName = FullyQualifiedTableName.build(tableName).toFqdn();
 
             PersistentCorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
                     createCorfuTable(cpRuntime, fullTableName, dynamicProtoBufSerializer);

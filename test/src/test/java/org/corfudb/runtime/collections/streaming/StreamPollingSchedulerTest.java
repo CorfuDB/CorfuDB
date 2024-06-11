@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections.streaming;
 
+import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.ReadOptions;
@@ -129,6 +131,9 @@ public class StreamPollingSchedulerTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
+
         return new MockedContext(scheduler, workers, runtime, addressSpaceView, sequencerView,
                 table, registry, namespace, tableName, streamTag, streamTagId);
     }
@@ -146,7 +151,7 @@ public class StreamPollingSchedulerTest {
         final String streamTag = ctx.getStreamTag();
         final UUID streamTagId = ctx.getStreamTagId();
 
-        final StreamPollingScheduler streamPoller = new StreamPollingScheduler(runtime, scheduler,
+        StreamPollingScheduler streamPoller = new StreamPollingScheduler(runtime, scheduler,
                 workers, Duration.ofMillis(50), 25, 5);
 
         verify(scheduler, times(1)).submit(any(StreamPollingScheduler.Tick.class));
@@ -227,6 +232,9 @@ public class StreamPollingSchedulerTest {
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
 
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
+
         streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 5, 10);
 
         StreamAddressRange rangeQuery = new StreamAddressRange(streamTagId, Address.MAX, 5);
@@ -279,6 +287,8 @@ public class StreamPollingSchedulerTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
         // listener, namespace, "sample_streamer_1", Collections.singletonList(tableName)
 
         streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 5, 10);
@@ -366,6 +376,10 @@ public class StreamPollingSchedulerTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
+
         streamPoller.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 6);
 
         StreamAddressRange rangeQuery = new StreamAddressRange(streamTagId, Address.MAX, 0);
@@ -445,6 +459,8 @@ public class StreamPollingSchedulerTest {
         when(registry.getTable(namespace, tableName)).thenReturn(table);
         UUID streamTagId = TableRegistry.getStreamIdForStreamTag(namespace, streamTag);
         when(table.getStreamTags()).thenReturn(Collections.singleton(streamTagId));
+        when(table.getKeyClass()).thenReturn(UuidMsg.class);
+        when(table.getValueClass()).thenReturn(UuidMsg.class);
 
         streamingScheduler.addTask(listener, namespace, streamTag, Collections.singletonList(tableName), 0, 6);
 
