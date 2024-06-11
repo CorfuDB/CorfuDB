@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 
 
 /**
@@ -19,6 +20,7 @@ import lombok.EqualsAndHashCode;
 
 @EqualsAndHashCode
 @AllArgsConstructor
+@Getter
 public class TableSchema<K extends Message, V extends Message, M extends Message> {
     private final String tableName;
 
