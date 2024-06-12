@@ -1,0 +1,32 @@
+{
+  "tables" : [
+    {
+      "table_name": "t1",
+      "columns": [
+        {
+          "name": "a",
+          "data_type": "int",
+          "primary_key": true
+        },
+        {
+          "name": "b",
+          "data_type": "int"
+        }
+      ]
+    },
+    {
+      "table_name": "t2",
+      "columns": [
+        {
+          "name": "a",
+          "data_type": "int",
+          "primary_key": true
+        },
+        {
+          "name": "b",
+          "data_type": "int"
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.utils;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +36,9 @@ import org.corfudb.utils.CommonTypes.Uuid;
 import org.corfudb.utils.LogReplicationStreams.Version;
 import org.corfudb.utils.LogReplicationStreams.VersionString;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -79,9 +83,9 @@ public class LogReplicationConfigManager {
 
     private final VersionString versionString = VersionString.newBuilder().setName(VERSION_PLUGIN_KEY).build();
 
-    private final CorfuRuntime rt;
+    private CorfuRuntime rt = null;
 
-    private final CorfuStore corfuStore;
+    private CorfuStore corfuStore = null;
 
     private static final Uuid defaultMetadata =
         Uuid.newBuilder().setLsb(0).setMsb(0).build();
@@ -107,6 +111,11 @@ public class LogReplicationConfigManager {
         this.rt = runtime;
         this.corfuStore = new CorfuStore(runtime);
         this.pluginConfigFilePath = EMPTY_STR;
+        this.lastRegistryTableLogTail = Address.NON_ADDRESS;
+    }
+
+    public LogReplicationConfigManager(String pluginConfigFilePath) {
+        this.pluginConfigFilePath = pluginConfigFilePath;
         this.lastRegistryTableLogTail = Address.NON_ADDRESS;
     }
 
@@ -182,6 +191,50 @@ public class LogReplicationConfigManager {
             }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
         } catch (InterruptedException e) {
             log.error("Cannot sync with registry table, LR stopped", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public Set<String> loadTablesToReplicate(String tablesToReplicatePath) {
+        try {
+            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+                Set<String> tablesToReplicate = new HashSet<>();
+                try {
+                    BufferedReader reader = new BufferedReader(new FileReader(tablesToReplicatePath));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        tablesToReplicate.add(line.trim());
+                    }
+                    return tablesToReplicate;
+                } catch (Exception e) {
+                    log.error("Exception caught fetching tables to replicate, retry needed", e);
+                    throw new RetryNeededException();
+                }
+            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+        } catch (InterruptedException e) {
+            log.error("Cannot load tables to replicate, LR stopped", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public List<JsonNode> loadTablesToCreate(String tablesToCreatePath) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return IRetry.build(ExponentialBackoffRetry.class, () -> {
+                List<JsonNode> tablesToCreate = new ArrayList<>();
+                try {
+                    JsonNode tables = objectMapper.readTree(new File(tablesToCreatePath));
+                    for (JsonNode tableToCreate : tables.get("tables")) {
+                        tablesToCreate.add(tableToCreate);
+                    }
+                    return tablesToCreate;
+                } catch (Exception e) {
+                    log.error("Exception caught fetching tables to create, retry needed", e);
+                    throw new RetryNeededException();
+                }
+            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
+        } catch (InterruptedException e) {
+            log.error("Cannot get tables to create, LR stopped", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
