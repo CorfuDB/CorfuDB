@@ -8,6 +8,7 @@ import io.vavr.control.Option;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.vavr.TupleIterableWrapper;
 import org.corfudb.runtime.object.ConsistencyView;
@@ -17,7 +18,6 @@ import org.corfudb.runtime.object.SnapshotGenerator;
 import org.corfudb.runtime.object.VersionedObjectIdentifier;
 import org.corfudb.runtime.view.ObjectOpenOption;
 
-import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -59,13 +59,13 @@ public class ImmutableCorfuTable<K, V> implements
         this.secondaryIndexesWrapper = new SecondaryIndexesWrapper<>();
     }
 
-    public ImmutableCorfuTable(@Nonnull final Index.Registry<K, V> indices) {
+    public ImmutableCorfuTable(@NonNull final Index.Registry<K, V> indices) {
         this.mainMap = HashMap.empty();
         this.secondaryIndexesWrapper = new SecondaryIndexesWrapper<>(indices);
     }
 
     @Override
-    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(@Nonnull VersionedObjectIdentifier version) {
+    public SMRSnapshot<ImmutableCorfuTable<K, V>> generateSnapshot(@NonNull VersionedObjectIdentifier version) {
         return new InMemorySMRSnapshot<>(this);
     }
 
@@ -112,7 +112,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @return The value associated with the provided key. or null
      * if no such mapping exists.
      */
-    public V get(@Nonnull K key) {
+    public V get(@NonNull K key) {
         return mainMap.get(key).getOrNull();
     }
 
@@ -123,7 +123,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @param value The value to insert.
      * @return An ImmutableCorfuTable containing the new key-value mapping.
      */
-    public ImmutableCorfuTable<K, V> put(@Nonnull K key, @Nonnull V value) {
+    public ImmutableCorfuTable<K, V> put(@NonNull K key, @NonNull V value) {
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap.get(key)
                 .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
                 .getOrElse(secondaryIndexesWrapper);
@@ -138,7 +138,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @return An ImmutableCorfuTable where the mapping given from the
      * provided key is removed.
      */
-    public ImmutableCorfuTable<K, V> remove(@Nonnull K key) {
+    public ImmutableCorfuTable<K, V> remove(@NonNull K key) {
         SecondaryIndexesWrapper<K, V> newSecondaryIndexesWrapper = mainMap
                 .get(key)
                 .map(prev -> secondaryIndexesWrapper.unmapSecondaryIndexes(key, prev))
@@ -160,7 +160,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @param key The key whose presence is to be tested.
      * @return True if and only if a mapping for the provided key exists.
      */
-    public boolean containsKey(@Nonnull K key) {
+    public boolean containsKey(@NonNull K key) {
         return mainMap.containsKey(key);
     }
 
@@ -198,7 +198,7 @@ public class ImmutableCorfuTable<K, V> implements
      * @param <I> The type of the index key.
      * @return An Iterable of map entries satisfying this index query.
      */
-    public <I> Iterable<java.util.Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Iterable<java.util.Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName, I indexKey) {
         return secondaryIndexesWrapper.contains(indexName.get(), indexKey)
                 .<Iterable<java.util.Map.Entry<K, V>>>map(TupleIterableWrapper::new)
                 .getOrElse(Collections.emptySet());
@@ -211,7 +211,7 @@ public class ImmutableCorfuTable<K, V> implements
         private final Map<Object, Map<K, V>> mapping;
         private final Index.Spec<K, V, ?> index;
 
-        public IndexMapping<K, V> cleanUp(@Nonnull K key, @Nonnull V value) {
+        public IndexMapping<K, V> cleanUp(@NonNull K key, @NonNull V value) {
             Map<Object, Map<K, V>> updatedMapping = mapping;
 
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
@@ -237,7 +237,7 @@ public class ImmutableCorfuTable<K, V> implements
             return new IndexMapping<>(updatedMapping, index);
         }
 
-        public IndexMapping<K, V> update(@Nonnull K key, @Nonnull V value) {
+        public IndexMapping<K, V> update(@NonNull K key, @NonNull V value) {
             Map<Object, Map<K, V>> updatedMapping = mapping;
 
             Iterable<?> mappedValues = index.getMultiValueIndexFunction().apply(key, value);
@@ -260,7 +260,7 @@ public class ImmutableCorfuTable<K, V> implements
             this.secondaryIndexesAliasToPath = HashMap.empty();
         }
 
-        private SecondaryIndexesWrapper(@Nonnull final Index.Registry<K, V> indices) {
+        private SecondaryIndexesWrapper(@NonNull final Index.Registry<K, V> indices) {
             Map<String, IndexMapping<K, V>> indexes = HashMap.empty();
             Map<String, String> indexesAliasToPath = HashMap.empty();
 
@@ -280,7 +280,7 @@ public class ImmutableCorfuTable<K, V> implements
             }
         }
 
-        private <I> Option<Map<K, V>> contains(@Nonnull final String index, I indexKey) {
+        private <I> Option<Map<K, V>> contains(@NonNull final String index, I indexKey) {
             if (secondaryIndexes.containsKey(index)) {
                 return secondaryIndexes.get(index).get().getMapping().get(indexKey);
             }
@@ -312,7 +312,7 @@ public class ImmutableCorfuTable<K, V> implements
             return new SecondaryIndexesWrapper<>(clearedIndexes, secondaryIndexesAliasToPath);
         }
 
-        private SecondaryIndexesWrapper<K, V> unmapSecondaryIndexes(@Nonnull K key, @Nonnull V value) {
+        private SecondaryIndexesWrapper<K, V> unmapSecondaryIndexes(@NonNull K key, @NonNull V value) {
             try {
                 Map<String, IndexMapping<K, V>> unmappedSecondaryIndexes = secondaryIndexes;
 
@@ -333,7 +333,7 @@ public class ImmutableCorfuTable<K, V> implements
             }
         }
 
-        private SecondaryIndexesWrapper<K, V> mapSecondaryIndexes(@Nonnull K key, @Nonnull V value) {
+        private SecondaryIndexesWrapper<K, V> mapSecondaryIndexes(@NonNull K key, @NonNull V value) {
             try {
                 Map<String, IndexMapping<K, V>> mappedSecondaryIndexes = secondaryIndexes;
 
