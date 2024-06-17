@@ -167,7 +167,7 @@ public class PostgresUtils {
 
         String dropPrefix = "DROP SUBSCRIPTION ";
         for (String subscription : subscriptionsToDrop) {
-            if (!tryExecuteCommand(dropPrefix + subscription + ";", connector)) {
+            if (!tryExecuteCommand(dropPrefix + "\"" + subscription + "\";", connector)) {
                 log.info("Unable to drop subscription: {}", subscription);
             } else {
                 log.info("Dropped subscription: {}", subscription);
@@ -182,6 +182,42 @@ public class PostgresUtils {
                 log.info("Unable to truncate table: {}", table);
             } else {
                 log.info("Truncated table: {}", table);
+            }
+        }
+    }
+
+    public static void makeTablesReadOnly(List<String> readOnlyTables, PostgresConnector connector) {
+        String readOnlySql = "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE %s FROM %s;";
+        String getRoleNamesQuery = "SELECT rolname FROM pg_roles WHERE rolname !~ 'postgres' AND rolname !~ '^pg';";
+        List<Map<String, Object>> rolenamesResult = executeQuery(getRoleNamesQuery, connector);
+
+        for (Map<String, Object> row : rolenamesResult) {
+            String roleName = row.get("rolname").toString();
+
+            for (String table : readOnlyTables) {
+                if (!tryExecuteCommand(String.format(readOnlySql, table, roleName), connector)) {
+                    log.info("Unable to make table readonly: {}", table);
+                } else {
+                    log.info("Made table readonly: {}", table);
+                }
+            }
+        }
+    }
+
+    public static void makeTablesWriteable(List<String> writeableTables, PostgresConnector connector) {
+        String writeableSql = "GRANT INSERT, UPDATE, DELETE, TRUNCATE ON TABLE %s TO %s;";
+        String getRoleNamesQuery = "SELECT rolname FROM pg_roles WHERE rolname !~ 'postgres' AND rolname !~ '^pg';";
+        List<Map<String, Object>> rolenamesResult = executeQuery(getRoleNamesQuery, connector);
+
+        for (Map<String, Object> row : rolenamesResult) {
+            String roleName = row.get("rolname").toString();
+
+            for (String table : writeableTables) {
+                if (!tryExecuteCommand(String.format(writeableSql, table, roleName), connector)) {
+                    log.info("Unable to make table writeable: {}", table);
+                } else {
+                    log.info("Made table writeable: {}", table);
+                }
             }
         }
     }
@@ -202,11 +238,11 @@ public class PostgresUtils {
 
     public static void dropPublications(List<String> publicationsToDrop, PostgresConnector connector) {
         String dropPrefix = "DROP PUBLICATION ";
-        for (String subscription : publicationsToDrop) {
-            if (!tryExecuteCommand(dropPrefix + subscription + ";", connector)) {
-                log.info("Unable to drop publication: {}", subscription);
+        for (String publication : publicationsToDrop) {
+            if (!tryExecuteCommand(dropPrefix + "\"" +  publication + "\";", connector)) {
+                log.info("Unable to drop publication: {}", publication);
             } else {
-                log.info("Dropped publication: {}", subscription);
+                log.info("Dropped publication: {}", publication);
             }
         }
     }

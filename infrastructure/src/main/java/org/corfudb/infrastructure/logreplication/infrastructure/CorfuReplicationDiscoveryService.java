@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
@@ -51,9 +52,11 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Stack;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -67,10 +70,13 @@ import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createPublicationCmd;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createSubscriptionCmd;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createTablesCmds;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropAllSubscriptions;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropPublications;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropSubscriptions;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllPublications;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllSubscriptions;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesReadOnly;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesWriteable;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.truncateTables;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.tryExecuteCommand;
 import static org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig.isPostgres;
@@ -370,12 +376,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     return;
                 }
                 log.info("CREATED PUBLICATIONS");
-
             } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-                Map<String, ClusterDescriptor> activeClusters = topology.getActiveClusters();
-                String remoteNodeHost = activeClusters.values().stream().findAny().get()
-                        .getNodesDescriptors().stream().findAny().get().getHost();
-                String remoteNodeIp = remoteNodeHost.split(":")[0];
+                dropAllSubscriptions(connector);
+                truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                log.info("Cleared tables to be replicated!");
+
+                String remoteNodeIp = getActiveNodeHost(topology);
                 log.info("Trying to connect to remote host: {}", remoteNodeIp);
 
                 PostgresConnector remoteConnector = new PostgresConnector(remoteNodeIp,
@@ -703,6 +710,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
 
             if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                log.info("Role change happening from Active to Standby!!!");
 
                 // Wait for standby to drop all subscriptions
                 Map<String, ClusterDescriptor> standbyClusters = topologyDescriptor.getStandbyClusters();
@@ -726,8 +734,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 // Drop all replication slots
                 dropPublications(getAllPublications(connector), connector);
 
-                // clear tables
+                // Clear tables
                 truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
 
                 if (!tryExecuteCommand(createSubscriptionCmd(remoteConnector, connector), connector)) {
                     return;
@@ -735,6 +744,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
                 log.info("TRANSFORMED SOURCE TO SINK");
             } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+                log.info("Role change happening from Standby to Active!!!");
+
+                // Make tables writeable
+                makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+
                 List<String> subscriptionsToDrop = getAllSubscriptions(connector);
                 dropSubscriptions(subscriptionsToDrop, connector);
 
@@ -898,7 +912,36 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (isPostgres) {
             if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
                 log.info("Standby added or remove...");
-                // TODO (POSTGRES): add/remove subscriptions here
+
+                // ConfigId mismatch could happen if customized cluster manager does not follow protocol
+                if (discoveredTopology.getTopologyConfigId() != topologyDescriptor.getTopologyConfigId()) {
+                    log.warn("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
+                            "topologyConfigId as the current one {}", discoveredTopology, topologyDescriptor);
+                }
+
+                Set<String> currentStandbys = new HashSet<>(topologyDescriptor.getStandbyClusters().keySet());
+                Set<String> newStandbys = new HashSet<>(discoveredTopology.getStandbyClusters().keySet());
+                Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
+
+                Set<String> standbysToRemove = new HashSet<>(currentStandbys);
+                standbysToRemove.removeAll(intersection);
+
+                log.info("Standbys to remove: {}", standbysToRemove);
+
+                // Remove standbys that are not in the new config
+                for (String clusterId : standbysToRemove) {
+                    makeTablesWriteable(new ArrayList<>(getLogReplicationConfiguration().getStreamsToReplicate()), connector);
+                    dropAllSubscriptions(connector);
+                    topologyDescriptor.removeStandbyCluster(clusterId);
+                }
+
+                // Start the standbys that are in the new config but not in the current config
+                for (String clusterId : newStandbys) {
+                    if (!topologyDescriptor.getStandbyClusters().containsKey(clusterId)) {
+                        ClusterDescriptor clusterInfo = discoveredTopology.getStandbyClusters().get(clusterId);
+                        topologyDescriptor.addStandbyCluster(clusterInfo);
+                    }
+                }
             }
             updateLocalTopology(discoveredTopology);
         } else {
@@ -1069,6 +1112,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private String getLocalHost() {
         return getHostFromEndpointURL(serverContext.getLocalEndpoint());
+    }
+
+    /**
+     * Return IP for active node
+     * TODO (Postgres): assumes single node, no leadership consensus
+     *
+     * @return active node's IP
+     */
+    private String getActiveNodeHost(TopologyDescriptor descriptor) {
+        Map<String, ClusterDescriptor> activeClusters = descriptor.getActiveClusters();
+        String remoteNodeHost = activeClusters.values().stream().findAny().get()
+                .getNodesDescriptors().stream().findAny().get().getHost();
+        return remoteNodeHost.split(":")[0];
     }
 
 
