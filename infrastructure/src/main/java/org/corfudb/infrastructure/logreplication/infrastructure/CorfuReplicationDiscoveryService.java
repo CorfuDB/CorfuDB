@@ -860,6 +860,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
+        // if (event.getTopologyConfig().getTopologyConfigID() == topologyDescriptor.getTopologyConfigID()){
+        //     log.debug("Repeated Topology Change Notification, current={}, received={}",
+        //             topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
+        //     return;
+        // }
+
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
@@ -910,12 +916,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Standby Cluster has been added or removed");
 
         if (isPostgres) {
-            if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-                log.info("Standby added or remove...");
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                log.info("onStandbyClusterAddRemove: Standby added or removed...");
 
                 // ConfigId mismatch could happen if customized cluster manager does not follow protocol
                 if (discoveredTopology.getTopologyConfigId() != topologyDescriptor.getTopologyConfigId()) {
-                    log.warn("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
+                    log.warn("onStandbyClusterAddRemove: Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
                             "topologyConfigId as the current one {}", discoveredTopology, topologyDescriptor);
                 }
 
@@ -926,18 +932,47 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 Set<String> standbysToRemove = new HashSet<>(currentStandbys);
                 standbysToRemove.removeAll(intersection);
 
-                log.info("Standbys to remove: {}", standbysToRemove);
+                log.info("onStandbyClusterAddRemove: Standbys to remove: {}", standbysToRemove);
 
                 // Remove standbys that are not in the new config
                 for (String clusterId : standbysToRemove) {
-                    makeTablesWriteable(new ArrayList<>(getLogReplicationConfiguration().getStreamsToReplicate()), connector);
-                    dropAllSubscriptions(connector);
+                    String remoteNodeIp = topologyDescriptor.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
+                    log.info("onStandbyClusterAddRemove: Dropping subscriptions present on old standbysToRemove: {}", remoteNodeIp);
+
+                    PostgresConnector standByConnector = new PostgresConnector(remoteNodeIp,
+                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                    dropAllSubscriptions(standByConnector);
+                    makeTablesWriteable(new ArrayList<>(getLogReplicationConfiguration().getStreamsToReplicate()), standByConnector);
                     topologyDescriptor.removeStandbyCluster(clusterId);
                 }
 
-                // Start the standbys that are in the new config but not in the current config
+                // Start the standbys that are in the new config but not in the old config
+                String activeNodeIp = getActiveNodeHost(discoveredTopology);
+                PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
+                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
                 for (String clusterId : newStandbys) {
                     if (!topologyDescriptor.getStandbyClusters().containsKey(clusterId)) {
+                        String standByNodeIp = discoveredTopology.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
+                        log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
+
+                        PostgresConnector standByConnector = new PostgresConnector(standByNodeIp,
+                                pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                        ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
+
+                        dropAllSubscriptions(standByConnector);
+                        truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), standByConnector);
+                        makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), standByConnector);
+                        log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
+
+                        log.info("onStandbyClusterAddRemove: Starting subscriptions on new standBy: {} to active: {}", standByNodeIp, activeNodeIp);
+                        if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, standByConnector), standByConnector)) {
+                            return;
+                        }
+                        log.info("onStandbyClusterAddRemove: Created Subscriptions");
+
                         ClusterDescriptor clusterInfo = discoveredTopology.getStandbyClusters().get(clusterId);
                         topologyDescriptor.addStandbyCluster(clusterInfo);
                     }
@@ -1125,6 +1160,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         String remoteNodeHost = activeClusters.values().stream().findAny().get()
                 .getNodesDescriptors().stream().findAny().get().getHost();
         return remoteNodeHost.split(":")[0];
+    }
+
+    /**
+     * Return IP for active node
+     * TODO (Postgres): assumes single node, no leadership consensus
+     *
+     * @return active node's IP
+     */
+    private String getStandbyNodeHost(TopologyDescriptor descriptor) {
+        Map<String, ClusterDescriptor> standbyClusters = descriptor.getStandbyClusters();
+        String standByNodeHost = standbyClusters.values().stream().findAny().get()
+                .getNodesDescriptors().stream().findAny().get().getHost();
+        return standByNodeHost.split(":")[0];
     }
 
 

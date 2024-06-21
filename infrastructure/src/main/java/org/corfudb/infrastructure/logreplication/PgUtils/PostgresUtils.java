@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.PgUtils;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -10,8 +11,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +26,7 @@ public class PostgresUtils {
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
         boolean successOrExists = false;
-
+        log.info("Executing command: {}", sql);
         if (!sql.isEmpty()) {
             try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
 
@@ -46,6 +49,54 @@ public class PostgresUtils {
             }
         }
         return successOrExists;
+    }
+
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) {
+        boolean successOrExists = false;
+        log.info("tryExecutePreparedStatementsCommand: Praparing command: {}", sql);
+        if (!sql.isEmpty()) {
+            try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    setParameters(pstmt, params);
+                    log.info("tryExecutePreparedStatementsCommand: Executing command: {}", pstmt.toString());
+                    pstmt.executeUpdate();
+                    successOrExists = true;
+                }
+            } catch (SQLException e) {
+                if ("42710".equals(e.getSQLState())) {
+                    log.info("tryExecutePreparedStatementsCommand: Object already exists!");
+                    successOrExists = true;
+                } else if ("42704".equals(e.getSQLState())) {
+                    log.info("tryExecutePreparedStatementsCommand: Object is undefined!");
+                } else if ("42P07".equals(e.getSQLState())) {
+                    log.info("tryExecutePreparedStatementsCommand: Table already exists!");
+                    successOrExists = true;
+                } else {
+                    log.info("ERROR", e);
+                }
+            }
+        }
+        return successOrExists;
+    }
+
+    public static void setParameters(PreparedStatement pstmt, Object[] params) throws SQLException {
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] instanceof String) {
+                pstmt.setString(i + 1, (String) params[i]);
+            } else if (params[i] instanceof Integer) {
+                pstmt.setInt(i + 1, (Integer) params[i]);
+            } else if (params[i] instanceof Double) {
+                pstmt.setDouble(i + 1, (Double) params[i]);
+            } else if (params[i] instanceof Boolean) {
+                pstmt.setBoolean(i + 1, (Boolean) params[i]);
+            } else if (params[i] instanceof java.sql.Date) {
+                pstmt.setDate(i + 1, (java.sql.Date) params[i]);
+            } else if (params[i] instanceof java.sql.Timestamp) {
+                pstmt.setTimestamp(i + 1, (java.sql.Timestamp) params[i]);
+            } else {
+                pstmt.setObject(i + 1, params[i]);
+            }
+        }
     }
 
 
@@ -148,26 +199,29 @@ public class PostgresUtils {
     }
 
     public static List<String> getAllSubscriptions(PostgresConnector connector) {
-        List<String> subscriptionNames = new ArrayList<>();
         String getSubQuery = "SELECT * FROM pg_subscription;";
 
-        for (Map<String, Object> row : executeQuery(getSubQuery, connector)) {
-            String subname = row.get("subname").toString();
-            if (subname != null && !subname.isEmpty()) {
-                subscriptionNames.add(subname);
+        return executeQuery(getSubQuery, connector).stream().map(row -> {
+                String subname = row.get("subname").toString();
+                if (subname != null && !subname.isEmpty()) {
+                    return row.get("subname").toString();
+                }
+                return null;
             }
-        }
-
-        return subscriptionNames;
+        ).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     public static void dropSubscriptions(List<String> subscriptionsToDrop, PostgresConnector connector) {
         // TODO (POSTGRES): Add retry logic for failed drops, can also decouple from slot to guarantee
         //  drop and have service to clean up inactive slots
 
-        String dropPrefix = "DROP SUBSCRIPTION ";
+
+
         for (String subscription : subscriptionsToDrop) {
-            if (!tryExecuteCommand(dropPrefix + "\"" + subscription + "\";", connector)) {
+            String[] params = {};
+            // params[0] = subscription;
+            String dropQuery = String.format("DROP SUBSCRIPTION \"%s\"", subscription);
+            if (!tryExecutePreparedStatementsCommand(dropQuery, params, connector)) {
                 log.info("Unable to drop subscription: {}", subscription);
             } else {
                 log.info("Dropped subscription: {}", subscription);
