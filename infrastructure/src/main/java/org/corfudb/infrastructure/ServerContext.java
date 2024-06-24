@@ -697,13 +697,12 @@ public class ServerContext implements AutoCloseable {
             Thread.currentThread().interrupt();
         }
 
-        log.trace("refreshWorkerGroup: workerGroup isShuttingDown {}," +
-                        " isShutdown {}, isTerminated {}",
+        log.info("refreshWorkerGroup: Creating new workerGroup threads. workerGroup current state:" +
+                        " isShuttingDown {}, isShutdown {}, isTerminated {}.",
                 workerGroup.isShuttingDown(),
                 workerGroup.isShutdown(),
                 workerGroup.isTerminated());
 
-        log.info("refreshWorkerGroup: Creating new workerGroup threads.");
         workerGroup = getNewWorkerGroup();
     }
 

@@ -400,7 +400,7 @@ public class SecurityIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = CorfuRuntime.fromParameters(rtParams)
                     .parseConfigurationString(
-                            getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuStringNodePort)
+                            getVersionFormattedEndpointURL(corfuSingleNodeHost, corfuSingleNodePort)
                     );
 
         // Before Runtime connects FileWatcher should not have been initialized
