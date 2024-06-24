@@ -75,9 +75,9 @@ public class CorfuServerNode implements AutoCloseable {
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
-    private ChannelFuture bindFuture;
+    private volatile ChannelFuture bindFuture;
 
-    private ChannelFuture httpServerFuture;
+    private volatile ChannelFuture httpServerFuture;
 
     private HTTPServer metricsServer;
 
