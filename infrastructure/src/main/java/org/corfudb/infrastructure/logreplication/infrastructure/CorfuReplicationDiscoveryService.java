@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
@@ -13,6 +14,10 @@ import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.PgUtils.PostgresConnector;
+import org.corfudb.infrastructure.logreplication.PostgresReplicationConfig;
+import org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig;
+import org.corfudb.infrastructure.logreplication.ReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
@@ -45,17 +50,36 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.Stack;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createPublicationCmd;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createSubscriptionCmd;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.createTablesCmds;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropAllSubscriptions;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropPublications;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropSubscriptions;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllPublications;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllSubscriptions;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesReadOnly;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesWriteable;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.truncateTables;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.tryExecuteCommand;
+import static org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig.isPostgres;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -201,6 +225,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private LogReplicationEventListener logReplicationEventListener;
 
+    private PostgresConnector connector;
+
+    private final PostgresReplicationConnectionConfig pgConfig;
+
     /**
      * Constructor Discovery Service
      *
@@ -217,6 +245,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
         this.isLeader = new AtomicBoolean();
+        this.pgConfig = new PostgresReplicationConnectionConfig(serverContext.getPluginConfigFilePath());
+        if (isPostgres) {
+            this.connector = new PostgresConnector(getLocalHost(), pgConfig.getPORT(),
+                    pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+        }
     }
 
     public void run() {
@@ -326,41 +359,102 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * - Building Log Replication Context (LR context shared across receiving and sending components)
      * - Start Log Replication Server (receiver component)
      */
-    private void bootstrapLogReplicationService() {
+    private void bootstrapLogReplicationService(TopologyDescriptor topology) {
         log.info("Bootstrap the Log Replication Service");
-        // Through LogReplicationConfigAdapter retrieve system-specific configurations
-        // such as streams to replicate and version
-        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        if (isPostgres) {
+            // Through LogReplicationConfigAdapter retrieve system-specific configurations
+            // such as streams to replicate and version
+            log.info("Starting with Postgres");
+            ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-            topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+            // OPEN TABLES FOR ALL ROLES
+            createTables(logReplicationConfig);
 
-        logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
-            logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
-        if (localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE)) {
-            logReplicationServerHandler.setActive(true);
-            addDefaultReplicationStatus();
-        } else if (localClusterDescriptor.getRole().equals(ClusterRole.STANDBY)) {
-            logReplicationServerHandler.setStandby(true);
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                // TODO (Postgres): This needs to be adapted for clustered, publications only on leader
+                if (!tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector)) {
+                    return;
+                }
+                log.info("CREATED PUBLICATIONS");
+            } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+                dropAllSubscriptions(connector);
+                truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                log.info("Cleared tables to be replicated!");
+
+                String remoteNodeIp = getActiveNodeHost(topology);
+                log.info("Trying to connect to remote host: {}", remoteNodeIp);
+
+                PostgresConnector remoteConnector = new PostgresConnector(remoteNodeIp,
+                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                if (!tryExecuteCommand(createSubscriptionCmd(remoteConnector, connector), connector)) {
+                    return;
+                }
+                log.info("CREATED SUBSCRIPTIONS");
+            }
+
+        } else {
+            // Through LogReplicationConfigAdapter retrieve system-specific configurations
+            // such as streams to replicate and version
+            ReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+
+            logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
+                    topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+
+            logReplicationServerHandler = new LogReplicationServer(serverContext, (LogReplicationConfig) logReplicationConfig,
+                    logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
+            if (localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE)) {
+                logReplicationServerHandler.setActive(true);
+                addDefaultReplicationStatus();
+            } else if (localClusterDescriptor.getRole().equals(ClusterRole.STANDBY)) {
+                logReplicationServerHandler.setStandby(true);
+            }
+
+            interClusterReplicationService = new CorfuInterClusterReplicationServerNode(
+                    serverContext,
+                    ImmutableMap.<Class, AbstractServer>builder()
+                            .put(BaseServer.class, new BaseServer(serverContext))
+                            .put(LogReplicationServer.class, logReplicationServerHandler)
+                            .build());
+
+            // Pass server's channel context through the Log Replication Context, for shared objects between the server
+            // and the client channel (specific requirements of the transport implementation)
+            replicationContext = new LogReplicationContext((LogReplicationConfig) logReplicationConfig, topologyDescriptor,
+                    localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
+
+            // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
+            serverCallback.complete(interClusterReplicationService);
+
+            logReplicationEventListener = new LogReplicationEventListener(this);
         }
 
-        interClusterReplicationService = new CorfuInterClusterReplicationServerNode(
-                serverContext,
-                ImmutableMap.<Class, AbstractServer>builder()
-                        .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(LogReplicationServer.class, logReplicationServerHandler)
-                        .build());
-
-        // Pass server's channel context through the Log Replication Context, for shared objects between the server
-        // and the client channel (specific requirements of the transport implementation)
-        replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor,
-            localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
-
-        // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
-        serverCallback.complete(interClusterReplicationService);
-
-        logReplicationEventListener = new LogReplicationEventListener(this);
         serverStarted = true;
+    }
+
+    public void createTables(ReplicationConfig replicationConfig) {
+        Stack<String> tablesToCreate = new Stack<>();
+        tablesToCreate.addAll(createTablesCmds(replicationConfig.getStreamsToCreate()));
+
+        while (!tablesToCreate.empty()) {
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        log.info("Trying command: {}", tablesToCreate.peek());
+                        if(tryExecuteCommand(tablesToCreate.peek(), connector)) {
+                            tablesToCreate.pop();
+                        }
+                    } catch (Exception e) {
+                        log.error("Error while attempting to create table", e);
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unable to create all tables", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
+        }
     }
 
     /**
@@ -424,7 +518,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * This configuration represents all common parameters for the log replication, regardless of
      * a cluster's role.
      */
-    private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
+    private ReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
 
         try {
             replicationConfigManager =
@@ -442,38 +536,50 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
+    private ReplicationConfig getLogReplicationConfiguration() {
+        try {
+            replicationConfigManager =
+                    new LogReplicationConfigManager(serverContext.getPluginConfigFilePath());
+            return new PostgresReplicationConfig(replicationConfigManager, pgConfig);
+        } catch (Throwable t) {
+            log.error("Exception when fetching the Replication Config", t);
+            throw t;
+        }
+    }
+
     /**
      * Register interest on Log Replication Lock.
      * <p>
      * The node that acquires the lock will drive/lead log replication.
      */
     private void registerToLogReplicationLock() {
-        try {
+        if (!isPostgres) {
+            try {
+                Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
+                LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
+                LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration() / RENEWAL_LEASE_FRACTION);
+                HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
 
-            Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
-            LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
-            LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration() / RENEWAL_LEASE_FRACTION);
-            HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
+                IRetry.build(IntervalRetry.class, () -> {
+                    try {
+                        lockClient = new LockClient(logReplicationLockId, getCorfuRuntime());
+                        // Callback on lock acquisition or revoke
+                        LockListener logReplicationLockListener = new LogReplicationLockListener(this);
+                        // Register Interest on the shared Log Replication Lock
+                        lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
+                    } catch (Exception e) {
+                        log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
+                        throw new RetryNeededException();
+                    }
 
-            IRetry.build(IntervalRetry.class, () -> {
-                try {
-                    lockClient = new LockClient(logReplicationLockId, getCorfuRuntime());
-                    // Callback on lock acquisition or revoke
-                    LockListener logReplicationLockListener = new LogReplicationLockListener(this);
-                    // Register Interest on the shared Log Replication Lock
-                    lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
-                } catch (Exception e) {
-                    log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
-                    throw new RetryNeededException();
-                }
-
-                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
-                        logReplicationLockId.getLeastSignificantBits());
-                return null;
-            }).run();
-        } catch (InterruptedException e) {
-            log.error("Unrecoverable exception when attempting to register interest on log replication lock.", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
+                    log.debug("Registered to lock, client msb={}, lsb={}", logReplicationLockId.getMostSignificantBits(),
+                            logReplicationLockId.getLeastSignificantBits());
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("Unrecoverable exception when attempting to register interest on log replication lock.", e);
+                throw new UnrecoverableCorfuInterruptedError(e);
+            }
         }
     }
 
@@ -598,86 +704,143 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
 
-        log.debug("OnClusterRoleChange, topology={}", newTopology);
+        log.info("OnClusterRoleChange, topology={}", newTopology);
 
-        // Stop ongoing replication, stopLogReplication() checks leadership and active
-        // We do not update topology until we successfully stop log replication
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            stopLogReplication();
-            logReplicationEventListener.stop();
-        }
+        if (isPostgres) {
+            ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
 
-        // Update topology, cluster, and node configs
-        updateLocalTopology(newTopology);
-
-        // Update topology config id in metadata manager
-        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-
-        if (isLeader.get()) {
-            // Clear the Replication Status on the leader node only.
-            // Consider the case of async configuration changes, non-lead nodes could overwrite
-            // the replication status if it has already completed by the lead node
-            // Note: For the cluster which was Active, this clear can race with the async 'replication stop'
-            // (stopLogReplication()) which updates the status table with STOPPED state.  So the status table
-            // can have 2 entries - 1 from the new Standby State showing the dataConsistent flag, and the other from
-            // the time it was Active, showing the replication status as 'STOPPED'.
-            // For example:
-            // Key:
-            //{
-            //  "clusterId": "b4c1ae3a-528a-4677-9f15-4a213ffd0da8"
-            //}
-            //
-            //Payload:
-            //{
-            //  "dataConsistent": true,
-            //  "status": "UNAVAILABLE"
-            //}
-            //                      and
-            //Key:
-            //{
-            //  "clusterId": "3c1bf6c7-70bd-4ad6-8a4f-7b4e5181ddb1"
-            //}
-            //
-            //Payload:
-            //{
-            //  "syncType": "LOG_ENTRY",
-            //  "status": "STOPPED",
-            //  "snapshotSyncInfo": {
-            //    "type": "FORCED",
-            //    "status": "COMPLETED",
-            //    "snapshotRequestId": "3671bdb0-d5ec-46cc-9c87-d1a9a2436083",
-            //    "completedTime": "2024-03-20T19:11:23.431973Z",
-            //    "baseSnapshot": "1575363"
-            //  }
-            //}
-            // This is a known limitation which can be ignored and does not have any functional impact.
-            // The limitation is because conflict detection between putRecord()(which sets the status to 'STOPPED') and
-            // clear() (clear of the table) is currently not available.
-            resetReplicationStatusTableWithRetry();
-            // In the event of Standby -> Active we should add the default replication values
             if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-                addDefaultReplicationStatus();
+                log.info("Role change happening from Active to Standby!!!");
+
+                // Wait for standby to drop all subscriptions
+                Map<String, ClusterDescriptor> standbyClusters = topologyDescriptor.getStandbyClusters();
+                String remoteNodeHost = standbyClusters.values().stream().findAny().get().getNodesDescriptors().stream().findAny().get().getHost();
+                String remoteNodeIp = remoteNodeHost.split(":")[0];
+                log.info("Trying to connect to remote host: {}", remoteNodeIp);
+
+                PostgresConnector remoteConnector = new PostgresConnector(remoteNodeIp,
+                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                while (!getAllSubscriptions(remoteConnector).isEmpty()) {
+                    try {
+                        TimeUnit.SECONDS.sleep(5);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                log.info("Subscriptions are dropped on replica, dropping inactive publications on active");
+
+                // Drop all publications
+                // Drop all replication slots
+                dropPublications(getAllPublications(connector), connector);
+
+                // Clear tables
+                truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+
+                if (!tryExecuteCommand(createSubscriptionCmd(remoteConnector, connector), connector)) {
+                    return;
+                }
+
+                log.info("TRANSFORMED SOURCE TO SINK");
+            } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+                log.info("Role change happening from Standby to Active!!!");
+
+                // Make tables writeable
+                makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+
+                List<String> subscriptionsToDrop = getAllSubscriptions(connector);
+                dropSubscriptions(subscriptionsToDrop, connector);
+
+                if (!tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector)) {
+                    return;
+                }
+
+                log.info("TRANSFORMED SINK TO SOURCE");
             }
-        }
 
-        log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
-                localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
+            // Update topology, cluster, and node configs
+            updateLocalTopology(newTopology);
+        } else {
+            // Stop ongoing replication, stopLogReplication() checks leadership and active
+            // We do not update topology until we successfully stop log replication
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                stopLogReplication();
+                logReplicationEventListener.stop();
+            }
 
-        // Update replication manager
-        updateReplicationManagerTopology(newTopology);
+            // Update topology, cluster, and node configs
+            updateLocalTopology(newTopology);
 
-        // Update sink manager
-        interClusterReplicationService.getLogReplicationServer().getSinkManager()
-                .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-        interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
+            // Update topology config id in metadata manager
+            logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
 
-        // Update replication server, in case there is a role change
-        logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
-        logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
+            if (isLeader.get()) {
+                // Clear the Replication Status on the leader node only.
+                // Consider the case of async configuration changes, non-lead nodes could overwrite
+                // the replication status if it has already completed by the lead node
+                // Note: For the cluster which was Active, this clear can race with the async 'replication stop'
+                // (stopLogReplication()) which updates the status table with STOPPED state.  So the status table
+                // can have 2 entries - 1 from the new Standby State showing the dataConsistent flag, and the other from
+                // the time it was Active, showing the replication status as 'STOPPED'.
+                // For example:
+                // Key:
+                //{
+                //  "clusterId": "b4c1ae3a-528a-4677-9f15-4a213ffd0da8"
+                //}
+                //
+                //Payload:
+                //{
+                //  "dataConsistent": true,
+                //  "status": "UNAVAILABLE"
+                //}
+                //                      and
+                //Key:
+                //{
+                //  "clusterId": "3c1bf6c7-70bd-4ad6-8a4f-7b4e5181ddb1"
+                //}
+                //
+                //Payload:
+                //{
+                //  "syncType": "LOG_ENTRY",
+                //  "status": "STOPPED",
+                //  "snapshotSyncInfo": {
+                //    "type": "FORCED",
+                //    "status": "COMPLETED",
+                //    "snapshotRequestId": "3671bdb0-d5ec-46cc-9c87-d1a9a2436083",
+                //    "completedTime": "2024-03-20T19:11:23.431973Z",
+                //    "baseSnapshot": "1575363"
+                //  }
+                //}
+                // This is a known limitation which can be ignored and does not have any functional impact.
+                // The limitation is because conflict detection between putRecord()(which sets the status to 'STOPPED') and
+                // clear() (clear of the table) is currently not available.
+                resetReplicationStatusTableWithRetry();
+                // In the event of Standby -> Active we should add the default replication values
+                if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                    addDefaultReplicationStatus();
+                }
+            }
 
-        // On Topology Config Change, only if this node is the leader take action
-        if (isLeader.get()) {
-            onLeadershipAcquire();
+            log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
+                    localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
+
+            // Update replication manager
+            updateReplicationManagerTopology(newTopology);
+
+            // Update sink manager
+            interClusterReplicationService.getLogReplicationServer().getSinkManager()
+                    .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+            interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
+
+            // Update replication server, in case there is a role change
+            logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
+            logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
+
+            // On Topology Config Change, only if this node is the leader take action
+            if (isLeader.get()) {
+                onLeadershipAcquire();
+            }
         }
     }
 
@@ -697,6 +860,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
+        // if (event.getTopologyConfig().getTopologyConfigID() == topologyDescriptor.getTopologyConfigID()){
+        //     log.debug("Repeated Topology Change Notification, current={}, received={}",
+        //             topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
+        //     return;
+        // }
+
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
@@ -704,6 +873,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         boolean isValid;
         try {
             isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
+            log.info("Found valid topology, topology={}", discoveredTopology);
         } catch (Throwable t) {
             log.error("Exception when processing the discovered topology", t);
             stopLogReplication();
@@ -745,14 +915,80 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void onStandbyClusterAddRemove(TopologyDescriptor discoveredTopology) {
         log.debug("Standby Cluster has been added or removed");
 
-        // We only need to process new standby's if your role is of an ACTIVE cluster
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null && isLeader.get()) {
-            replicationManager.processStandbyChange(discoveredTopology);
+        if (isPostgres) {
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                log.info("onStandbyClusterAddRemove: Standby added or removed...");
+
+                // ConfigId mismatch could happen if customized cluster manager does not follow protocol
+                if (discoveredTopology.getTopologyConfigId() != topologyDescriptor.getTopologyConfigId()) {
+                    log.warn("onStandbyClusterAddRemove: Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
+                            "topologyConfigId as the current one {}", discoveredTopology, topologyDescriptor);
+                }
+
+                Set<String> currentStandbys = new HashSet<>(topologyDescriptor.getStandbyClusters().keySet());
+                Set<String> newStandbys = new HashSet<>(discoveredTopology.getStandbyClusters().keySet());
+                Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
+
+                Set<String> standbysToRemove = new HashSet<>(currentStandbys);
+                standbysToRemove.removeAll(intersection);
+
+                log.info("onStandbyClusterAddRemove: Standbys to remove: {}", standbysToRemove);
+
+                // Remove standbys that are not in the new config
+                for (String clusterId : standbysToRemove) {
+                    String remoteNodeIp = topologyDescriptor.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
+                    log.info("onStandbyClusterAddRemove: Dropping subscriptions present on old standbysToRemove: {}", remoteNodeIp);
+
+                    PostgresConnector standByConnector = new PostgresConnector(remoteNodeIp,
+                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                    dropAllSubscriptions(standByConnector);
+                    makeTablesWriteable(new ArrayList<>(getLogReplicationConfiguration().getStreamsToReplicate()), standByConnector);
+                    topologyDescriptor.removeStandbyCluster(clusterId);
+                }
+
+                // Start the standbys that are in the new config but not in the old config
+                String activeNodeIp = getActiveNodeHost(discoveredTopology);
+                PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
+                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                for (String clusterId : newStandbys) {
+                    if (!topologyDescriptor.getStandbyClusters().containsKey(clusterId)) {
+                        String standByNodeIp = discoveredTopology.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
+                        log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
+
+                        PostgresConnector standByConnector = new PostgresConnector(standByNodeIp,
+                                pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                        ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
+
+                        dropAllSubscriptions(standByConnector);
+                        truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), standByConnector);
+                        makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), standByConnector);
+                        log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
+
+                        log.info("onStandbyClusterAddRemove: Starting subscriptions on new standBy: {} to active: {}", standByNodeIp, activeNodeIp);
+                        if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, standByConnector), standByConnector)) {
+                            return;
+                        }
+                        log.info("onStandbyClusterAddRemove: Created Subscriptions");
+
+                        ClusterDescriptor clusterInfo = discoveredTopology.getStandbyClusters().get(clusterId);
+                        topologyDescriptor.addStandbyCluster(clusterInfo);
+                    }
+                }
+            }
+            updateLocalTopology(discoveredTopology);
+        } else {
+            // We only need to process new standby's if your role is of an ACTIVE cluster
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null && isLeader.get()) {
+                replicationManager.processStandbyChange(discoveredTopology);
+            }
+            updateLocalTopology(discoveredTopology);
+            updateReplicationManagerTopology(discoveredTopology);
+            updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
         }
 
-        updateLocalTopology(discoveredTopology);
-        updateReplicationManagerTopology(discoveredTopology);
-        updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
     }
@@ -770,7 +1006,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (topology != null && clusterPresentInTopology(topology, update)) {
             log.info("Node[{}/{}] belongs to cluster, descriptor={}, topology={}", localEndpoint, localNodeId, localClusterDescriptor, topology);
             if (!serverStarted) {
-                bootstrapLogReplicationService();
+                bootstrapLogReplicationService(topology);
                 registerToLogReplicationLock();
             }
             return true;
@@ -804,13 +1040,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Enforce a snapshot full sync for all standbys if the current node is a leader node
      */
     private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
-        if (replicationManager == null || !isLeader.get()) {
-            log.warn("The current node is not the leader, will skip doing the " +
-                    "forced snapshot sync with id {}", event.getEventId());
-            return;
-        }
+        if (!isPostgres) {
+            if (replicationManager == null || !isLeader.get()) {
+                log.warn("The current node is not the leader, will skip doing the " +
+                        "forced snapshot sync with id {}", event.getEventId());
+                return;
+            }
 
-        replicationManager.enforceSnapshotSync(event);
+            replicationManager.enforceSnapshotSync(event);
+        }
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {
@@ -909,6 +1147,32 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private String getLocalHost() {
         return getHostFromEndpointURL(serverContext.getLocalEndpoint());
+    }
+
+    /**
+     * Return IP for active node
+     * TODO (Postgres): assumes single node, no leadership consensus
+     *
+     * @return active node's IP
+     */
+    private String getActiveNodeHost(TopologyDescriptor descriptor) {
+        Map<String, ClusterDescriptor> activeClusters = descriptor.getActiveClusters();
+        String remoteNodeHost = activeClusters.values().stream().findAny().get()
+                .getNodesDescriptors().stream().findAny().get().getHost();
+        return remoteNodeHost.split(":")[0];
+    }
+
+    /**
+     * Return IP for active node
+     * TODO (Postgres): assumes single node, no leadership consensus
+     *
+     * @return active node's IP
+     */
+    private String getStandbyNodeHost(TopologyDescriptor descriptor) {
+        Map<String, ClusterDescriptor> standbyClusters = descriptor.getStandbyClusters();
+        String standByNodeHost = standbyClusters.values().stream().findAny().get()
+                .getNodesDescriptors().stream().findAny().get().getHost();
+        return standByNodeHost.split(":")[0];
     }
 
 
