@@ -26,7 +26,7 @@ import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 @Slf4j
 @Data
 @ToString
-public class LogReplicationConfig {
+public class LogReplicationConfig extends ReplicationConfig {
 
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
@@ -63,13 +63,6 @@ public class LogReplicationConfig {
             REGISTRY_TABLE_ID,
             PROTOBUF_TABLE_ID
     ));
-
-    // Suite of utility methods for updating the configuration
-    private LogReplicationConfigManager configManager;
-
-    // Unique identifiers for all streams to be replicated across sites
-    private Set<String> streamsToReplicate;
-
     // Mapping from stream ids to their fully qualified names.
     private Map<UUID, String> streamsIdToNameMap;
 

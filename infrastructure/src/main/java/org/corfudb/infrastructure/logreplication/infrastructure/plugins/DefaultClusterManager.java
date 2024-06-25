@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.corfudb.common.util.URLUtils.getVersionFormattedHostAddress;
+import static org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig.isPostgres;
 
 /**
  * This class extends CorfuReplicationClusterManagerAdapter, provides topology config API
@@ -94,33 +95,37 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         shutdown = false;
         topologyConfig = constructTopologyConfigMsg();
         clusterManagerCallback = new ClusterManagerCallback(this);
-        corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(corfuEndpoint)
-                .connect();
-        corfuStore = new CorfuStore(corfuRuntime);
-        long trimMark = Address.NON_ADDRESS;
-        try {
-            // Subscribe from the earliest point in the log.
-            trimMark = corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(corfuRuntime.getLayoutServers().get(0)).getTrimMark().get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Exception caught while attempting to fetch trim mark. Subscription might fail.", e);
+
+        if (!isPostgres) {
+            corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+                    .parseConfigurationString(corfuEndpoint)
+                    .connect();
+            corfuStore = new CorfuStore(corfuRuntime);
+            long trimMark = Address.NON_ADDRESS;
+            try {
+                // Subscribe from the earliest point in the log.
+                trimMark = corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(corfuRuntime.getLayoutServers().get(0)).getTrimMark().get();
+            } catch (ExecutionException | InterruptedException e) {
+                log.error("Exception caught while attempting to fetch trim mark. Subscription might fail.", e);
+            }
+            CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
+                    .setEpoch(corfuRuntime.getLayoutView().getRuntimeLayout().getLayout().getEpoch())
+                    .setSequence(trimMark).build();
+            try {
+                Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
+                        CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
+                        ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
+                        TableOptions.fromProtoSchema(ClusterUuidMsg.class)
+                );
+                table.clearAll();
+            } catch (Exception e) {
+                log.error("Exception caught while opening {} table", CONFIG_TABLE_NAME);
+                throw new RuntimeException(e);
+            }
+            configStreamListener = new ConfigStreamListener(this);
+            corfuStore.subscribeListener(configStreamListener, CONFIG_NAMESPACE, "cluster_manager_test", ts);
         }
-        CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
-                .setEpoch(corfuRuntime.getLayoutView().getRuntimeLayout().getLayout().getEpoch())
-                .setSequence(trimMark).build();
-        try {
-            Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> table = corfuStore.openTable(
-                    CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
-                    ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
-                    TableOptions.fromProtoSchema(ClusterUuidMsg.class)
-            );
-            table.clearAll();
-        } catch (Exception e) {
-            log.error("Exception caught while opening {} table", CONFIG_TABLE_NAME);
-            throw new RuntimeException(e);
-        }
-        configStreamListener = new ConfigStreamListener(this);
-        corfuStore.subscribeListener(configStreamListener, CONFIG_NAMESPACE, "cluster_manager_test", ts);
+
         Thread thread = new Thread(clusterManagerCallback);
         thread.start();
     }
