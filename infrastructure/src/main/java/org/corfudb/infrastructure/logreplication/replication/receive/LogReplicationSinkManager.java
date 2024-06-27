@@ -29,6 +29,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -265,6 +266,12 @@ public class LogReplicationSinkManager implements DataReceiver {
             return null;
         }
 
+        if (isMessageFromNewSnapshotSync(message) && ongoingApply.get()) {
+            log.warn("Drop message {}.  A Snapshot Apply is already ongoing.  Not accepting messages from a new " +
+                "Snapshot Sync Cycle");
+            return null;
+        }
+
         // If it receives a SNAPSHOT_START message, prepare a transition
         if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
             if (isValidSnapshotStart(message)) {
@@ -302,6 +309,17 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         return processReceivedMessage(message);
+    }
+
+    private boolean isMessageFromNewSnapshotSync(LogReplication.LogReplicationEntryMsg message) {
+        if ((message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START ||
+            message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_MESSAGE ||
+            message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END) &&
+            !Objects.equals(getUUID(message.getMetadata().getSyncRequestId()), lastSnapshotSyncId))
+        {
+           return true;
+        }
+        return false;
     }
 
     /**
