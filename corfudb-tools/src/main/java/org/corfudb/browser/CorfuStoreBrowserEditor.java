@@ -177,9 +177,10 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                 for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
                     String keyJsonString = printKey(entry);
                     String payloadJsonString = printPayload(entry);
-                    printMetadata(entry);
+                    String metadataJsonString = printMetadata(entry);
 
-                    String query = "INSERT INTO \"" + fullTableName + "\" (key, value) VALUES ('" + keyJsonString + "','" + payloadJsonString + "');\n";
+                    String query = "INSERT INTO \"" + fullTableName + "\" (key, value, metadata) VALUES ('"
+                            + keyJsonString + "','" + payloadJsonString + "','" + metadataJsonString + "');\n";
                     Files.write(Paths.get(filePath), query.getBytes(), StandardOpenOption.APPEND);
                 }
             }
@@ -264,19 +265,21 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
-    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static String printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
         StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
             log.warn("metadata is NULL");
-            return;
+            return "";
         }
         try {
             builder = new StringBuilder("\nMetadata:\n")
                     .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
             System.out.println(builder.toString());
+            return JsonFormat.printer().omittingInsignificantWhitespace().print(entry.getValue().getMetadata());
         } catch (Exception e) {
             log.error("invalid metadata: ", e);
         }
+        return "";
     }
 
     /**
