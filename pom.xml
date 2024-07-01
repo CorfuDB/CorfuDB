@@ -100,7 +100,7 @@
 
         <repository>
             <id>ossrh-staging</id>
-            <url>https://s01.oss.sonatype.org/content/repositories/orgcorfudb-1011</url>
+            <url>https://s01.oss.sonatype.org/content/repositories/orgcorfudb-1013</url>
         </repository>
     </repositories>
 

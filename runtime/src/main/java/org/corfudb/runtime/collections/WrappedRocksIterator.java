@@ -4,7 +4,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.RocksIteratorInterface;
-import org.rocksdb.Snapshot;
 
 import java.nio.ByteBuffer;
 
@@ -145,11 +144,6 @@ public class WrappedRocksIterator implements RocksIteratorInterface {
 
     @Override
     public void refresh(){
-        throw new UnsupportedOperationException("refresh");
-    }
-
-    @Override
-    public void refresh(Snapshot snapshot) throws RocksDBException {
         throw new UnsupportedOperationException("refresh");
     }
 
