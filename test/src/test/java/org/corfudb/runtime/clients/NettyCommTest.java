@@ -703,6 +703,9 @@ public class NettyCommTest extends AbstractCorfuTest {
         byte[] randomBytes = new byte[100];
         Random random = new Random();
         random.nextBytes(randomBytes);
+
+        // Wait a second to mark new file's modified time greater than original file
+        TimeUnit.SECONDS.sleep(1);
         Files.write(keyStoreFilePath, randomBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 
         clientRouter.reconnect();

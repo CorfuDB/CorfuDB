@@ -30,41 +30,55 @@ public class ReloadableKeyManager implements X509KeyManager {
         this.keyStoreConfig = keyStoreConfig;
         this.keysLastModifiedTime = 0;
         this.lastReloadSucceeded = false;
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside ReloadableKeyManager Constructor");
         reloadKeyStoreWrapper();
     }
 
     @Override
     public String[] getClientAliases(String keyType, Principal[] issuers) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside getClientAliases");
         reloadKeyStoreWrapper();
         return keyManager.getClientAliases(keyType, issuers);
     }
 
     @Override
     public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside chooseClientAlias");
         reloadKeyStoreWrapper();
         return keyManager.chooseClientAlias(keyType, issuers, socket);
     }
 
     @Override
     public String[] getServerAliases(String keyType, Principal[] issuers) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside getServerAliases");
         reloadKeyStoreWrapper();
         return keyManager.getServerAliases(keyType, issuers);
     }
 
     @Override
     public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside chooseServerAlias");
         reloadKeyStoreWrapper();
         return keyManager.chooseServerAlias(keyType, issuers, socket);
     }
 
     @Override
     public X509Certificate[] getCertificateChain(String alias) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside getCertificateChain");
         reloadKeyStoreWrapper();
         return keyManager.getCertificateChain(alias);
     }
 
     @Override
     public PrivateKey getPrivateKey(String alias) {
+        // TODO (Chetan): remove this before merging
+        log.info("ReloadableKeyManager: inside getPrivateKey");
         reloadKeyStoreWrapper();
         return keyManager.getPrivateKey(alias);
     }

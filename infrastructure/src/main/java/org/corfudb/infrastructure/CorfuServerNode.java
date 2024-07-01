@@ -33,6 +33,7 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.KeyStoreConfig;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.TrustStoreConfig;
+import org.corfudb.util.FileWatcher;
 import org.corfudb.util.GitRepositoryState;
 
 import javax.annotation.Nonnull;
@@ -47,6 +48,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
@@ -73,11 +75,14 @@ public class CorfuServerNode implements AutoCloseable {
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
-    private ChannelFuture bindFuture;
+    private volatile ChannelFuture bindFuture;
 
-    private ChannelFuture httpServerFuture;
+    private volatile ChannelFuture httpServerFuture;
 
     private HTTPServer metricsServer;
+
+    @Getter
+    private final Optional<FileWatcher> sslCertWatcher;
 
     /**
      * Corfu Server initialization.
@@ -107,6 +112,7 @@ public class CorfuServerNode implements AutoCloseable {
         this.serverMap = serverMap;
         this.router = new NettyServerRouter(serverMap.values().asList(), serverContext);
         this.serverContext.setServerRouter(router);
+
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
         Optional<Layout> maybeCurrentLayout = serverContext.findCurrentLayout();
@@ -118,6 +124,19 @@ public class CorfuServerNode implements AutoCloseable {
         });
 
         this.close = new AtomicBoolean(false);
+        // Initialize the getSslCertWatcher
+        if (serverContext
+                .<Boolean>getServerConfig(ConfigParamNames.DISABLE_FILE_WATCHER)
+                .orElse(KeyStoreConfig.DEFAULT_DISABLE_FILE_WATCHER)){
+            log.info("CorfuServerNode: Disabling FileWatcher for corfu server as per the server args.");
+            sslCertWatcher = Optional.empty();
+        } else {
+            log.info("CorfuServerNode: Starting FileWatcher for corfu server as per the server args.");
+            sslCertWatcher = FileWatcher.newInstance(
+                    serverContext.getServerConfig(String.class, ConfigParamNames.KEY_STORE),
+                    this::restartServerChannel);
+        }
+
     }
 
     /**
@@ -185,6 +204,45 @@ public class CorfuServerNode implements AutoCloseable {
         this.start().channel().closeFuture().syncUninterruptibly();
     }
 
+    public void restartServerChannel() {
+        log.info("restartServerChannel: Stopping Corfu Server channels.");
+
+        if (bindFuture != null) {
+            bindFuture.channel().close().syncUninterruptibly();
+        }
+
+        if (httpServerFuture != null) {
+            httpServerFuture.channel().close().syncUninterruptibly();
+        }
+
+        // Check if channels are active and
+        // close them with await for thread safety
+        if (bindFuture != null
+                && bindFuture.channel() != null
+                && bindFuture.channel().isActive()) {
+                bindFuture.channel().close().awaitUninterruptibly(
+                        serverContext.getManagementRuntimeParameters().getNettyShutdownTimeout(),
+                        TimeUnit.MILLISECONDS
+                );
+        }
+
+        if (httpServerFuture != null
+                && httpServerFuture.channel() != null
+                && httpServerFuture.channel().isActive()) {
+                httpServerFuture.channel().close().awaitUninterruptibly(
+                        serverContext.getManagementRuntimeParameters().getNettyShutdownTimeout(),
+                        TimeUnit.MILLISECONDS
+                );
+        }
+
+        serverContext.refreshWorkerGroupThreads();
+
+        log.info("restartServerChannel: Reinitializing Corfu Server channels.");
+        // Invoke restartServerChannel method in CorfuServer to signal
+        // the Corfu Server's while loop to continue using latch countdown()
+        CorfuServer.restartServerChannel();
+    }
+
     /**
      * Closes the currently running corfu server.
      */
@@ -204,6 +262,10 @@ public class CorfuServerNode implements AutoCloseable {
         if (httpServerFuture != null) {
             httpServerFuture.channel().close().syncUninterruptibly();
         }
+
+        // close ssl cert watcher
+        sslCertWatcher.ifPresent(FileWatcher::close);
+
         serverContext.close();
 
         // A executor service to create the shutdown threads
@@ -419,6 +481,8 @@ public class CorfuServerNode implements AutoCloseable {
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
                             certExpiryFile
                     );
+                    // TODO (Chetan): remove this before merging
+                    log.info("constructSslContext from CorfuServerNode ");
 
                     sslContext = SslContextConstructor.constructSslContext(
                             true, keyStoreConfig, trustStoreConfig

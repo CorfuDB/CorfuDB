@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  could-deployment-test:
+  cloud_deployment_test:
     runs-on: ubuntu-latest
 
     strategy:

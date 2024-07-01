@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.util.URLUtils.NetworkInterfaceVersion;
@@ -22,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer.initServerMetrics;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
@@ -39,6 +42,8 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 public class CorfuServer {
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
 
+    @Getter
+    @Setter
     private static volatile CountDownLatch resetLatch;
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
@@ -47,6 +52,10 @@ public class CorfuServer {
     private static volatile boolean shutdownServer = false;
     // If set to true - triggers a reset of the server by wiping off all the data.
     private static volatile boolean cleanupServer = false;
+    // If reload is true, server loads new server components
+    // If false, server restarts the netty channel and reuse the old server components
+    @Getter
+    private static AtomicBoolean reloadServerComponents = new AtomicBoolean(true);
     // Error code required to detect an ungraceful shutdown.
     static final int EXIT_ERROR_CODE = 100;
 
@@ -57,6 +66,7 @@ public class CorfuServer {
     // Declaring strings to avoid code duplication code analysis error
     private static final String ADDRESS_PARAM = "--address";
     private static final String NETWORK_INTERFACE_VERSION_PARAM = "--network-interface-version";
+    private static ServerContext serverContext;
 
     /**
      * Main program entry point.
@@ -130,12 +140,22 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             resetLatch = new CountDownLatch(1);
-            ServerContext serverContext;
             try {
-                serverContext = new ServerContext(opts);
-                configureMetrics(opts, serverContext.getLocalEndpoint());
-                configureHealthMonitor(opts);
-                activeServer = new CorfuServerNode(serverContext);
+                // If reloadServerComponents is true, then initiate the server channel
+                // by resetting all the server components, else, do not reset components
+                // Also reset reloadServerComponents to true for next iterations
+                if (reloadServerComponents.getAndSet(true) || serverContext == null) {
+                    serverContext = new ServerContext(opts);
+                    configureMetrics(opts, serverContext.getLocalEndpoint());
+                    configureHealthMonitor(opts);
+                    activeServer = new CorfuServerNode(serverContext);
+
+                    log.info("main: Restarting the server Channel with resetting the " +
+                            "server components.");
+                } else {
+                    log.info("main: Restarting the server Channel without resetting the " +
+                            "server components.");
+                }
             } catch (DataCorruptionException ex) {
                 log.error("Failed starting server", ex);
                 TimeUnit.SECONDS.sleep(TIMEOUT.getSeconds());
@@ -155,9 +175,9 @@ public class CorfuServer {
             }
 
             if (!shutdownServer) {
-                log.info("main: Waiting until restart is complete.");
+                log.info("main: Waiting for signal until shutdown is complete.");
                 resetLatch.await();
-                log.info("main: Server restarted.");
+                log.info("main: Server has stopped completely, restarting now.");
             }
         }
 
@@ -288,6 +308,19 @@ public class CorfuServer {
             }
         }
         log.warn("main: cleanup completed, expect clean startup");
+    }
+
+    /**
+     * Resets the corfu channel without resetting any of the server components
+     * CorfuRuntime will auto-reconnect to the server using
+     * {@link org.corfudb.runtime.clients.NettyClientRouter
+     * #channelConnectionFutureHandler(ChannelFuture, Bootstrap)}.
+     *
+     */
+    static void restartServerChannel() {
+        reloadServerComponents.set(false);
+        resetLatch.countDown();
+        log.info("main: Signalled restart of corfu server channels");
     }
 
     /**
