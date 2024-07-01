@@ -26,7 +26,7 @@ public class PostgresUtils {
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
         boolean successOrExists = false;
-        log.info("Executing command: {}", sql);
+        log.info("Executing command: {}, on connector {} ", sql, connector);
         if (!sql.isEmpty()) {
             try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
 
@@ -103,6 +103,7 @@ public class PostgresUtils {
 
     public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector) {
         List<Map<String, Object>> result = new ArrayList<>();
+        log.info("Executing command: {}, on connector {} ", sql, connector);
 
         try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
             Statement statement = conn.createStatement();
