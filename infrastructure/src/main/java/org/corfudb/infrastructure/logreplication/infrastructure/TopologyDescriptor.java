@@ -173,7 +173,7 @@ public class TopologyDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Topology[id=%s] \n Active Cluster=%s \n Standby Clusters=%s \n Invalid Clusters=%s",
+        return String.format("Topology[id=%s] Active Cluster=%s Standby Clusters=%s Invalid Clusters=%s",
                 topologyConfigId, activeClusters.values(), standbyClusters.values(), invalidClusters.values());
     }
 }

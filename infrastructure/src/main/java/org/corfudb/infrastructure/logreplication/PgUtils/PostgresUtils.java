@@ -26,10 +26,9 @@ public class PostgresUtils {
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
         boolean successOrExists = false;
-        log.info("Executing command: {}", sql);
+        log.info("Executing command: {}, on connector {} ", sql, connector);
         if (!sql.isEmpty()) {
             try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
-
                 Statement statement = conn.createStatement();
                 statement.execute(sql);
                 statement.close();
@@ -53,7 +52,6 @@ public class PostgresUtils {
 
     public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) {
         boolean successOrExists = false;
-        log.info("tryExecutePreparedStatementsCommand: Praparing command: {}", sql);
         if (!sql.isEmpty()) {
             try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
                 try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -103,6 +101,7 @@ public class PostgresUtils {
 
     public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector) {
         List<Map<String, Object>> result = new ArrayList<>();
+        log.info("Executing command: {}, on connector {} ", sql, connector);
 
         try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
             Statement statement = conn.createStatement();
@@ -161,35 +160,40 @@ public class PostgresUtils {
     }
 
     public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica) {
-        int max_retry = 10;
         String createSubCmd = "";
-        String primaryPrefix = String.join("_", primary.ADDRESS.split("\\."));
-        String replicaPrefix = String.join("_", replica.ADDRESS.split("\\."));
-        String pubName = String.join("_", primaryPrefix, "pub");
 
-        for (int i = 0; i < max_retry; i++) {
-            String pubExistsQuery = String.format("SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '%s');", pubName);
-            log.info("check exists: {}", pubExistsQuery);
-            try {
-                List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primary);
+        if (Objects.equals(primary.ADDRESS, replica.ADDRESS)) {
+            log.error("Skipping subscribing to self {}. This is an invalid state!", primary.ADDRESS);
+        } else {
+            int max_retry = 10;
+            String primaryPrefix = String.join("_", primary.ADDRESS.split("\\."));
+            String replicaPrefix = String.join("_", replica.ADDRESS.split("\\."));
+            String pubName = String.join("_", primaryPrefix, "pub");
 
-                if (!queryResult.isEmpty()) {
-                    boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
-                    if (publicationExists) {
-                        String subName = String.join("_", replicaPrefix, "sub");
-                        createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
-                                subName, primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, pubName);
-                        break;
+            for (int i = 0; i < max_retry; i++) {
+                String pubExistsQuery = String.format("SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '%s');", pubName);
+                log.info("check exists: {}", pubExistsQuery);
+                try {
+                    List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primary);
+
+                    if (!queryResult.isEmpty()) {
+                        boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
+                        if (publicationExists) {
+                            String subName = String.join("_", replicaPrefix, "sub");
+                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
+                                    subName, primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, pubName);
+                            break;
+                        } else {
+                            log.info("PUB WITH THAT NAME DOES NOT EXIST");
+                            TimeUnit.SECONDS.sleep(5);
+                        }
                     } else {
-                        log.info("PUB WITH THAT NAME DOES NOT EXIST");
+                        log.info("PUB DOES NOT EXIST");
                         TimeUnit.SECONDS.sleep(5);
                     }
-                } else {
-                    log.info("PUB DOES NOT EXIST");
-                    TimeUnit.SECONDS.sleep(5);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
                 }
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
             }
         }
 
@@ -214,8 +218,6 @@ public class PostgresUtils {
     public static void dropSubscriptions(List<String> subscriptionsToDrop, PostgresConnector connector) {
         // TODO (POSTGRES): Add retry logic for failed drops, can also decouple from slot to guarantee
         //  drop and have service to clean up inactive slots
-
-
 
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};

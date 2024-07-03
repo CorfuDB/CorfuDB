@@ -372,6 +372,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
                 // TODO (Postgres): This needs to be adapted for clustered, publications only on leader
+                // Make tables writeable
+                makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                 if (!tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector)) {
                     return;
                 }
@@ -382,13 +384,25 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                 log.info("Cleared tables to be replicated!");
 
-                String remoteNodeIp = getActiveNodeHost(topology);
-                log.info("Trying to connect to remote host: {}", remoteNodeIp);
+                AtomicBoolean success = new AtomicBoolean(true);
+                topology.getActiveClusters().values().forEach(
+                        activeCluster -> activeCluster.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    String activeNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    log.info("Trying to connect to remote host: {}", activeNodeIp);
+                                    PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
+                                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
 
-                PostgresConnector remoteConnector = new PostgresConnector(remoteNodeIp,
-                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+                                    if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, connector), connector)) {
+                                        log.error("bootstrapLogReplicationService: Error while subscribing to new remote active {} ", activeNodeIp);
+                                        success.set(false);
+                                    } else {
+                                        success.set(true);
+                                    }
+                                })
+                );
 
-                if (!tryExecuteCommand(createSubscriptionCmd(remoteConnector, connector), connector)) {
+                if (!success.get()) {
                     return;
                 }
                 log.info("CREATED SUBSCRIPTIONS");
@@ -702,47 +716,74 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
 
-        log.info("OnClusterRoleChange, topology={}", newTopology);
+        log.info("OnClusterRoleChange, topology={}, localClusterDescriptor={}", newTopology, localClusterDescriptor);
 
         if (isPostgres) {
             ReplicationConfig logReplicationConfig = getLogReplicationConfiguration();
 
-            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-                log.info("Role change happening from Active to Standby!!!");
+            if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && newTopology.getClusterDescriptor(localNodeId).getRole() == ClusterRole.STANDBY) {
+                log.info("Role change happening from Active to Standby!");
 
-                // Wait for standby to drop all subscriptions
-                Map<String, ClusterDescriptor> standbyClusters = topologyDescriptor.getStandbyClusters();
-                String remoteNodeHost = standbyClusters.values().stream().findAny().get().getNodesDescriptors().stream().findAny().get().getHost();
-                String remoteNodeIp = remoteNodeHost.split(":")[0];
-                log.info("Trying to connect to remote host: {}", remoteNodeIp);
+                log.info("Current Standby Clusters {}", topologyDescriptor.getStandbyClusters());
+                //  Drop all subscriptions from current standby to current active clusters
+                topologyDescriptor.getStandbyClusters().values().forEach(
+                        clusterDescriptor -> clusterDescriptor.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    String standbyNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    log.info("onClusterRoleChange: Trying to connect to remote host to drop subscriptions: {}", standbyNodeIp);
 
-                PostgresConnector remoteConnector = new PostgresConnector(remoteNodeIp,
-                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+                                    PostgresConnector standbyConnector = new PostgresConnector(standbyNodeIp,
+                                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
 
-                while (!getAllSubscriptions(remoteConnector).isEmpty()) {
-                    try {
-                        TimeUnit.SECONDS.sleep(5);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
+                                    dropSubscriptions(getAllSubscriptions(standbyConnector), standbyConnector);
+
+                                    // For safety, check and wait until all the subscriptions are dropped
+                                    while (!getAllSubscriptions(standbyConnector).isEmpty()) {
+                                        try {
+                                            TimeUnit.SECONDS.sleep(5);
+                                        } catch (InterruptedException e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    }
+                                })
+                );
+
                 log.info("Subscriptions are dropped on replica, dropping inactive publications on active");
 
-                // Drop all publications
-                // Drop all replication slots
+                // Drop all publications and replication slots
                 dropPublications(getAllPublications(connector), connector);
 
                 // Clear tables
                 truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                 makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
 
-                if (!tryExecuteCommand(createSubscriptionCmd(remoteConnector, connector), connector)) {
+                // Subscribe to new publications if there is any active node in the new topology
+                // mostly this is a no-op as there are no active clusters in topology at this point.
+                // Both the clusters are standby.
+                AtomicBoolean success = new AtomicBoolean(true);
+                newTopology.getActiveClusters().values().forEach(
+                        activeCluster -> activeCluster.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    String activeNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    log.info("onClusterRoleChange: Trying to connect to remote active to create subscriptions from the old active, now standby: {}", activeNodeIp);
+                                    PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
+                                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                                    if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, connector), connector)) {
+                                        log.error("onClusterRoleChange: Error while subscribing to new remote active {} ", activeNodeIp);
+                                        success.set(false);
+                                    } else {
+                                        success.set(true);
+                                    }
+                                })
+                );
+
+                if (!success.get()) {
                     return;
                 }
-
-                log.info("TRANSFORMED SOURCE TO SINK");
-            } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-                log.info("Role change happening from Standby to Active!!!");
+                log.info("TRANSFORMED ACTIVE TO STANDBY");
+            } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY && newTopology.getClusterDescriptor(localNodeId).getRole() == ClusterRole.ACTIVE) {
+                log.info("Role change happening from Standby to Active!");
 
                 // Make tables writeable
                 makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
@@ -754,7 +795,45 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     return;
                 }
 
-                log.info("TRANSFORMED SINK TO SOURCE");
+                // Create subscriptions on new remote standby to new local active
+                AtomicBoolean success = new AtomicBoolean(true);
+                newTopology.getStandbyClusters().values().forEach(
+                        standbyCluster -> standbyCluster.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    String standbyNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    log.info("onClusterRoleChange: Trying to connect to remote standby {} to create subscriptions to new local active {}.", standbyNodeIp, connector.ADDRESS);
+                                    PostgresConnector standbyConnector = new PostgresConnector(standbyNodeIp,
+                                            pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                                    if (!tryExecuteCommand(createSubscriptionCmd(connector, standbyConnector), standbyConnector)) {
+                                        log.error("bootstrapLogReplicationService: Error while subscribing to new remote active {} ", standbyNodeIp);
+                                        success.set(false);
+                                    } else {
+                                        success.set(true);
+                                    }
+                                })
+                );
+                if (!success.get()) {
+                    return;
+                }
+                log.info("Created subscriptions on the standby nodes to the new active cluster");
+
+                log.info("TRANSFORMED STANDBY TO ACTIVE");
+            } else if (localClusterDescriptor.getRole() == ClusterRole.NONE && newTopology.getClusterDescriptor(localNodeId).getRole() == ClusterRole.STANDBY) {
+                log.info("Role change happening from None to Standby! No op as its taken care by onStandbyClusterAddRemove triggered on the Active Cluster.");
+            } else if (localClusterDescriptor.getRole() == ClusterRole.NONE && newTopology.getClusterDescriptor(localNodeId).getRole() == ClusterRole.ACTIVE) {
+                log.info("Role change happening from None to Active!");
+                // Make tables writeable
+                makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+
+                List<String> subscriptionsToDrop = getAllSubscriptions(connector);
+                dropSubscriptions(subscriptionsToDrop, connector);
+
+                if (!tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector)) {
+                    return;
+                }
+
+                log.info("TRANSFORMED NONE TO ACTIVE");
             }
 
             // Update topology, cluster, and node configs
@@ -871,7 +950,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         boolean isValid;
         try {
             isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
-            log.info("Found valid topology, topology={}", discoveredTopology);
+            log.info("Found valid topology, topology={}, isValid {}, localClusterDescriptor {}", discoveredTopology, isValid, localClusterDescriptor);
         } catch (Throwable t) {
             log.error("Exception when processing the discovered topology", t);
             stopLogReplication();
@@ -879,7 +958,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
 
         if (isValid) {
-            if (clusterRoleChanged(discoveredTopology)) {
+            if (isClusterRoleChanged(discoveredTopology)) {
                 onClusterRoleChange(discoveredTopology);
             } else {
                 onStandbyClusterAddRemove(discoveredTopology);
@@ -896,8 +975,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @return true, cluster role changed
      * false, otherwise
      */
-    private boolean clusterRoleChanged(TopologyDescriptor discoveredTopology) {
+    private boolean isClusterRoleChanged(TopologyDescriptor discoveredTopology) {
         if (localClusterDescriptor != null) {
+            log.info("isClusterRoleChanged: discoveredTopology {}," +
+                            " localClusterDescriptor.getRole() {}," +
+                            " discoveredTopology.getClusterDescriptor(localNodeId).getRole() {}",
+                    discoveredTopology,
+                    localClusterDescriptor.getRole(),
+                    discoveredTopology.getClusterDescriptor(localNodeId).getRole());
             return localClusterDescriptor.getRole() !=
                     discoveredTopology.getClusterDescriptor(localNodeId).getRole();
         }
@@ -945,15 +1030,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     topologyDescriptor.removeStandbyCluster(clusterId);
                 }
 
-                // Start the standbys that are in the new config but not in the old config
-                String activeNodeIp = getActiveNodeHost(discoveredTopology);
-                PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
-                        pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
-
                 for (String clusterId : newStandbys) {
                     if (!topologyDescriptor.getStandbyClusters().containsKey(clusterId)) {
                         String standByNodeIp = discoveredTopology.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
-                        log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
 
                         PostgresConnector standByConnector = new PostgresConnector(standByNodeIp,
                                 pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
@@ -965,12 +1044,30 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                         makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), standByConnector);
                         log.info("onStandbyClusterAddRemove: Cleared tables to be replicated on clusterId {}, node {}", clusterId, standByNodeIp);
 
-                        log.info("onStandbyClusterAddRemove: Starting subscriptions on new standBy: {} to active: {}", standByNodeIp, activeNodeIp);
-                        if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, standByConnector), standByConnector)) {
+                        AtomicBoolean success = new AtomicBoolean(true);
+                        // Start the standbys that are in the new config but not in the old config
+                        log.info("onStandbyClusterAddRemove: Starting subscriptions on new standBy: {} to active", standByNodeIp);
+                        discoveredTopology.getActiveClusters().values().forEach(
+                                activeCluster -> activeCluster.getNodesDescriptors().forEach(
+                                        nodeDescriptor -> {
+                                            String activeNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                            log.info("onStandbyClusterAddRemove: Trying to connect to remote active host: {}", activeNodeIp);
+                                            PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
+                                                    pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
+
+                                            if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, standByConnector), standByConnector)) {
+                                                log.error("onStandbyClusterAddRemove: Error while subscribing to new remote active {} ", activeNodeIp);
+                                                success.set(false);
+                                            } else {
+                                                success.set(true);
+                                            }
+                                        })
+                        );
+
+                        if (!success.get()) {
                             return;
                         }
                         log.info("onStandbyClusterAddRemove: Created Subscriptions");
-
                         ClusterDescriptor clusterInfo = discoveredTopology.getStandbyClusters().get(clusterId);
                         topologyDescriptor.addStandbyCluster(clusterInfo);
                     }
@@ -1145,19 +1242,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private String getLocalHost() {
         return getHostFromEndpointURL(serverContext.getLocalEndpoint());
-    }
-
-    /**
-     * Return IP for active node
-     * TODO (Postgres): assumes single node, no leadership consensus
-     *
-     * @return active node's IP
-     */
-    private String getActiveNodeHost(TopologyDescriptor descriptor) {
-        Map<String, ClusterDescriptor> activeClusters = descriptor.getActiveClusters();
-        String remoteNodeHost = activeClusters.values().stream().findAny().get()
-                .getNodesDescriptors().stream().findAny().get().getHost();
-        return remoteNodeHost.split(":")[0];
     }
 
     /**
