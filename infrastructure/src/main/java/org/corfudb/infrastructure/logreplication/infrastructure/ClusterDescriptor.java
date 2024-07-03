@@ -82,17 +82,10 @@ public class ClusterDescriptor {
         return clusterMsg;
     }
 
-    public static String listToString(List<?> list) {
-        String result = "";
-        for (int i = 0; i < list.size(); i++) {
-            result += "\n" + list.get(i);
-        }
-        return result;
-    }
 
     @Override
     public String toString() {
-        return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]:  %s", getClusterId(), role, corfuPort, nodesDescriptors.size(), listToString(nodesDescriptors));
+        return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]: %s", getClusterId(), role, corfuPort, nodesDescriptors.size(), nodesDescriptors);
     }
 
     /**

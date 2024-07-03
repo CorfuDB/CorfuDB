@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.logreplication.PgUtils;
 
+import lombok.ToString;
+
+@ToString
 public class PostgresConnector {
     public final String ADDRESS;
     public final String PORT;
@@ -22,6 +25,6 @@ public class PostgresConnector {
     }
 
     private static String getConnectionString(String address, String port) {
-        return "jdbc:postgresql://" + address + (port != null && !port.isEmpty() ? ":" + port : "5432") + "/postgres";
+        return "jdbc:postgresql://" + address + (port != null && !port.isEmpty() ? ":" + port : ":" + "5432") + "/postgres";
     }
 }
