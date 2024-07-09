@@ -38,8 +38,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
+      - name: Install Docker
+        run: |
+          for pkg in docker.io docker-ce docker-ce-cli docker-ce-rootless-extras docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+          curl -fsSL https://get.docker.com -o get-docker.sh
+          sudo sh ./get-docker.sh --version 24.0.9
+          /usr/bin/docker version
+          /usr/bin/docker info
 
       - name: Prepare Corfu
         run: ./mvnw clean install -Pdocker -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C

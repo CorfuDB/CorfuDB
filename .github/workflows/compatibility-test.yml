@@ -31,8 +31,13 @@ jobs:
         with:
           java-version: 1.8
 
-      - uses: satackey/action-docker-layer-caching@v0.0.8
-        continue-on-error: true
+      - name: Install Docker
+        run: |
+          for pkg in docker.io docker-ce docker-ce-cli docker-ce-rootless-extras docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do sudo apt-get remove $pkg; done
+          curl -fsSL https://get.docker.com -o get-docker.sh
+          sudo sh ./get-docker.sh --version 24.0.9
+          /usr/bin/docker version
+          /usr/bin/docker info
 
       - name: Prepare top of trunk docker image
         run: ./mvnw clean install -DskipTests -Pcompatibility -Dmaven.javadoc.skip=true -T 1C
