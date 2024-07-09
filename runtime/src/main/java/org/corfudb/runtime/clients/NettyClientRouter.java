@@ -15,6 +15,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -23,6 +24,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.CertificateUtils;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
@@ -50,8 +52,11 @@ import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +67,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static org.corfudb.common.util.URLUtils.getHostFromEndpointURL;
 import static org.corfudb.common.util.URLUtils.getPortFromEndpointURL;
@@ -735,5 +741,50 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     @VisibleForTesting
     EventLoopGroup getEventLoopGroup() {
         return eventLoopGroup;
+    }
+
+    /**
+     * @return Return true if the Channel used in this router is active and so connected.
+     */
+    public boolean isChannelActive() {
+        try {
+            return channel.isActive();
+        } catch (Exception e) {
+            log.error("isChannelActive: Error in accessing the Channel." +
+                    " May be it is not initialized yet?", e);
+            return false;
+        }
+    }
+
+    public List<String> getLocalCertificateThumbprints() {
+        if (!isChannelActive()) {
+            return Collections.emptyList();
+        }
+        try {
+            return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
+                            .engine().getSession().getLocalCertificates())
+                    .map(CertificateUtils::computeCertificateThumbprint)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            String errMsg = "Error in getLocalCertificateThumbprints, node {}, isChannelActive {}.";
+            log.error(errMsg, node.toEndpointUrl(), isChannelActive(), e);
+            return Collections.emptyList();
+        }
+    }
+
+    public List<String> getPeerCertificateThumbprints() {
+        if (!isChannelActive()) {
+            return Collections.emptyList();
+        }
+        try {
+            return Arrays.stream(((SslHandler) this.channel.pipeline().get("ssl"))
+                            .engine().getSession().getPeerCertificates())
+                    .map(CertificateUtils::computeCertificateThumbprint)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            String errMsg = "Error in getPeerCertificateThumbprints, node {}, isChannelActive {}.";
+            log.error(errMsg, node.toEndpointUrl(), isChannelActive(), e);
+            return Collections.emptyList();
+        }
     }
 }
