@@ -114,6 +114,8 @@ public class TlsUtils {
             private final Path keyStoreFile;
             private final Path passwordFile;
 
+            public static final boolean DEFAULT_DISABLE_FILE_WATCHER = false;
+
             public static KeyStoreConfig from(String keyStorePath, String passwordFile) {
                 return new KeyStoreConfig(Paths.get(keyStorePath), Paths.get(passwordFile));
             }

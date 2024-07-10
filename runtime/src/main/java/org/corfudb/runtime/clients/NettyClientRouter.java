@@ -217,6 +217,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         if (parameters.isTlsEnabled()) {
             try {
+                log.info("constructSslContext from NettyClientRouter ");
                 sslContext = SslContextConstructor.constructSslContext(
                         false,
                         parameters.getKeyStoreConfig(),
@@ -414,7 +415,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         shutdown = true;
         connectionFuture.completeExceptionally(new NetworkException("Router stopped", node));
         if (channel != null && channel.isOpen()) {
-            channel.close();
+            channel.close().syncUninterruptibly();
         }
     }
 
@@ -427,7 +428,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         log.info("NettyClientRouter reconnecting. Closing the existing channel.");
         Channel channelCopy = channel;
         if (channelCopy != null && channelCopy.isOpen()) {
-            channelCopy.close();
+            channelCopy.close().syncUninterruptibly();
         }
     }
 

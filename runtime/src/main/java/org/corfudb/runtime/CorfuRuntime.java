@@ -357,6 +357,11 @@ public class CorfuRuntime {
          * The period at which the runtime will run garbage collection
          */
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
+        
+        /**
+         * Disable the filewatcher for this runtime
+         */
+        boolean disableFileWatcher = false;
 
         /*
          * The {@link UUID} for the cluster this client is connecting to, or
@@ -460,6 +465,7 @@ public class CorfuRuntime {
             private int checkpointReadBatchSize = 1;
             private Duration runtimeGCPeriod = Duration.ofMinutes(20);
             private UUID clusterId = null;
+            private boolean disableFileWatcher = false;
             private int systemDownHandlerTriggerLimit = 20;
             private List<NodeLocator> layoutServers = new ArrayList<>();
             private int invalidateRetry = 5;
@@ -751,6 +757,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder disableFileWatcher(boolean disableFileWatcher) {
+                this.disableFileWatcher = disableFileWatcher;
+                return this;
+            }
+
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
                 this.clusterId = clusterId;
                 return this;
@@ -837,6 +848,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
                 corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
                 corfuRuntimeParameters.setClusterId(clusterId);
+                corfuRuntimeParameters.setDisableFileWatcher(disableFileWatcher);
                 corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
                 corfuRuntimeParameters.setLayoutServers(layoutServers);
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
@@ -1029,12 +1041,17 @@ public class CorfuRuntime {
      * @return The Optional of FileWatcher on Keystore file. Empty if keystore is not set in runtime.
      */
     private Optional<FileWatcher> initializeSslCertWatcher() {
-        String keyStorePath = this.parameters.getKeyStore();
-        if (keyStorePath == null || keyStorePath.isEmpty()) {
+
+        // If the filewatcher is disabled for this Runtime, then skip the registration.
+        // This is required for CorfuServer's ManagementAgent's CorfuRuntime, which uses same certs
+        // as the Corfu Server. Duplicate filewatcher is not required as the server already restarts
+        // connections when those certs are changed, leading to client reconnection with the new certs.
+        if (parameters.disableFileWatcher) {
             return Optional.empty();
         }
-        FileWatcher sslWatcher = new FileWatcher(keyStorePath, this::reconnect);
-        return Optional.of(sslWatcher);
+
+        String keyStorePath = this.parameters.getKeyStore();
+        return FileWatcher.newInstance(keyStorePath, this::reconnect);
     }
 
     /**
