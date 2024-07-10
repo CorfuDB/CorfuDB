@@ -268,7 +268,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         if (isMessageFromNewSnapshotSync(message) && ongoingApply.get()) {
             log.warn("Drop message {}.  A Snapshot Apply is already ongoing.  Not accepting messages from a new " +
-                "Snapshot Sync Cycle");
+                "Snapshot Sync Cycle", message);
             return null;
         }
 
@@ -312,14 +312,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private boolean isMessageFromNewSnapshotSync(LogReplication.LogReplicationEntryMsg message) {
-        if ((message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START ||
+        return ((message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START ||
             message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_MESSAGE ||
             message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END) &&
-            !Objects.equals(getUUID(message.getMetadata().getSyncRequestId()), lastSnapshotSyncId))
-        {
-           return true;
-        }
-        return false;
+            !Objects.equals(getUUID(message.getMetadata().getSyncRequestId()), lastSnapshotSyncId));
     }
 
     /**
