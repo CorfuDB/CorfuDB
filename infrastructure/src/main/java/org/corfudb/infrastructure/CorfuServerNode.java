@@ -473,7 +473,7 @@ public class CorfuServerNode implements AutoCloseable {
                             .map(Paths::get)
                             .orElse(TrustStoreConfig.DEFAULT_DISABLE_CERT_EXPIRY_CHECK_FILE);
 
-                    log.trace("getServerChannelInitializer: certExpiryFile path is {}, isCertExpiryCheckEnabled is {}.",
+                    log.trace("initChannel: certExpiryFile path is {}, isCertExpiryCheckEnabled is {}.",
                             certExpiryFile, !Files.exists(certExpiryFile));
 
                     TrustStoreConfig trustStoreConfig = TrustStoreConfig.from(
@@ -481,9 +481,8 @@ public class CorfuServerNode implements AutoCloseable {
                             context.getServerConfig(String.class, ConfigParamNames.TRUST_STORE_PASS_FILE),
                             certExpiryFile
                     );
-                    // TODO (Chetan): remove this before merging
-                    log.info("constructSslContext from CorfuServerNode ");
 
+                    log.info("initChannel: constructSslContext from CorfuServerNode");
                     sslContext = SslContextConstructor.constructSslContext(
                             true, keyStoreConfig, trustStoreConfig
                     );
