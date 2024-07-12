@@ -78,19 +78,13 @@ public class LogEntrySender {
 
         taskActive = true;
 
-        try {
-            /*
-             * It will first resend entries in the buffer that hasn't ACKed
-             */
-            LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
-            if (ack != null) {
-                logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-                        new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp())));
-            }
-        } catch (LogEntrySyncTimeoutException te) {
-            log.error("LogEntrySyncTimeoutException after several retries.", te);
-            cancelLogEntrySync(LogReplicationError.LOG_ENTRY_ACK_TIMEOUT, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
-            return;
+        /*
+         * It will first resend entries in the buffer that hasn't ACKed
+         */
+        LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
+        if (ack != null) {
+            logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
+                    new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp())));
         }
 
         while (taskActive && !dataSenderBufferManager.getPendingMessages().isFull()) {
