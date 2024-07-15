@@ -14,8 +14,6 @@ public abstract class ReplicationConfig {
 
     Set<String> streamsToReplicate;
 
-    List<JsonNode> streamsToCreate;
-
     Set<UUID> replicatedStreamsToDrop;
 
     public void syncWithRegistry() {}

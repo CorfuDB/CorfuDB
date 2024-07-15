@@ -13,7 +13,6 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 @ToString
 public class PostgresReplicationConfig extends ReplicationConfig {
     private final String streamsToReplicatePath;
-    private final String streamsToCreatePath;
 
     /**
      * Constructor exposed to {@link CorfuReplicationDiscoveryService}
@@ -21,7 +20,6 @@ public class PostgresReplicationConfig extends ReplicationConfig {
     public PostgresReplicationConfig(LogReplicationConfigManager configManager, PostgresReplicationConnectionConfig config) {
         this.configManager = configManager;
         this.streamsToReplicatePath = config.getTABLES_TO_REPLICATE_PATH();
-        this.streamsToCreatePath = config.getTABLES_TO_CREATE_PATH();
         syncWithRegistry();
     }
 
@@ -43,7 +41,6 @@ public class PostgresReplicationConfig extends ReplicationConfig {
      * registry table entries in {@link LogReplicationConfigManager}.
      */
     private void update() {
-        this.streamsToCreate = configManager.loadTablesToCreate(streamsToCreatePath);
         this.streamsToReplicate = configManager.loadTablesToReplicate(streamsToReplicatePath);
 
         // TODO (Postgres): might need to take care of these outside of happy path

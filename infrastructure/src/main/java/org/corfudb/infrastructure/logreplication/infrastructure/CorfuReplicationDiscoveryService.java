@@ -447,16 +447,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     public void createTables(ReplicationConfig replicationConfig) {
-        Stack<String> tablesToCreate = new Stack<>();
-        tablesToCreate.addAll(createTablesCmds(replicationConfig.getStreamsToCreate()));
+        Stack<String> tablesToCreateCmds = new Stack<>();
+        tablesToCreateCmds.addAll(createTablesCmds(replicationConfig.getStreamsToReplicate()));
 
-        while (!tablesToCreate.empty()) {
+        while (!tablesToCreateCmds.empty()) {
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
-                        log.info("Trying command: {}", tablesToCreate.peek());
-                        if(tryExecuteCommand(tablesToCreate.peek(), connector)) {
-                            tablesToCreate.pop();
+                        log.info("Trying command: {}", tablesToCreateCmds.peek());
+                        if(tryExecuteCommand(tablesToCreateCmds.peek(), connector)) {
+                            tablesToCreateCmds.pop();
                         }
                     } catch (Exception e) {
                         log.error("Error while attempting to create table", e);
@@ -1035,6 +1035,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 for (String clusterId : newStandbys) {
                     if (!topologyDescriptor.getStandbyClusters().containsKey(clusterId)) {
                         String standByNodeIp = discoveredTopology.getStandbyClusters().get(clusterId).getNodesDescriptors().stream().findAny().get().getHost().split(":")[0];
+                        log.info("onStandbyClusterAddRemove: Standbys to add: clusterId {}, standByNodeIp: {}", clusterId, standByNodeIp);
 
                         PostgresConnector standByConnector = new PostgresConnector(standByNodeIp,
                                 pgConfig.getREMOTE_PG_PORT(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
