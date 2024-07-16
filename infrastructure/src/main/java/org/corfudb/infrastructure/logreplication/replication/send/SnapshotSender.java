@@ -122,7 +122,7 @@ public class SnapshotSender {
         if (Address.isAddress(baseSnapshotTimestamp)) {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
-            dataSenderBufferManager.resend();
+            dataSenderBufferManager.resend(false);
 
             while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
                     !snapshotCompleted && !stopSnapshotSync.get()) {

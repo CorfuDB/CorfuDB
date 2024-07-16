@@ -225,17 +225,16 @@ public abstract class SenderBufferManager {
     /**
      * Resend the messages in the queue if they have timed out.
      */
-    public LogReplicationEntryMsg resend() {
+    public LogReplicationEntryMsg resend(boolean isLogEntry) {
         LogReplicationEntryMsg ack = null;
         boolean force = false;
 
-        // Wait before retrying
-        if (isBackpressureActive.get()) {
-            waitBeforeRetry();
-        }
-
         try {
             ack = processAcks();
+
+            if (isLogEntry && isBackpressureActive.get()) {
+                waitBeforeRetry();
+            }
         } catch (TimeoutException te) {
             // Exceptions thrown directly from the CompletableFuture.anyOf(cfs)
             log.warn("Caught a timeout exception while processing ACKs", te);
@@ -250,7 +249,7 @@ public abstract class SenderBufferManager {
         } catch (Exception e) {
             log.warn("Caught an exception while processing ACKs.", e);
         } finally {
-            if (force) {
+            if (isLogEntry && force) {
                 activateBackpressure();
                 updateBackoffDelay();
             } else {
