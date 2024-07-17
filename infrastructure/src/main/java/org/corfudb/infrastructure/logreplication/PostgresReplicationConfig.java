@@ -13,7 +13,6 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 @ToString
 public class PostgresReplicationConfig extends ReplicationConfig {
     private final String streamsToReplicatePath;
-    private final String streamsToCreatePath;
 
     /**
      * Constructor exposed to {@link CorfuReplicationDiscoveryService}
@@ -21,7 +20,6 @@ public class PostgresReplicationConfig extends ReplicationConfig {
     public PostgresReplicationConfig(LogReplicationConfigManager configManager, PostgresReplicationConnectionConfig config) {
         this.configManager = configManager;
         this.streamsToReplicatePath = config.getTABLES_TO_REPLICATE_PATH();
-        this.streamsToCreatePath = config.getTABLES_TO_CREATE_PATH();
         syncWithRegistry();
     }
 
@@ -31,10 +29,10 @@ public class PostgresReplicationConfig extends ReplicationConfig {
     public void syncWithRegistry() {
         try {
             update();
-            log.info("Synced with registry table. Streams to replicate total = {}, streams names = {}",
+            log.info("Synced with tables_to_replicate file. Total = {}, Table names = {}",
                     streamsToReplicate.size(), streamsToReplicate);
         } catch (Exception e) {
-            log.trace("Registry table address space did not change, using last fetched config.", e);
+            log.warn("Unable to load table names from tables_to_replicate file, using last fetched list = {}.", streamsToReplicate, e);
         }
     }
 
@@ -43,7 +41,6 @@ public class PostgresReplicationConfig extends ReplicationConfig {
      * registry table entries in {@link LogReplicationConfigManager}.
      */
     private void update() {
-        this.streamsToCreate = configManager.loadTablesToCreate(streamsToCreatePath);
         this.streamsToReplicate = configManager.loadTablesToReplicate(streamsToReplicatePath);
 
         // TODO (Postgres): might need to take care of these outside of happy path

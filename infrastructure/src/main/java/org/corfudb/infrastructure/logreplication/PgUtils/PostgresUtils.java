@@ -24,6 +24,10 @@ public class PostgresUtils {
 
     private PostgresUtils() {}
 
+    public static String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
         boolean successOrExists = false;
         log.info("Executing command: {}, on connector {} ", sql, connector);
@@ -124,28 +128,18 @@ public class PostgresUtils {
         return result;
     }
 
-    public static List<String> createTablesCmds (List<JsonNode> tablesToCreate) {
+    public static List<String> createTablesCmds(Set<String> tablesToReplicate) {
         List<String> createTableCmds = new ArrayList<>();
 
-        for (JsonNode table : tablesToCreate) {
-            StringBuilder createCmd = new StringBuilder();
+        tablesToReplicate.forEach(table -> {
+            String createCmd = String.format("CREATE TABLE IF NOT EXISTS %s (", table) +
+                    " key VARCHAR PRIMARY KEY," +
+                    " value JSONB NOT NULL," +
+                    " metadata JSONB NOT NULL" +
+                    " );";
 
-            createCmd.append(String.format("CREATE TABLE %s (",  table.get("table_name").asText()));
-
-            for (JsonNode column : table.get("columns")) {
-                createCmd.append(String.format("%s %s", column.get("name").asText(), column.get("data_type").asText()));
-
-                if (column.has("primary_key")) {
-                    createCmd.append(" PRIMARY KEY");
-                }
-
-                createCmd.append(", ");
-            }
-
-            createCmd.replace(createCmd.length() - 2, createCmd.length(), "");
-            createCmd.append(");");
-            createTableCmds.add(createCmd.toString());
-        }
+            createTableCmds.add(createCmd);
+        });
 
         return createTableCmds;
     }
@@ -177,11 +171,11 @@ public class PostgresUtils {
                     List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primary);
 
                     if (!queryResult.isEmpty()) {
-                        boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
-                        if (publicationExists) {
+                        // if publication exists
+                        if (queryResult.get(0).values().stream().findAny().isPresent()) {
                             String subName = String.join("_", replicaPrefix, "sub");
-                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
-                                    subName, primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, pubName);
+                            createSubCmd = String.format("CREATE SUBSCRIPTION %s CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION %s;",
+                                    quoteIdentifier(subName), primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, quoteIdentifier(pubName));
                             break;
                         } else {
                             log.info("PUB WITH THAT NAME DOES NOT EXIST");
@@ -222,7 +216,7 @@ public class PostgresUtils {
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};
             // params[0] = subscription;
-            String dropQuery = String.format("DROP SUBSCRIPTION \"%s\"", subscription);
+            String dropQuery = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
             if (!tryExecutePreparedStatementsCommand(dropQuery, params, connector)) {
                 log.info("Unable to drop subscription: {}", subscription);
             } else {
