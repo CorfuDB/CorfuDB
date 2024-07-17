@@ -29,10 +29,10 @@ public class PostgresReplicationConfig extends ReplicationConfig {
     public void syncWithRegistry() {
         try {
             update();
-            log.info("Synced with registry table. Streams to replicate total = {}, streams names = {}",
+            log.info("Synced with tables_to_replicate file. Total = {}, Table names = {}",
                     streamsToReplicate.size(), streamsToReplicate);
         } catch (Exception e) {
-            log.trace("Registry table address space did not change, using last fetched config.", e);
+            log.warn("Unable to load table names from tables_to_replicate file, using last fetched list = {}.", streamsToReplicate, e);
         }
     }
 
