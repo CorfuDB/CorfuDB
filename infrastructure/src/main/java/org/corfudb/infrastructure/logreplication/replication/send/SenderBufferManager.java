@@ -13,9 +13,11 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
 
 import java.io.File;
 import java.io.FileReader;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +25,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,9 +65,8 @@ public abstract class SenderBufferManager {
      */
     private int timeoutTimer;
 
-    private final long INITIAL_BACKOFF_DELAY = 0;
-    private long backoffDelay = INITIAL_BACKOFF_DELAY;
-    private AtomicBoolean isBackpressureActive = new AtomicBoolean(false);
+    private final AtomicBoolean isBackpressureActive = new AtomicBoolean(false);
+    private final ExponentialBackoffRetry<?,?,?,?,?,?> backoffRetry = new ExponentialBackoffRetry<>(() -> null);
 
     /*
      * If there is a timeout for a message, should generate an error or not
@@ -112,11 +112,19 @@ public abstract class SenderBufferManager {
      * @param dataSender
      */
     public SenderBufferManager(DataSender dataSender) {
+        float BACKOFF_RANDOM_PORTION_PERCENT = 0.1f;
+        int BACKOFF_DURATION_SECONDS = 30;
+        int BACKOFF_MAX_THRESHOLD_MINUETS = 5;
+
         maxRetry = DefaultClusterConfig.getLogSenderRetryCount();
         maxBufferSize = DefaultClusterConfig.getLogSenderBufferSize();
         msgTimer = DefaultClusterConfig.getLogSenderResendTimer();
         timeoutTimer = DefaultClusterConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultClusterConfig.isLogSenderTimeout();
+
+        backoffRetry.setRandomPortion(BACKOFF_RANDOM_PORTION_PERCENT);
+        backoffRetry.setBackoffDuration(Duration.ofSeconds(BACKOFF_DURATION_SECONDS));
+        backoffRetry.setMaxRetryThreshold(Duration.ofMinutes(BACKOFF_MAX_THRESHOLD_MINUETS));
 
         readConfig();
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
@@ -233,7 +241,13 @@ public abstract class SenderBufferManager {
             ack = processAcks();
 
             if (isLogEntry && isBackpressureActive.get()) {
-                waitBeforeRetry();
+                try {
+                    log.trace("Dropped ACKs from sink, resending log entry messages in some time...");
+                    backoffRetry.nextWait();
+                } catch (Exception e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("log entry message resend retry sleep was interrupted.", e);
+                }
             }
         } catch (TimeoutException te) {
             // Exceptions thrown directly from the CompletableFuture.anyOf(cfs)
@@ -251,9 +265,8 @@ public abstract class SenderBufferManager {
         } finally {
             if (isLogEntry && force) {
                 activateBackpressure();
-                updateBackoffDelay();
             } else {
-                resetBackpressure();
+                deactivateBackpressure();
             }
         }
 
@@ -278,38 +291,15 @@ public abstract class SenderBufferManager {
         return ack;
     }
 
-    private void waitBeforeRetry() {
-        if (backoffDelay > 0) {
-            try {
-                long JITTER_RANGE = 100;
-                long backoffTime = backoffDelay + ThreadLocalRandom.current().nextLong(-JITTER_RANGE, JITTER_RANGE);
-                log.info("Dropped ACKs from sink, resending log entry messages in {} ms", backoffTime);
-                TimeUnit.MILLISECONDS.sleep(backoffTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.warn("log entry message resend retry sleep got interrupted.");
-            }
-        }
-    }
-
-    private void updateBackoffDelay() {
-        long ADD_BACKOFF_TIME = 500;
-        long MAX_BACKOFF_DELAY = 60000;
-        double BACKOFF_MULTIPLIER = 1.5;
-        backoffDelay = (long) Math.min((backoffDelay + ADD_BACKOFF_TIME) * BACKOFF_MULTIPLIER,
-                MAX_BACKOFF_DELAY);
-    }
-
     private void activateBackpressure() {
         log.info("Log entry ACKs timing out on sink, enabling back pressure for retries.");
         isBackpressureActive.set(true);
     }
 
-    private void resetBackpressure() {
+    private void deactivateBackpressure() {
         if (isBackpressureActive.get()) {
-            log.info("Reset back pressure timeout for log entry resends.");
+            log.info("Turn off back pressure for log entry resends.");
             isBackpressureActive.set(false);
-            backoffDelay = INITIAL_BACKOFF_DELAY;
         }
     }
 
