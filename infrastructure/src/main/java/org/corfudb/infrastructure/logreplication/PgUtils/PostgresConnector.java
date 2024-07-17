@@ -18,13 +18,13 @@ public class PostgresConnector {
     public PostgresConnector(String address, String port, String user, String password, String databaseName) {
         this.ADDRESS = address;
         this.PORT = port;
-        this.URL = getConnectionString(address, port);
+        this.URL = getConnectionString(address, port, databaseName);
         this.USER = user;
         this.PASSWORD = password;
         this.DATABASE_NAME = databaseName;
     }
 
-    private static String getConnectionString(String address, String port) {
-        return "jdbc:postgresql://" + address + (port != null && !port.isEmpty() ? ":" + port : ":" + "5432") + "/postgres";
+    private static String getConnectionString(String address, String port, String databaseName) {
+        return "jdbc:postgresql://" + address + (port != null && !port.isEmpty() ? ":" + port : ":" + "5432") + "/" + databaseName;
     }
 }

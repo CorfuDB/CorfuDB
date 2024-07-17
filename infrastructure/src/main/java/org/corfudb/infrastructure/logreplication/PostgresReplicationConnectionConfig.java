@@ -33,9 +33,6 @@ public class PostgresReplicationConnectionConfig {
     @Getter
     private String TABLES_TO_REPLICATE_PATH;
 
-    @Getter
-    private String TABLES_TO_CREATE_PATH;
-
     public PostgresReplicationConnectionConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
             Properties prop = new Properties();
@@ -48,7 +45,6 @@ public class PostgresReplicationConnectionConfig {
                 this.REMOTE_PG_PORT = prop.getProperty("remote_pg_port");
                 this.DB_NAME = prop.getProperty("pg_db_name");
                 this.TABLES_TO_REPLICATE_PATH = prop.getProperty("tables_to_replicate_path");
-                this.TABLES_TO_CREATE_PATH = prop.getProperty("tables_to_create_path");
                 isPostgres = true;
             }
         } catch (IOException e) {

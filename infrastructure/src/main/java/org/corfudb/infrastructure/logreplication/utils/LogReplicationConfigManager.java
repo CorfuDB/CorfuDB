@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MERGE_ONLY_STREAMS;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.quoteIdentifier;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
@@ -203,8 +204,8 @@ public class LogReplicationConfigManager {
                 try {
                     BufferedReader reader = new BufferedReader(new FileReader(tablesToReplicatePath));
                     String line;
-                    while ((line = reader.readLine()) != null) {
-                        tablesToReplicate.add(line.trim());
+                    while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                        tablesToReplicate.add(quoteIdentifier(line).trim());
                     }
                     return tablesToReplicate;
                 } catch (Exception e) {
@@ -214,28 +215,6 @@ public class LogReplicationConfigManager {
             }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
         } catch (InterruptedException e) {
             log.error("Cannot load tables to replicate, LR stopped", e);
-            throw new UnrecoverableCorfuInterruptedError(e);
-        }
-    }
-
-    public List<JsonNode> loadTablesToCreate(String tablesToCreatePath) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        try {
-            return IRetry.build(ExponentialBackoffRetry.class, () -> {
-                List<JsonNode> tablesToCreate = new ArrayList<>();
-                try {
-                    JsonNode tables = objectMapper.readTree(new File(tablesToCreatePath));
-                    for (JsonNode tableToCreate : tables.get("tables")) {
-                        tablesToCreate.add(tableToCreate);
-                    }
-                    return tablesToCreate;
-                } catch (Exception e) {
-                    log.error("Exception caught fetching tables to create, retry needed", e);
-                    throw new RetryNeededException();
-                }
-            }).setOptions(x -> x.setMaxRetryThreshold(Duration.ofSeconds(SYNC_THRESHOLD))).run();
-        } catch (InterruptedException e) {
-            log.error("Cannot get tables to create, LR stopped", e);
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
