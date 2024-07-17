@@ -454,7 +454,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try {
-                        log.info("Trying command: {}", tablesToCreateCmds.peek());
                         if(tryExecuteCommand(tablesToCreateCmds.peek(), connector)) {
                             tablesToCreateCmds.pop();
                         }
