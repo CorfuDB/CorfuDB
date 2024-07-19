@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
@@ -101,6 +102,8 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
+    private int waitMsBeforeSnapshotApply;
+
     /**
      * Constructor Sink Manager
      *
@@ -125,6 +128,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
+        waitMsBeforeSnapshotApply = context.getSnapshotApplyWaitTime();
         init(metadataManager, config);
     }
 
@@ -267,8 +271,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         if (isMessageFromNewSnapshotSync(message) && ongoingApply.get()) {
-            log.warn("Drop message {}.  A Snapshot Apply is already ongoing.  Not accepting messages from a new " +
-                "Snapshot Sync Cycle", message);
+            log.warn("Snapshot Apply for sync id {} is already ongoing.  Not accepting messages from a new Snapshot " +
+                "Sync Cycle.  Dropping message {}", lastSnapshotSyncId, message);
             return null;
         }
 
@@ -505,6 +509,16 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+
+        if (waitMsBeforeSnapshotApply > 0) {
+            log.info("Waiting for {} ms before starting Snapshot Apply", waitMsBeforeSnapshotApply);
+            try {
+                TimeUnit.MILLISECONDS.sleep(waitMsBeforeSnapshotApply);
+            } catch (InterruptedException e) {
+                log.warn("Snapshot Apply Wait Interrupted.  Continuing Snapshot Apply");
+            }
+        }
+
         // set data_consistent as false
         setDataConsistentWithRetry(false);
         

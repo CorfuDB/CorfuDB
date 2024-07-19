@@ -229,8 +229,24 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     /**
-     * This test verifies that concurrent Snapshot Syncs are handled gracefully on the Standby.  If the apply phase
-     * of a snapshot sync is ongoing, a new snapshot sync is rejected, avoiding any race.
+     * This test verifies that concurrent Snapshot Syncs are handled gracefully on the Standby.  If messages from
+     * a new Snapshot Sync are received on the Standby when it is in 'apply' phase of a previous sync, these new
+     * messages are rejected.  This avoids the race between transfer and apply phases on Standby.
+     * The Active will continue to re-send messages from the new sync.  They will be accepted and ACK'd by Standby
+     * after the ongoing apply finishes.
+     *
+     * Test workflow:
+     * 1. Create a topology with Active and Standby.  On Standby, introduce a 20 sec latency during apply phase to
+     *    simulate the above race.  Wait for initial snapshot sync to complete.
+     * 2. Trigger 2 forced snapshot sync events with a delay of 3 seconds between requests.  This is to ensure that
+     *    the 1st request completes transfer and Standby is in 'apply' phase of the 1st sync.
+     * 3. When the 2nd forced sync is triggered, Active will be in WaitSnapshotApplyState due to the 'apply delay'
+     *    on Standby.  When the 2nd forced sync starts, the 1st one gets cancelled on Active.  Standby continues
+     *    to apply data from the 1st sync, rejecting incoming messages from the 2nd one.  Active continues to
+     *    resend these messages from the 2nd sync request.
+     *    Eventually, the apply phase of the 1st sync completes and Standby accepts messages from the 2nd one.
+     4.   When this 2nd sync completes on the Standby, all existing forced sync events are deleted from the Event
+     *    table.  Wait for the table to be empty, which indicates that this 2nd sync completed successfully.
      * @throws Exception
      */
     @Test
@@ -239,6 +255,14 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         int batchSize = 5;
         int numForcedSyncEvents = 2;
 
+        // Time delay of 20 seconds introduced on the Standby when in Apply phase
+        int waitSnapshotApplyMs = 20000;
+
+        // Time delay of 3 seconds between requesting 2 consecutive forced syncs.  This is to ensure that the first
+        // sync request reaches the WaitForSnapshotApplyState (implies that the Standby will be in the Apply phase)
+        int waitTimeBetweenSyncRequestsMs = 3000;
+
+        // Perform initial setup and wait for initial snapshot sync to complete
         try {
             setupActiveAndStandbyCorfu();
 
@@ -289,25 +313,21 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             assertThat(mapActive.count()).isEqualTo(batchSize);
             assertThat(mapStandby.count()).isZero();
 
+            // Start LR on both sides.  Introduce a latency of 20 seconds in the apply phase on Standby
             startActiveLogReplicator();
-            startStandbyLogReplicator();
+            startStandbyLogReplicator(waitSnapshotApplyMs);
             log.info("Replication servers started, and replication is in progress...");
 
             // Wait for replication to finish and check sink has all the writes
-            boolean entriesReplicated = false;
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-                if (mapStandby.count() == mapActive.count()) {
-                    entriesReplicated = true;
-                    break;
-                }
-                Thread.sleep(50);
+            while (mapStandby.count() != mapActive.count()) {
+                log.debug("Waiting for entries to be replicated");
             }
-            assertThat(entriesReplicated).isTrue();
+            assertThat(mapStandby.count()).isEqualTo(mapActive.count());
 
-            // Check that the event table is empty to begin
+            // Check that the event table is empty to begin with
             assertThat(eventTable.count()).isZero();
 
-            // Add 2 full sync events
+            // Add 2 full sync events with delay of 'waitTimeBetweenSyncRequestsMs'
             Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable = corfuStoreActive.openTable(
                 DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
                 ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
@@ -320,15 +340,24 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                         DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
                     txn.commit();
                 }
+                TimeUnit.SECONDS.sleep(waitTimeBetweenSyncRequestsMs);
             }
 
             // Wait for the forced sync events to be added to the event table
             while(eventTable.count() < numForcedSyncEvents) {
-                log.debug("Num Forced Sync Events Added: {}.  Expected {}", eventTable.count(), numForcedSyncEvents);
+                log.info("Num Forced Sync Events Added: {}.  Expected {}", eventTable.count(), numForcedSyncEvents);
             }
 
-            // After 1 forced sync is successfully applied on the Standby, all existing events are cleared.  Wait for
-            // the event table to become empty, which indicates that Standby applied the sync.
+            log.info("Forced Sync Events written to the table and will execute concurrently");
+
+            // When the 2nd forced sync is triggered, Active will be in WaitSnapshotApplyState due to the 'apply delay'
+            // on Standby.  When the 2nd forced sync starts, the 1st one gets cancelled on Active.  Standby continues
+            // to apply data from the 1st sync, rejecting incoming messages from the 2nd one.  Active continues to
+            // resend these messages.
+            // Eventually, the apply phase of the 1st sync completes and Standby accepts messages from the 2nd one.
+            // When this 2nd sync completes on the Standby, all existing forced sync events are deleted from the Event
+            // table.
+            // Wait for the table to be empty, which indicates that this 2nd sync completed successfully.
             while(eventTable.count() > 0) {
                 log.debug("Waiting for the Event Table to be cleared.  Current Size = {}", eventTable.count());
             }
