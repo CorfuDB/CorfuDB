@@ -68,7 +68,7 @@ public abstract class SenderBufferManager {
 
     @VisibleForTesting
     @Getter
-    private final AtomicBoolean isBackpressureActive = new AtomicBoolean(false);
+    private boolean isBackpressureActive = false;
     private final ExponentialBackoffRetry<?,?,?,?,?,?> backoffRetry = new ExponentialBackoffRetry<>(() -> null);
 
     /*
@@ -243,9 +243,9 @@ public abstract class SenderBufferManager {
         try {
             ack = processAcks();
 
-            if (isLogEntry && isBackpressureActive.get()) {
+            if (isLogEntry && isBackpressureActive) {
                 try {
-                    log.trace("Dropped ACKs from sink, resending log entry messages in some time...");
+                    log.trace("ACKs timing out on sink, resending log entry messages in some time...");
                     backoffRetry.nextWait();
                 } catch (Exception e) {
                     Thread.currentThread().interrupt();
@@ -266,10 +266,12 @@ public abstract class SenderBufferManager {
         } catch (Exception e) {
             log.warn("Caught an exception while processing ACKs.", e);
         } finally {
-            if (isLogEntry && force) {
-                activateBackpressure();
-            } else {
-                deactivateBackpressure();
+            if (isLogEntry) {
+                if (force) {
+                    activateBackpressure();
+                } else {
+                    deactivateBackpressure();
+                }
             }
         }
 
@@ -296,13 +298,13 @@ public abstract class SenderBufferManager {
 
     private void activateBackpressure() {
         log.info("Log entry ACKs timing out on sink, enabling back pressure for retries.");
-        isBackpressureActive.set(true);
+        isBackpressureActive = true;
     }
 
-    private void deactivateBackpressure() {
-        if (isBackpressureActive.get()) {
+    public void deactivateBackpressure() {
+        if (isBackpressureActive) {
             log.info("Turn off back pressure for log entry resends.");
-            isBackpressureActive.set(false);
+            isBackpressureActive = false;
         }
     }
 

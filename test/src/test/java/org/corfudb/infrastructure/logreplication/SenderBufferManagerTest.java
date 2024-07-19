@@ -54,23 +54,23 @@ public class SenderBufferManagerTest {
         LogReplicationEntryMsg ack1 = bufferManager.resend(true);
         assertNull(ack1, "No stale ACKs to process!");
         bufferManager.sendWithBuffering(testMsg1);
-        assertFalse(bufferManager.getIsBackpressureActive().get());
+        assertFalse(bufferManager.isBackpressureActive());
 
         // Message 2 is sent
         LogReplicationEntryMsg ack2 = bufferManager.resend(true);
         assertEquals(ack2, testMsg1, "Message 1 had been ACKd by the sink!");
         bufferManager.sendWithBuffering(testMsg2);
-        assertFalse(bufferManager.getIsBackpressureActive().get());
+        assertFalse(bufferManager.isBackpressureActive());
 
         // Message 2 times out when processing further!
         LogReplicationEntryMsg ack3 = bufferManager.resend(true);
         assertNull(ack3, "Message 2 timed out giving us a null ack!");
-        assertTrue(bufferManager.getIsBackpressureActive().get());
+        assertTrue(bufferManager.isBackpressureActive());
         bufferManager.sendWithBuffering(testMsg2);
 
         // Next go around everything is fine and backpressure should be turned off
         bufferManager.resend(true);
-        assertFalse(bufferManager.getIsBackpressureActive().get());
+        assertFalse(bufferManager.isBackpressureActive());
     }
 
 
