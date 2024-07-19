@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
@@ -65,6 +66,8 @@ public abstract class SenderBufferManager {
      */
     private int timeoutTimer;
 
+    @VisibleForTesting
+    @Getter
     private final AtomicBoolean isBackpressureActive = new AtomicBoolean(false);
     private final ExponentialBackoffRetry<?,?,?,?,?,?> backoffRetry = new ExponentialBackoffRetry<>(() -> null);
 
@@ -171,7 +174,7 @@ public abstract class SenderBufferManager {
      * @throws ExecutionException
      * @throws TimeoutException
      */
-    public LogReplicationEntryMsg processAcks() throws InterruptedException, ExecutionException, TimeoutException {
+    private LogReplicationEntryMsg processAcks() throws InterruptedException, ExecutionException, TimeoutException {
         LogReplicationEntryMsg ack = null;
 
         if (!pendingCompletableFutureForAcks.isEmpty()) {
