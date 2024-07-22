@@ -340,7 +340,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                         DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
                     txn.commit();
                 }
-                TimeUnit.SECONDS.sleep(waitTimeBetweenSyncRequestsMs);
+                TimeUnit.MILLISECONDS.sleep(waitTimeBetweenSyncRequestsMs);
             }
 
             // Wait for the forced sync events to be added to the event table
