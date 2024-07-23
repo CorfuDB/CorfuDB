@@ -14,11 +14,9 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
 
 import java.io.File;
 import java.io.FileReader;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +26,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideMetadata;
@@ -45,6 +42,18 @@ public abstract class SenderBufferManager {
      * The location of the file to read buffer related configuration.
      */
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
+
+    /*
+     * Back of napkin math to derive sleep time (per message):
+     *  - Assume payload size of 15MB
+     *  - Queue holds ~50 messages before OOM risk
+     *  -> MAX_SLEEP_TIME_MS = 5 min to process 50 messages = 300000 / 50 = 6000 + buffer = 7000ms
+     *  -> INITIAL_SLEEP_TIME_MS = 50% of max time
+     *  -> SLEEP_TIME_INCREMENT_MS = 25% of max time
+     */
+    public static final long INITIAL_SLEEP_TIME_MS = 3500;
+    public static final long MAX_SLEEP_TIME_MS = 7000;
+    public static final long SLEEP_TIME_INCREMENT_MS = 1750;
 
     /*
      * The max buffer size
@@ -69,7 +78,13 @@ public abstract class SenderBufferManager {
     @VisibleForTesting
     @Getter
     private boolean isBackpressureActive = false;
-    private final ExponentialBackoffRetry<?,?,?,?,?,?> backoffRetry = new ExponentialBackoffRetry<>(() -> null);
+
+    /*
+     * Backpressure mechanism to space out resends when log entries are timing out.
+     */
+    @VisibleForTesting
+    @Getter
+    private final LinearBackoffRetry backoffRetry;
 
     /*
      * If there is a timeout for a message, should generate an error or not
@@ -115,19 +130,13 @@ public abstract class SenderBufferManager {
      * @param dataSender
      */
     public SenderBufferManager(DataSender dataSender) {
-        float BACKOFF_RANDOM_PORTION_PERCENT = 0.1f;
-        int BACKOFF_DURATION_SECONDS = 30;
-        int BACKOFF_MAX_THRESHOLD_MINUETS = 5;
+        backoffRetry = new LinearBackoffRetry(INITIAL_SLEEP_TIME_MS, MAX_SLEEP_TIME_MS, SLEEP_TIME_INCREMENT_MS);
 
         maxRetry = DefaultClusterConfig.getLogSenderRetryCount();
         maxBufferSize = DefaultClusterConfig.getLogSenderBufferSize();
         msgTimer = DefaultClusterConfig.getLogSenderResendTimer();
         timeoutTimer = DefaultClusterConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultClusterConfig.isLogSenderTimeout();
-
-        backoffRetry.setRandomPortion(BACKOFF_RANDOM_PORTION_PERCENT);
-        backoffRetry.setBackoffDuration(Duration.ofSeconds(BACKOFF_DURATION_SECONDS));
-        backoffRetry.setMaxRetryThreshold(Duration.ofMinutes(BACKOFF_MAX_THRESHOLD_MINUETS));
 
         readConfig();
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
@@ -238,37 +247,27 @@ public abstract class SenderBufferManager {
      */
     public LogReplicationEntryMsg resend(boolean isLogEntry) {
         LogReplicationEntryMsg ack = null;
-        boolean force = false;
+        boolean error = false;
 
         try {
             ack = processAcks();
-
-            if (isLogEntry && isBackpressureActive) {
-                try {
-                    log.trace("ACKs timing out on sink, resending log entry messages in some time...");
-                    backoffRetry.nextWait();
-                } catch (Exception e) {
-                    Thread.currentThread().interrupt();
-                    log.warn("log entry message resend retry sleep was interrupted.", e);
-                }
-            }
         } catch (TimeoutException te) {
             // Exceptions thrown directly from the CompletableFuture.anyOf(cfs)
             log.warn("Caught a timeout exception while processing ACKs", te);
-            force = true;
+            error = true;
         } catch (ExecutionException ee) {
             // Exceptions thrown from the send message completable future will be wrapped around ExecutionException
             log.warn("Caught an execution exception while processing ACKs", ee);
             final Throwable cause = ee.getCause();
             if (cause instanceof TimeoutException) {
-                force = true;
+                error = true;
             }
         } catch (Exception e) {
             log.warn("Caught an exception while processing ACKs.", e);
         } finally {
             if (isLogEntry) {
-                if (force) {
-                    activateBackpressure();
+                if (error) {
+                    activateOrIncreaseBackpressure();
                 } else {
                     deactivateBackpressure();
                 }
@@ -277,7 +276,13 @@ public abstract class SenderBufferManager {
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
             LogReplicationPendingEntry entry = pendingMessages.getPendingEntries().get(i);
-            if (entry.timeout(msgTimer) || force) {
+            if (entry.timeout(msgTimer) || error) {
+                // Upon an ACK failing due to a timeout, we add a linearly increasing wait between retries as
+                // a backpressure mechanism.
+                if (isLogEntry && isBackpressureActive) {
+                    backoffRetry.backoff();
+                }
+
                 entry.retry();
                 // Update metadata as topologyConfigId could have changed in between resend cycles
                 LogReplicationEntryMsg dataEntry = entry.getData();
@@ -296,15 +301,20 @@ public abstract class SenderBufferManager {
         return ack;
     }
 
-    private void activateBackpressure() {
-        log.info("Log entry ACKs timing out on sink, enabling back pressure for retries.");
-        isBackpressureActive = true;
+    private void activateOrIncreaseBackpressure() {
+        if (!isBackpressureActive) {
+            log.info("Log entry ACKs timing out on sink, enabling back pressure for retries.");
+            isBackpressureActive = true;
+        } else {
+            backoffRetry.incrementSleepTime();
+        }
     }
 
     public void deactivateBackpressure() {
         if (isBackpressureActive) {
-            log.info("Turn off back pressure for log entry resends.");
+            log.info("Turn off and reset back pressure for log entry resends.");
             isBackpressureActive = false;
+            backoffRetry.reset();
         }
     }
 
@@ -359,5 +369,44 @@ public abstract class SenderBufferManager {
                     });
                     return future;
                 }).orElse(entryFuture);
+    }
+
+
+    /**
+     * Utility class to provide a configurable linearly increasing sleep mechanism.
+     *
+     */
+    public static class LinearBackoffRetry {
+        private final long initialSleepTime;
+        private final long maxSleepTime;
+        private final long sleepTimeIncrement;
+
+        @Getter
+        private long currentSleepTime;
+
+        public LinearBackoffRetry(long initialSleepTime, long maxSleepTime, long sleepTimeIncrement) {
+            this.initialSleepTime = initialSleepTime;
+            this.maxSleepTime = maxSleepTime;
+            this.sleepTimeIncrement = sleepTimeIncrement;
+            this.currentSleepTime = initialSleepTime;
+        }
+
+        public void backoff() {
+            try {
+                log.trace("ACKs timing out on sink, resending messages in {} milliseconds...", currentSleepTime);
+                TimeUnit.MILLISECONDS.sleep(currentSleepTime);
+            } catch (Exception e) {
+                Thread.currentThread().interrupt();
+                log.warn("Backoff retry sleep was interrupted.", e);
+            }
+        }
+
+        public void incrementSleepTime() {
+            currentSleepTime = Math.min(currentSleepTime + sleepTimeIncrement, maxSleepTime);
+        }
+
+        public void reset() {
+            currentSleepTime = initialSleepTime;
+        }
     }
 }

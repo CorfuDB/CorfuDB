@@ -121,7 +121,8 @@ public class SnapshotSender {
         // Skip if no data is present in the log
         if (Address.isAddress(baseSnapshotTimestamp)) {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
-            // or snapshot sync is stopped
+            // or snapshot sync is stopped. Resends for snapshot sync do not use same backoff mechanism
+            // as for log entry, there is no wait added for snapshot sync resends.
             dataSenderBufferManager.resend(false);
 
             while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&

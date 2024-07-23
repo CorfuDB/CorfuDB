@@ -30,9 +30,9 @@ public class SenderBufferManagerTest {
         bufferManager = new TestSenderBufferManager(mockDataSender);
     }
 
-    /** Test that log entry CFs that timeout due to no ACK from the sink trigger an
-     * exponential backoff, that is disabled upon a successful ack within the allotted timeframe.
-     *
+    /*
+     * Test that log entry CFs that timeout due to no ACK from the sink trigger a
+     * backoff wait, that is disabled upon a successful ack within the allotted timeframe.
      */
     @Test
     public void testSenderBackpressure() {
@@ -73,6 +73,46 @@ public class SenderBufferManagerTest {
         assertFalse(bufferManager.isBackpressureActive());
     }
 
+    /*
+     * Test that back pressure wait time increases on repeat timeouts.
+     */
+    @Test
+    public void testSenderBackpressureWaitIncrease() {
+        LogReplicationEntryMetadataMsg testMsgMetadata = LogReplicationEntryMetadataMsg.newBuilder()
+                .setTimestamp(1L).build();
+        LogReplicationEntryMsg testMsg = LogReplicationEntryMsg.newBuilder()
+                .setMetadata(testMsgMetadata).build();
+
+        when(mockDataSender.send(any(LogReplicationEntryMsg.class)))
+                .thenReturn(CompletableFuture.failedFuture(new TimeoutException("Future Timed Out!")))
+                .thenReturn(CompletableFuture.failedFuture(new TimeoutException("Future Timed Out!")))
+                .thenReturn(CompletableFuture.failedFuture(new TimeoutException("Future Timed Out!")))
+                .thenReturn(CompletableFuture.completedFuture(testMsg));
+
+        // Initial attempt, back pressure not activated, and sleep time is at initial
+        bufferManager.resend(true);
+        bufferManager.sendWithBuffering(testMsg);
+        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+
+        // Backpressure is activated, and sleep time is at initial
+        bufferManager.resend(true);
+        bufferManager.sendWithBuffering(testMsg);
+        assertTrue(bufferManager.isBackpressureActive());
+        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS,
+                bufferManager.getBackoffRetry().getCurrentSleepTime());
+
+        // Backpressure is increased, and sleep time is at initial + increment
+        bufferManager.resend(true);
+        bufferManager.sendWithBuffering(testMsg);
+        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS + SenderBufferManager.SLEEP_TIME_INCREMENT_MS,
+                bufferManager.getBackoffRetry().getCurrentSleepTime());
+
+        // Backpressure is reset, and sleep time is at initial wait
+        bufferManager.resend(true);
+        bufferManager.sendWithBuffering(testMsg);
+        assertFalse(bufferManager.isBackpressureActive());
+        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+    }
 
     /**
      * Test implementation of SenderBufferManager
