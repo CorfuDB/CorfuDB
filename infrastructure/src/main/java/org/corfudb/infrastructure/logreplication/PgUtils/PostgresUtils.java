@@ -16,7 +16,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -24,11 +24,18 @@ public class PostgresUtils {
 
     private PostgresUtils() {}
 
+    @Setter
+    private static PostgresConnector aliasOverride;
+
     public static String quoteIdentifier(String identifier) {
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
+        if (aliasOverride != null) {
+            connector = aliasOverride;
+        }
+
         boolean successOrExists = false;
         log.info("Executing command: {}, on connector {} ", sql, connector);
         if (!sql.isEmpty()) {
@@ -154,9 +161,13 @@ public class PostgresUtils {
     }
 
     public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica) {
+        return createSubscriptionCmd(primary, replica, primary);
+    }
+
+    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica, PostgresConnector primaryToQuery) {
         String createSubCmd = "";
 
-        if (Objects.equals(primary.ADDRESS, replica.ADDRESS)) {
+        if (Objects.equals(primary.ADDRESS + primary.PORT, replica.ADDRESS + replica.PORT)) {
             log.error("Skipping subscribing to self {}. This is an invalid state!", primary.ADDRESS);
         } else {
             int max_retry = 10;
@@ -168,14 +179,14 @@ public class PostgresUtils {
                 String pubExistsQuery = String.format("SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '%s');", pubName);
                 log.info("check exists: {}", pubExistsQuery);
                 try {
-                    List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primary);
+                    List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primaryToQuery);
 
                     if (!queryResult.isEmpty()) {
-                        // if publication exists
-                        if (queryResult.get(0).values().stream().findAny().isPresent()) {
+                        boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
+                        if (publicationExists) {
                             String subName = String.join("_", replicaPrefix, "sub");
-                            createSubCmd = String.format("CREATE SUBSCRIPTION %s CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION %s;",
-                                    quoteIdentifier(subName), primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, quoteIdentifier(pubName));
+                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
+                                    subName, primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, pubName);
                             break;
                         } else {
                             log.info("PUB WITH THAT NAME DOES NOT EXIST");

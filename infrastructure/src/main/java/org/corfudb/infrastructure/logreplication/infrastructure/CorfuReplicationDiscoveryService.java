@@ -15,6 +15,7 @@ import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.PgUtils.PostgresConnector;
+import org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils;
 import org.corfudb.infrastructure.logreplication.PostgresReplicationConfig;
 import org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig;
 import org.corfudb.infrastructure.logreplication.ReplicationConfig;
@@ -247,7 +248,17 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.isLeader = new AtomicBoolean();
         this.pgConfig = new PostgresReplicationConnectionConfig(serverContext.getPluginConfigFilePath());
         if (isPostgres) {
-            this.connector = new PostgresConnector(getLocalHost(), pgConfig.getPORT(),
+            String pgHost;
+
+            if (pgConfig.getHOST_ALIAS() == null) {
+                pgHost = getLocalHost();
+            } else {
+                pgHost = pgConfig.getHOST_ALIAS();
+                PostgresUtils.setAliasOverride(new PostgresConnector(pgConfig.getHOST_ALIAS(),
+                        pgConfig.getPORT_ALIAS(), pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME()));
+            }
+
+            this.connector = new PostgresConnector(pgHost, pgConfig.getPORT(),
                     pgConfig.getUSER(), pgConfig.getPASSWORD(), pgConfig.getDB_NAME());
         }
     }

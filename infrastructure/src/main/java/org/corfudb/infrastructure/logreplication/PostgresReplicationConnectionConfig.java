@@ -33,6 +33,12 @@ public class PostgresReplicationConnectionConfig {
     @Getter
     private String TABLES_TO_REPLICATE_PATH;
 
+    @Getter
+    private String HOST_ALIAS;
+
+    @Getter
+    private String PORT_ALIAS;
+
     public PostgresReplicationConnectionConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
             Properties prop = new Properties();
@@ -46,6 +52,11 @@ public class PostgresReplicationConnectionConfig {
                 this.DB_NAME = prop.getProperty("pg_db_name");
                 this.TABLES_TO_REPLICATE_PATH = prop.getProperty("tables_to_replicate_path");
                 isPostgres = true;
+
+                if (prop.getProperty("host_alias") != null) {
+                    this.HOST_ALIAS = prop.getProperty("host_alias");
+                    this.PORT_ALIAS = prop.getProperty("port_alias");
+                }
             }
         } catch (IOException e) {
             log.info("Problem with loading config, starting as normal deployment!!!");
