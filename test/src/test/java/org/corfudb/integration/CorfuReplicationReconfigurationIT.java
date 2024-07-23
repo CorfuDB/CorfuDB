@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.Metadata;
@@ -225,6 +226,176 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
                 LogReplicationMetadata.SyncStatus.ONGOING, LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT,
                 LogReplicationMetadata.SyncStatus.COMPLETED);
         assertThat(remainingEntriesToSend).isEqualTo(0L);
+    }
+
+    /**
+     * This test verifies that concurrent Snapshot Syncs are handled gracefully on the Standby.  If messages from
+     * a new Snapshot Sync are received on the Standby when it is in 'apply' phase of a previous sync, these new
+     * messages are rejected.  This avoids the race between transfer and apply phases on Standby.
+     * The Active will continue to re-send messages from the new sync.  They will be accepted and ACK'd by Standby
+     * after the ongoing apply finishes.
+     *
+     * Test workflow:
+     * 1. Create a topology with Active and Standby.  On Standby, introduce a 20 sec latency during apply phase to
+     *    simulate the above race.  Wait for initial snapshot sync to complete.
+     * 2. Trigger 2 forced snapshot sync events with a delay of 3 seconds between requests.  This is to ensure that
+     *    the 1st request completes transfer and Standby is in 'apply' phase of the 1st sync.
+     * 3. When the 2nd forced sync is triggered, Active will be in WaitSnapshotApplyState due to the 'apply delay'
+     *    on Standby.  When the 2nd forced sync starts, the 1st one gets cancelled on Active.  Standby continues
+     *    to apply data from the 1st sync, rejecting incoming messages from the 2nd one.  Active continues to
+     *    resend these messages from the 2nd sync request.
+     *    Eventually, the apply phase of the 1st sync completes and Standby accepts messages from the 2nd one.
+     4.   When this 2nd sync completes on the Standby, all existing forced sync events are deleted from the Event
+     *    table.  Wait for the table to be empty, which indicates that this 2nd sync completed successfully.
+     * @throws Exception
+     */
+    @Test
+    public void testConcurrentSnapshotSyncOnStandby() throws Exception {
+        String testStreamName = "Table001";
+        int batchSize = 5;
+        int numForcedSyncEvents = 2;
+
+        // Time delay of 20 seconds introduced on the Standby when in Apply phase
+        int waitSnapshotApplyMs = 20000;
+
+        // Time delay of 3 seconds between requesting 2 consecutive forced syncs.  This is to ensure that the first
+        // sync request reaches the WaitForSnapshotApplyState (implies that the Standby will be in the Apply phase)
+        int waitTimeBetweenSyncRequestsMs = 3000;
+
+        // Perform initial setup and wait for initial snapshot sync to complete
+        try {
+            setupActiveAndStandbyCorfu();
+
+            Table<LogReplicationMetadata.ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, Message> eventTable =
+                corfuStoreActive.openTable(LogReplicationMetadataManager.NAMESPACE,
+                    REPLICATION_EVENT_TABLE_NAME,
+                    LogReplicationMetadata.ReplicationEventKey.class,
+                    LogReplicationMetadata.ReplicationEvent.class,
+                    null,
+                    TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationEvent.class));
+
+            Table<StringKey, IntValue, Metadata> mapActive = corfuStoreActive.openTable(
+                NAMESPACE,
+                testStreamName,
+                StringKey.class,
+                IntValue.class,
+                Metadata.class,
+                TableOptions.builder().schemaOptions(
+                        CorfuOptions.SchemaOptions.newBuilder()
+                            .setIsFederated(true)
+                            .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                            .build())
+                    .build()
+            );
+
+            Table<StringKey, IntValue, Metadata> mapStandby = corfuStoreStandby.openTable(
+                NAMESPACE,
+                testStreamName,
+                StringKey.class,
+                IntValue.class,
+                Metadata.class,
+                TableOptions.builder().schemaOptions(
+                        CorfuOptions.SchemaOptions.newBuilder()
+                            .setIsFederated(true)
+                            .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                            .build())
+                    .build()
+            );
+
+            // Write batchSize num of entries to active map
+            for (int i = 0; i < batchSize; i++) {
+                try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                    txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                    txn.commit();
+                }
+            }
+            assertThat(mapActive.count()).isEqualTo(batchSize);
+            assertThat(mapStandby.count()).isZero();
+
+            // Start LR on both sides.  Introduce a latency of 20 seconds in the apply phase on Standby
+            startActiveLogReplicator();
+            startStandbyLogReplicator(waitSnapshotApplyMs);
+            log.info("Replication servers started, and replication is in progress...");
+
+            // Wait for replication to finish and check sink has all the writes
+            while (mapStandby.count() != mapActive.count()) {
+                log.debug("Waiting for entries to be replicated");
+            }
+            assertThat(mapStandby.count()).isEqualTo(mapActive.count());
+
+            // Check that the event table is empty to begin with
+            assertThat(eventTable.count()).isZero();
+
+            // Add 2 full sync events with delay of 'waitTimeBetweenSyncRequestsMs'
+            Table<ClusterUuidMsg, ClusterUuidMsg, ClusterUuidMsg> configTable = corfuStoreActive.openTable(
+                DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
+                ClusterUuidMsg.class, ClusterUuidMsg.class, ClusterUuidMsg.class,
+                TableOptions.fromProtoSchema(ClusterUuidMsg.class)
+            );
+
+            for (int i = 0; i < numForcedSyncEvents; i++) {
+                try (TxnContext txn = corfuStoreActive.txn(DefaultClusterManager.CONFIG_NAMESPACE)) {
+                    txn.putRecord(configTable, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                        DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC);
+                    txn.commit();
+                }
+                TimeUnit.MILLISECONDS.sleep(waitTimeBetweenSyncRequestsMs);
+            }
+
+            // Wait for the forced sync events to be added to the event table
+            while(eventTable.count() < numForcedSyncEvents) {
+                log.info("Num Forced Sync Events Added: {}.  Expected {}", eventTable.count(), numForcedSyncEvents);
+            }
+
+            log.info("Forced Sync Events written to the table and will execute concurrently");
+
+            // When the 2nd forced sync is triggered, Active will be in WaitSnapshotApplyState due to the 'apply delay'
+            // on Standby.  When the 2nd forced sync starts, the 1st one gets cancelled on Active.  Standby continues
+            // to apply data from the 1st sync, rejecting incoming messages from the 2nd one.  Active continues to
+            // resend these messages.
+            // Eventually, the apply phase of the 1st sync completes and Standby accepts messages from the 2nd one.
+            // When this 2nd sync completes on the Standby, all existing forced sync events are deleted from the Event
+            // table.
+            // Wait for the table to be empty, which indicates that this 2nd sync completed successfully.
+            while(eventTable.count() > 0) {
+                log.debug("Waiting for the Event Table to be cleared.  Current Size = {}", eventTable.count());
+            }
+
+            // Verify that data is consistent on the Standby
+            corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+                REPLICATION_STATUS_TABLE,
+                ReplicationStatusKey.class,
+                ReplicationStatusVal.class,
+                null,
+                TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+            ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(
+                DefaultClusterConfig.getStandbyClusterId()).build();
+            try (TxnContext txnContext = corfuStoreStandby.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                ReplicationStatusVal val =
+                    (ReplicationStatusVal) txnContext.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                Assert.assertTrue(val.getDataConsistent());
+            }
+
+        } finally {
+            executorService.shutdownNow();
+
+            if (activeCorfu != null) {
+                activeCorfu.destroy();
+            }
+
+            if (standbyCorfu != null) {
+                standbyCorfu.destroy();
+            }
+
+            if (activeReplicationServer != null) {
+                activeReplicationServer.destroy();
+            }
+
+            if (standbyReplicationServer != null) {
+                standbyReplicationServer.destroy();
+            }
+        }
     }
 
     /**

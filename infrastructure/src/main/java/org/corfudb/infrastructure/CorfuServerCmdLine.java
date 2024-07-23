@@ -49,6 +49,7 @@ public class CorfuServerCmdLine {
                     + "[" + HEALTH_PORT_PARAM + "=<health_port>]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[--max-snapshot-entries-applied=<max-snapshot-entries-applied>]"
+                    + "[--wait-before-apply-ms=<wait_before_apply_ms>]"
                     + "[-P <prefix>] [-R <retention>] <port>"
                     + "[--compaction-trigger-freq-ms=<compaction_trigger_freq_ms>]"
                     + "[--compactor-script=<compactor_script_path>]"

@@ -407,6 +407,19 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public Process runReplicationServerWaitInSnapshotApply(int port, String pluginConfigFilePath,
+                                                           int lockLeaseDuration, int waitInSnapshotApplyMs)
+                                                        throws IOException {
+        return new CorfuReplicationServerRunner()
+            .setHost(DEFAULT_HOST)
+            .setPort(port)
+            .setLockLeaseDuration(lockLeaseDuration)
+            .setPluginConfigFilePath(pluginConfigFilePath)
+            .setMsg_size(MSG_SIZE)
+            .setWaitSnapshotApplyMs(waitInSnapshotApplyMs)
+            .runServer();
+    }
+
     public Process runReplicationServerCustomMaxWriteSize(int port,
                                                           String pluginConfigFilePath, int maxWriteSize,
                                                           int maxEntriesApplied) throws IOException {
@@ -719,6 +732,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private Integer lockLeaseDuration;
         private int maxWriteSize = 0;
         private int maxSnapshotEntriesApplied;
+        private int waitSnapshotApplyMs;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -780,6 +794,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (maxSnapshotEntriesApplied != 0) {
                 command.append(" --max-snapshot-entries-applied=").append(maxSnapshotEntriesApplied);
+            }
+
+            if (waitSnapshotApplyMs != 0) {
+                command.append(" --wait-before-apply-ms=").append(waitSnapshotApplyMs);
             }
 
             command.append(" -d ").append(logLevel).append(" ")

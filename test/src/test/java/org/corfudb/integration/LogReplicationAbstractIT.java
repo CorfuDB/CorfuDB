@@ -807,6 +807,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    public void startStandbyLogReplicator(int waitSnapshotApplyMs) {
+        try {
+            if (runProcess) {
+                // Start Log Replication Server on Active Site
+                standbyReplicationServer = runReplicationServerWaitInSnapshotApply(standbyReplicationServerPort, pluginConfigFilePath,
+                    lockLeaseDuration, waitSnapshotApplyMs);
+            } else {
+                executorService.submit(() -> {
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
+                        "--wait-before-apply-ms=" + waitSnapshotApplyMs, "--address=localhost",
+                        String.valueOf(standbyReplicationServerPort)});
+                });
+            }
+        } catch (Exception e) {
+            log.debug("Error caught while running Log Replication Server");
+        }
+    }
+
     public void verifyDataOnStandbyNonUFO(int expectedConsecutiveWrites) {
         // Wait until data is fully replicated
         while (mapAStandby.count() != expectedConsecutiveWrites) {
