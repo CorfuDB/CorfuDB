@@ -16,8 +16,11 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 
 @Slf4j
 public class PostgresUtils {
@@ -215,7 +218,6 @@ public class PostgresUtils {
 
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};
-            // params[0] = subscription;
             String dropQuery = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
             if (!tryExecutePreparedStatementsCommand(dropQuery, params, connector)) {
                 log.info("Unable to drop subscription: {}", subscription);
@@ -303,5 +305,53 @@ public class PostgresUtils {
 
     public static void dropAllPublications(PostgresConnector connector) {
         dropPublications(getAllPublications(connector), connector);
+    }
+
+    public static ReplicationStatusVal getPgReplicationStatus(PostgresConnector connector) {
+        String getReplicationStatsQuery = "select * from pg_stat_replication;";
+        Map<String, Object> pgStatus = executeQuery(getReplicationStatsQuery, connector).get(0);
+
+        if (pgStatus.isEmpty()) {
+            log.warn("Replication stats are not available!");
+            return ReplicationStatusVal.getDefaultInstance();
+        }
+
+        boolean isDataConsistent = pgStatus.get("flush_lsn").equals(pgStatus.get("write_lsn"));
+
+        String replayLsn = pgStatus.get("replay_lsn").toString();
+        replayLsn = replayLsn.substring(replayLsn.indexOf('/') + 1);
+        long replayLsnValue = Long.parseLong(replayLsn, 16);
+
+        long writeLag = pgStatus.get("write_lag") == null ? 0 : Integer.parseInt(pgStatus.get("write_lag").toString()) / 1000;
+
+        SyncStatus syncStatus;
+        switch (pgStatus.get("state").toString()) {
+            case "startup":
+                syncStatus = SyncStatus.NOT_STARTED;
+                break;
+
+            case "catchup":
+            case "streaming":
+            case "backup":
+                syncStatus = SyncStatus.ONGOING;
+                break;
+
+            default:
+                syncStatus = SyncStatus.UNRECOGNIZED;
+                break;
+        }
+
+        SnapshotSyncInfo syncInfo = SnapshotSyncInfo.newBuilder()
+                .setBaseSnapshot(replayLsnValue)
+                .setStatus(SyncStatus.COMPLETED)
+                .build();
+
+        return ReplicationStatusVal.newBuilder()
+                .setDataConsistent(isDataConsistent)
+                .setSyncType(SyncType.LOG_ENTRY)
+                .setRemainingEntriesToSend(writeLag)
+                .setStatus(syncStatus)
+                .setSnapshotSyncInfo(syncInfo)
+                .build();
     }
 }
