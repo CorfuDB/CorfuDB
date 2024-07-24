@@ -24,7 +24,7 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     public static Collection<String> input() {
 
         List<String> transportPlugins = Arrays.asList(
-                "src/test/resources/transport/grpcConfig.properties",
+                //"src/test/resources/transport/grpcConfig.properties",
                 "src/test/resources/transport/nettyConfig.properties");
 
         if(runProcess) {

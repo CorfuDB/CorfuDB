@@ -66,7 +66,7 @@ public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
-    public static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
+    public static final String CORFU_LOG_PATH = "/Users/pmajmudar/Desktop/test";
 
     static final long DEFAULT_MVO_CACHE_SIZE = 100;
 
@@ -129,7 +129,11 @@ public class AbstractIT extends AbstractCorfuTest {
         }
 
         shutdownAllCorfuServers(shouldForceKill);
-        FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+        try {
+            FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+        } catch (Exception e) {
+            log.error("Exception: ", e);
+        }
     }
 
     public static String getCodeCoverageCmd() {

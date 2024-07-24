@@ -209,6 +209,8 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             startLogReplicatorServers();
 
+            TimeUnit.SECONDS.sleep(20);
+            shutdownCorfuServer(standbyCorfu);
             log.info(">> Wait ... Snapshot log replication in progress ...");
             verifyDataOnStandby(numWrites);
 
