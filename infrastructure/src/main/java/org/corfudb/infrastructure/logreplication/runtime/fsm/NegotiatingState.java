@@ -31,8 +31,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final CorfuLogReplicationRuntime fsm;
 
-    private Optional<String> leaderNodeId;
-
     private final ThreadPoolExecutor worker;
 
     private final LogReplicationClientRouter router;
@@ -64,8 +62,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeIdDown)) {
-                    leaderNodeId = Optional.empty();
+                if (fsm.getRemoteLeaderNodeId().equals(nodeIdDown)) {
+                    fsm.resetRemoteLeaderNodeId();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
                     // Router will attempt reconnection of non-leader endpoint
@@ -89,9 +87,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;
-            case REMOTE_LEADER_NOT_FOUND:
-                leaderNodeId = Optional.empty();
-                return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case REMOTE_LEADER_LOSS:
                 if (fsm.getRemoteLeaderNodeId().get().equals(event.getNodeId())) {
                     fsm.resetRemoteLeaderNodeId();
@@ -154,16 +149,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         } finally {
             log.debug("Exit :: negotiate");
         }
-    }
-
-    /**
-     * Set Leader Endpoint, determined during the transition from VERIFYING_REMOTE_LEADER
-     * to NEGOTIATING state.
-     *
-     * @param nodeId leader node on remote cluster
-     */
-    public void setLeaderNodeId(String nodeId) {
-        this.leaderNodeId = Optional.of(nodeId);
     }
 
     /**
