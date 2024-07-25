@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,10 +17,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 
 @Slf4j
@@ -104,8 +107,6 @@ public class PostgresUtils {
         }
     }
 
-
-
     public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector) {
         List<Map<String, Object>> result = new ArrayList<>();
         log.info("Executing command: {}, on connector {} ", sql, connector);
@@ -127,6 +128,37 @@ public class PostgresUtils {
             statement.close();
         } catch (SQLException e) {
            log.info("ERROR", e);
+        }
+        return result;
+    }
+
+    public static List<Map<String, Object>> executePreparedStatementQuery(String sql, Object[] params, PostgresConnector connector) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        log.info("Executing query: {}, on connector {} ", sql, connector);
+
+        try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+            ResultSet results;
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                setParameters(pstmt, params);
+                log.info("tryExecutePreparedStatementsCommand: Executing query: {}", pstmt.toString());
+                results = pstmt.executeQuery();
+                ResultSetMetaData metaData = results.getMetaData();
+                int columnCount = metaData.getColumnCount();
+
+                while (results.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        row.put(metaData.getColumnName(i), results.getObject(i));
+                    }
+                    result.add(row);
+                }
+            } catch (SQLException e) {
+                log.error("Encountered error while executing prepared statement query.", e);
+                throw e;
+            }
+
+        } catch (Exception e) {
+            log.info("Error with query.", e);
         }
         return result;
     }
@@ -307,26 +339,40 @@ public class PostgresUtils {
         dropPublications(getAllPublications(connector), connector);
     }
 
-    public static ReplicationStatusVal getPgReplicationStatus(PostgresConnector connector) {
-        String getReplicationStatsQuery = "select * from pg_stat_replication;";
-        Map<String, Object> pgStatus = executeQuery(getReplicationStatsQuery, connector).get(0);
+    public static ReplicationStatusVal getPgReplicationStatus(PostgresConnector connector, String remoteHost) {
+        // TODO (Postgres): update protobufs to be relevant for pg stats
+        String subPostfix = "_sub";
+        remoteHost = String.join("_", remoteHost.split("\\."));
+        String replicationStatsQuery = "SELECT replay_lsn, flush_lsn, write_lsn, state, " +
+                "pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) as bytes_lag " +
+                "FROM pg_stat_replication " +
+                "WHERE application_name = ?;";
 
-        if (pgStatus.isEmpty()) {
+        String applicationName = remoteHost + subPostfix;
+        Object[] params = new Object[]{applicationName};
+        List<Map<String, Object>> pgStatusQuery = executePreparedStatementQuery(replicationStatsQuery, params, connector);
+        if (pgStatusQuery.isEmpty()) {
             log.warn("Replication stats are not available!");
             return ReplicationStatusVal.getDefaultInstance();
         }
+        Map<String, Object> pgStatus = pgStatusQuery.get(0);
 
         boolean isDataConsistent = pgStatus.get("flush_lsn").equals(pgStatus.get("write_lsn"));
+
+        String flushLsn = pgStatus.get("flush_lsn").toString();
+        flushLsn = flushLsn.substring(flushLsn.indexOf('/') + 1);
+        long flushLsnValue = Long.parseLong(flushLsn, 16);
 
         String replayLsn = pgStatus.get("replay_lsn").toString();
         replayLsn = replayLsn.substring(replayLsn.indexOf('/') + 1);
         long replayLsnValue = Long.parseLong(replayLsn, 16);
 
-        long writeLag = pgStatus.get("write_lag") == null ? 0 : Integer.parseInt(pgStatus.get("write_lag").toString()) / 1000;
+        long writeLag = Integer.parseInt(pgStatus.get("bytes_lag").toString());
 
         SyncStatus syncStatus;
         switch (pgStatus.get("state").toString()) {
             case "startup":
+            case "stopping":
                 syncStatus = SyncStatus.NOT_STARTED;
                 break;
 
@@ -341,9 +387,15 @@ public class PostgresUtils {
                 break;
         }
 
+        Instant time = Instant.now();
+        Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                .setNanos(time.getNano()).build();
         SnapshotSyncInfo syncInfo = SnapshotSyncInfo.newBuilder()
-                .setBaseSnapshot(replayLsnValue)
+                .setSnapshotRequestId(String.valueOf(replayLsnValue))
+                .setCompletedTime(timestamp)
+                .setBaseSnapshot(flushLsnValue)
                 .setStatus(SyncStatus.COMPLETED)
+                .setType(SnapshotSyncType.DEFAULT)
                 .build();
 
         return ReplicationStatusVal.newBuilder()

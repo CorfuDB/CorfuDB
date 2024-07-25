@@ -940,12 +940,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        // if (event.getTopologyConfig().getTopologyConfigID() == topologyDescriptor.getTopologyConfigID()){
-        //     log.debug("Repeated Topology Change Notification, current={}, received={}",
-        //             topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
-        //     return;
-        // }
-
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
@@ -1172,7 +1166,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (isPostgres) {
             Map<String, ReplicationStatusVal> mapToSend = new HashMap<>();
             if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-                mapToSend.put(localClusterDescriptor.clusterId, getPgReplicationStatus(connector));
+                topologyDescriptor.getStandbyClusters().values().forEach(
+                        standbyCluster -> standbyCluster.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    // TODO (Postgres): Will need leadership check after clustering implemented
+                                    String standbyNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    mapToSend.put(localClusterDescriptor.clusterId, getPgReplicationStatus(connector, standbyNodeIp));
+                                })
+                );
             }
             return mapToSend;
         } else {
@@ -1204,9 +1205,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             log.error(errorStr);
             throw new LogReplicationDiscoveryServiceException(errorStr);
         } else if (isPostgres) {
-            String errorStr = "The forceSnapshotSync command is not supported on Postgres cluster.";
-            log.error(errorStr);
-            throw new LogReplicationDiscoveryServiceException(errorStr);
+            log.warn("Full sync not supported for postgres, returning random uuid.");
+            return UUID.randomUUID();
         }
 
         UUID forceSyncId = UUID.randomUUID();
