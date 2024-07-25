@@ -195,34 +195,6 @@ class CompactorRunner(object):
         logger.info(msg)
         print(msg)
 
-    # Disk space: max 50MB. keep 1000 files.
-    # Mem space: max 50MB, most of time 50KB. CORFU_GC_MAX_INDEX 1000 files, each file is 50KB.
-    def _rsync_log(self, src_file_prefix, dst_dir):
-        self._print_and_log("start copying jvm gc files from  " + src_file_prefix + " to " + dst_dir)
-        src_dir = os.path.dirname(src_file_prefix)
-        if not os.path.isdir(src_dir):
-            self._print_and_log("ERROR nonexist dir " + src_dir)
-
-        if not os.path.isdir(dst_dir):
-            check_output("mkdir " + dst_dir, shell=True)
-            self._print_and_log("create dst " + dst_dir)
-
-        flist = glob.glob(src_file_prefix + "*")
-        for file in flist:
-            try:
-                # Java 11 log rotation naming scheme:
-                # 1. The active GC log file has a ".log" extension
-                # 2. Rotated GC files have a ".log.[0-9]" extension
-                if file.split(".")[-1] != 'log':
-                    cmd = "cp --preserve " + file + " " + dst_dir
-                    output = check_output(cmd, shell=True)
-                    os.remove(file)
-                    msg = "CMD: " + cmd
-                    self._print_and_log(msg)
-            except Exception as ex:
-                self._print_and_log("Failed to copy log file: " + file + ", error: " + str(ex))
-        self._print_and_log("Done copying jvm gc files from  " + src_file_prefix + " to " + dst_dir)
-
     def _run_corfu_compactor(self):
         """
         Run the corfu compactor. It will first trim and then immediately checkpoint all corfu maps.
@@ -235,11 +207,6 @@ class CompactorRunner(object):
         logging.basicConfig(filename=corfu_paths["CompactorLogfile"],
                     format='%(asctime)s.%(msecs)03dZ %(levelname)5s Runner - %(message)s',
                     datefmt='%Y-%m-%dT%H:%M:%S')
-        # Copy mem jvm gc log files to disk
-        try:
-            self._rsync_log(corfu_paths["CorfuMemLogPrefix"], corfu_paths["CorfuDiskLogDir"])
-        except Exception as ex:
-            self._print_and_log("Failed to run rsync_log " + " error: " + str(ex))
 
         self._configure_server_address(compactor_config)
         self._print_and_log("_run_corfu_compactor: Configured compacter hostname as "
