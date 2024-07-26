@@ -44,18 +44,6 @@ public abstract class SenderBufferManager {
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
     /*
-     * Back of napkin math to derive sleep time (per message):
-     *  - Assume payload size of 15MB
-     *  - Queue holds ~50 messages before OOM risk
-     *  -> MAX_SLEEP_TIME_MS = 5 min to process 50 messages = 300000 / 50 = 6000 + buffer = 7000ms
-     *  -> INITIAL_SLEEP_TIME_MS = 50% of max time
-     *  -> SLEEP_TIME_INCREMENT_MS = 25% of max time
-     */
-    public static final long INITIAL_SLEEP_TIME_MS = 3500;
-    public static final long MAX_SLEEP_TIME_MS = 7000;
-    public static final long SLEEP_TIME_INCREMENT_MS = 1750;
-
-    /*
      * The max buffer size
      */
     private int maxBufferSize;
@@ -69,6 +57,11 @@ public abstract class SenderBufferManager {
      * The max number of retry for a message
      */
     private int maxRetry;
+
+    /*
+     * The max wait period between sends of log entries.
+     */
+    private int maxLogEntryWait;
 
     /*
      * Max time to wait an ACK for a message.
@@ -130,18 +123,27 @@ public abstract class SenderBufferManager {
      * @param dataSender
      */
     public SenderBufferManager(DataSender dataSender) {
-        backoffRetry = new LinearBackoffRetry(INITIAL_SLEEP_TIME_MS, MAX_SLEEP_TIME_MS, SLEEP_TIME_INCREMENT_MS);
-
         maxRetry = DefaultClusterConfig.getLogSenderRetryCount();
         maxBufferSize = DefaultClusterConfig.getLogSenderBufferSize();
         msgTimer = DefaultClusterConfig.getLogSenderResendTimer();
         timeoutTimer = DefaultClusterConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultClusterConfig.isLogSenderTimeout();
+        maxLogEntryWait = DefaultClusterConfig.getLogSenderWaitPeriod();
 
         readConfig();
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
         pendingCompletableFutureForAcks = new HashMap<>();
         this.dataSender = dataSender;
+
+        // Back of napkin math to derive sleep time (per message):
+        // Assume payload size of 15MB
+        // Queue holds ~50 messages before OOM risk
+        // maxSleepTime (default) = 5min to process 50 messages = 300000 / 50 = 6000 + buffer = 7000ms
+        // initialSleepTime = 50% of max time
+        // sleepTimeIncrement = 25% of max time
+        int initialSleep = maxLogEntryWait / 2;
+        int sleepIncrement = maxLogEntryWait / 4;
+        backoffRetry = new LinearBackoffRetry(maxLogEntryWait, initialSleep, sleepIncrement);
     }
 
     public SenderBufferManager(DataSender dataSender, Optional<AtomicLong> counter) {
@@ -166,6 +168,7 @@ public abstract class SenderBufferManager {
             timeoutTimer = Integer.parseInt(props.getProperty("log_reader_resend_timeout", Integer.toString(timeoutTimer)));
             errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout",
                     Boolean.toString(errorOnMsgTimeout)));
+            maxLogEntryWait = Integer.parseInt(props.getProperty("log_reader_max_wait", Integer.toString(maxLogEntryWait)));
             reader.close();
         } catch (Exception e) {
             log.warn("Use default config, could not load {}, cause={}", config_file, e.getMessage());
@@ -384,9 +387,9 @@ public abstract class SenderBufferManager {
         @Getter
         private long currentSleepTime;
 
-        public LinearBackoffRetry(long initialSleepTime, long maxSleepTime, long sleepTimeIncrement) {
-            this.initialSleepTime = initialSleepTime;
+        public LinearBackoffRetry(long maxSleepTime, long initialSleepTime, long sleepTimeIncrement) {
             this.maxSleepTime = maxSleepTime;
+            this.initialSleepTime = initialSleepTime;
             this.sleepTimeIncrement = sleepTimeIncrement;
             this.currentSleepTime = initialSleepTime;
         }
@@ -395,9 +398,8 @@ public abstract class SenderBufferManager {
             try {
                 log.trace("ACKs timing out on sink, resending messages in {} milliseconds...", currentSleepTime);
                 TimeUnit.MILLISECONDS.sleep(currentSleepTime);
-            } catch (Exception e) {
-                Thread.currentThread().interrupt();
-                log.warn("Backoff retry sleep was interrupted.", e);
+            } catch (InterruptedException e) {
+                log.warn("Sleep interrupted between message resends.", e);
             }
         }
 

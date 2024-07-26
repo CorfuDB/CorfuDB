@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.SenderBufferManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -23,6 +24,9 @@ public class SenderBufferManagerTest {
     private DataSender mockDataSender;
 
     private TestSenderBufferManager bufferManager;
+
+    private final int INITIAL_SLEEP_TIME_MS =  DefaultClusterConfig.getLogSenderWaitPeriod() / 2;
+    private final int SLEEP_TIME_INCREMENT_MS = DefaultClusterConfig.getLogSenderWaitPeriod() / 4;
 
     @Before
     public void setUp() {
@@ -92,26 +96,26 @@ public class SenderBufferManagerTest {
         // Initial attempt, back pressure not activated, and sleep time is at initial
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+        assertEquals(INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
 
         // Backpressure is activated, and sleep time is at initial
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertTrue(bufferManager.isBackpressureActive());
-        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS,
+        assertEquals(INITIAL_SLEEP_TIME_MS,
                 bufferManager.getBackoffRetry().getCurrentSleepTime());
 
         // Backpressure is increased, and sleep time is at initial + increment
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS + SenderBufferManager.SLEEP_TIME_INCREMENT_MS,
+        assertEquals(INITIAL_SLEEP_TIME_MS + SLEEP_TIME_INCREMENT_MS,
                 bufferManager.getBackoffRetry().getCurrentSleepTime());
 
         // Backpressure is reset, and sleep time is at initial wait
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertFalse(bufferManager.isBackpressureActive());
-        assertEquals(SenderBufferManager.INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+        assertEquals(INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
     }
 
     /**

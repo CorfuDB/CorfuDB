@@ -59,6 +59,9 @@ public final class DefaultClusterConfig {
     private static final int logSenderRetryCount = 5;
 
     @Getter
+    private static final int logSenderWaitPeriod = 7000;
+
+    @Getter
     private static final int logSenderResendTimer = 5000;
 
     @Getter
