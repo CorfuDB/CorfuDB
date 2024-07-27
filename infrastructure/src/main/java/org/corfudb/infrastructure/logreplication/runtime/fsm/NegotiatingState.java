@@ -62,7 +62,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (fsm.getRemoteLeaderNodeId().equals(nodeIdDown)) {
+                if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
                     fsm.resetRemoteLeaderNodeId();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
@@ -99,7 +99,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
+                log.warn("Unexpected communication event {} when in {} state", event.getType(), getType().name());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
@@ -116,6 +116,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     private void negotiate() {
 
         log.debug("Enter :: negotiate");
+
+        if (tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime() != 0) {
+            try {
+                //metadataManager.updateRuntimeState();
+                TimeUnit.SECONDS.sleep(tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime());
+            } catch (InterruptedException e) {
+                log.error("Interrupted Exception When Waiting in the Negotiating State", e);
+            }
+        }
 
         try {
             if(fsm.getRemoteLeaderNodeId().isPresent()) {

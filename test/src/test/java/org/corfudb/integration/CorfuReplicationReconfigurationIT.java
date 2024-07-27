@@ -228,6 +228,82 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
+    @Test
+    public void testStandbyStopInNegotiatingState() throws Exception {
+        String testStreamName = "Table001";
+        int batchSize = 5;
+
+        setupActiveAndStandbyCorfu();
+
+        Table<StringKey, IntValue, Metadata> mapActive = corfuStoreActive.openTable(
+            NAMESPACE,
+            testStreamName,
+            StringKey.class,
+            IntValue.class,
+            Metadata.class,
+            TableOptions.builder().schemaOptions(
+                    CorfuOptions.SchemaOptions.newBuilder()
+                        .setIsFederated(true)
+                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                        .build())
+                .build()
+        );
+        Table<StringKey, IntValue, Metadata> mapStandby = corfuStoreStandby.openTable(
+            NAMESPACE,
+            testStreamName,
+            StringKey.class,
+            IntValue.class,
+            Metadata.class,
+            TableOptions.builder().schemaOptions(
+                    CorfuOptions.SchemaOptions.newBuilder()
+                        .setIsFederated(true)
+                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                        .build())
+                .build()
+        );
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+            REPLICATION_STATUS_TABLE,
+            ReplicationStatusKey.class,
+            ReplicationStatusVal.class,
+            null,
+            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        // Write batchSize num of entries to active map
+        for (int i = 0; i < batchSize; i++) {
+            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                    IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(batchSize);
+        assertThat(mapStandby.count()).isZero();
+
+        // Start LR on both sides.  Introduce a latency of 20 seconds in the apply phase on Standby
+        startActiveLogReplicator(20);
+        startStandbyLogReplicator();
+
+        TimeUnit.SECONDS.sleep(10);
+
+        // Wait for a few seconds for the Active to reach negotiation state
+        //TimeUnit.SECONDS.sleep(5);
+
+        shutdownCorfuServer(standbyReplicationServer);
+        TimeUnit.SECONDS.sleep(5);
+
+        // Subscribe listener to know when data is consistent on the sink
+        CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
+        DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        startStandbyLogReplicator();
+
+        // Wait for successful sync
+        awaitSyncCompletion.await();
+        tearDown();
+    }
+
     /**
      * This test verifies that concurrent Snapshot Syncs are handled gracefully on the Standby.  If messages from
      * a new Snapshot Sync are received on the Standby when it is in 'apply' phase of a previous sync, these new

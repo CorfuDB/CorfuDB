@@ -437,7 +437,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         assertThat(standbyListener.getAccumulatedStatus()).contains(false);
     }
 
-    private void tearDown() {
+    public void tearDown() {
         executorService.shutdownNow();
 
         if (activeCorfu != null) {
@@ -817,6 +817,24 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
                         "--wait-before-apply-ms=" + waitSnapshotApplyMs, "--address=localhost",
+                        String.valueOf(standbyReplicationServerPort)});
+                });
+            }
+        } catch (Exception e) {
+            log.debug("Error caught while running Log Replication Server");
+        }
+    }
+
+    public void startActiveLogReplicator(int waitInNegotiatingState) {
+        try {
+            if (runProcess) {
+                // Start Log Replication Server on Active Site
+                activeReplicationServer = runReplicationServerWaitInNegotiatingState(activeReplicationServerPort,
+                    pluginConfigFilePath, lockLeaseDuration, waitInNegotiatingState);
+            } else {
+                executorService.submit(() -> {
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
+                        "--wait-in-negotiating-state-ms=" + waitInNegotiatingState, "--address=localhost",
                         String.valueOf(standbyReplicationServerPort)});
                 });
             }
