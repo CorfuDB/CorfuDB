@@ -217,7 +217,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         if (parameters.isTlsEnabled()) {
             try {
-                log.info("constructSslContext from NettyClientRouter ");
+                log.info("NettyClientRouter: constructSslContext for corfu client");
                 sslContext = SslContextConstructor.constructSslContext(
                         false,
                         parameters.getKeyStoreConfig(),
