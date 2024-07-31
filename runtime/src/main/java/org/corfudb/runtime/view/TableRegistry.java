@@ -460,7 +460,7 @@ public class TableRegistry {
      * @param tableDescriptorsBuilder Builder instance.
      * @param rootFileDescriptor      File descriptor to be added.
      */
-    public static void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
+    public void insertAllDependingFileDescriptorProtos(TableDescriptors.Builder tableDescriptorsBuilder,
                                                               FileDescriptor rootFileDescriptor,
                                                               Map<ProtobufFileName, CorfuRecord<ProtobufFileDescriptor, TableMetadata>>
                                                                       allDescriptors) {
@@ -485,12 +485,12 @@ public class TableRegistry {
             // are not deterministically constructed. So we can tell if we are coming up after
             // a fresh upgrade, we conservatively record the git repo version in each proto file
             // and update it if this version were to be different.
-            long corfuCodeVersion = GitRepositoryState.getCorfuSourceCodeVersion();
+            long sourceCodeVersion = runtime.getParameters().getSourceCodeVersion();
             ProtobufFileName protoFileName = ProtobufFileName.newBuilder()
                     .setFileName(fileDescriptorProto.getName()).build();
             ProtobufFileDescriptor protoFd = ProtobufFileDescriptor.newBuilder()
                     .setFileDescriptor(fileDescriptorProto)
-                    .setVersion(corfuCodeVersion)
+                    .setVersion(sourceCodeVersion)
                     .build();
             // Add the actual descriptor into a common pool of descriptors to avoid duplication
             allDescriptors.putIfAbsent(protoFileName, new CorfuRecord<>(protoFd, null));
