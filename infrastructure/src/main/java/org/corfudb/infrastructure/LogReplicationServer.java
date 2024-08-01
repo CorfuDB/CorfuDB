@@ -7,6 +7,7 @@ import io.netty.channel.ChannelPipeline;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -20,6 +21,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
@@ -80,14 +82,19 @@ public class LogReplicationServer extends AbstractServer {
         this.localNodeId = localNodeId;
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
-        this.executor = context.getExecutorService(1, "LogReplicationServer-");
+        this.executor = context.getExecutorService(1, "LogReplicationServer-",
+                DefaultClusterConfig.getLogSenderBufferSize());
     }
 
     /* ************ Override Methods ************ */
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        try {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        } catch (RejectedExecutionException e) {
+            log.info("Server request queue at capacity, dropping message {}", req.getHeader().getRequestId());
+        }
     }
 
     @Override
