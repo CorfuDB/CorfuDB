@@ -59,6 +59,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
+                log.info("Received event On Connection Down");
                 String nodeIdDown = event.getNodeId();
                 // Update list of valid connections.
                 fsm.updateDisconnectedNodes(nodeIdDown);
@@ -66,9 +67,11 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
                 if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeIdDown)) {
                     leaderNodeId = Optional.empty();
+                    log.info("Transition to Remote Leader Verification");
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
                     // Router will attempt reconnection of non-leader endpoint
+                    log.info("Non-leader node is down");
                     return null;
                 }
             case ON_CONNECTION_UP:
