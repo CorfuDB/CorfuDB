@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -117,10 +118,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Enter :: negotiate");
 
+        // Note:  This is for testing only.  Currently used in tests to introduce a delay in the Negotiating State.
         if (tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime() != 0) {
             try {
-                //metadataManager.updateRuntimeState();
-                TimeUnit.SECONDS.sleep(tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime());
+                TimeUnit.MILLISECONDS.sleep(tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime());
             } catch (InterruptedException e) {
                 log.error("Interrupted Exception When Waiting in the Negotiating State", e);
             }

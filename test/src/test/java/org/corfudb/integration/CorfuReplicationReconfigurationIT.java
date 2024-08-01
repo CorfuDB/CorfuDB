@@ -228,6 +228,12 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         assertThat(remainingEntriesToSend).isEqualTo(0L);
     }
 
+    /**
+     * This test verifies that if the Standby leader stops or changes when Active is in the Negotiating state, the
+     * Active cluster performs leadership verification and connects/re-connects(if no leadership change) to the leader
+     * on Standby.  Once connected, sync between the clusters is successful.
+     * @throws Exception
+     */
     @Test
     public void testStandbyStopInNegotiatingState() throws Exception {
         String testStreamName = "Table001";
@@ -235,6 +241,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         setupActiveAndStandbyCorfu();
 
+        // Open tables
         Table<StringKey, IntValue, Metadata> mapActive = corfuStoreActive.openTable(
             NAMESPACE,
             testStreamName,
@@ -279,24 +286,28 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
         assertThat(mapActive.count()).isEqualTo(batchSize);
         assertThat(mapStandby.count()).isZero();
 
-        // Start LR on both sides.  Introduce a latency of 20 seconds in the apply phase on Standby
-        startActiveLogReplicator(20);
+        // Start LR on both sides.  Introduce a latency of 20 seconds when Active is in negotiating state
+        int waitInNegotiatingStateMs = 20000;
+        startActiveLogReplicator(waitInNegotiatingStateMs);
         startStandbyLogReplicator();
 
+        // Wait for 10 seconds for the Active to reach Negotiating State.
+        // Note: This wait time was empirically determined and may require to be changed if source code behavior
+        // changes in future.
         TimeUnit.SECONDS.sleep(10);
 
-        // Wait for a few seconds for the Active to reach negotiation state
-        //TimeUnit.SECONDS.sleep(5);
-
+        // Shutdown LR on the Standby for 5 seconds to cause a connection loss
         shutdownCorfuServer(standbyReplicationServer);
         TimeUnit.SECONDS.sleep(5);
 
-        // Subscribe listener to know when data is consistent on the sink
+        // Subscribe listener to know when data is consistent on the Standby.  This would indicate a successful sync
+        // on reconnection after Standby starts.
         CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
         DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
         corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
             LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
 
+        // Start LR on the Standby
         startStandbyLogReplicator();
 
         // Wait for successful sync
