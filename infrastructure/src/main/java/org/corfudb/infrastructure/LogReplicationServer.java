@@ -7,7 +7,6 @@ import io.netty.channel.ChannelPipeline;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -24,6 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -83,7 +83,7 @@ public class LogReplicationServer extends AbstractServer {
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
         this.executor = context.getExecutorService(1, "LogReplicationServer-",
-                DefaultClusterConfig.getLogSenderBufferSize());
+                DEFAULT_MAX_NUM_MSG_PER_BATCH);
     }
 
     /* ************ Override Methods ************ */

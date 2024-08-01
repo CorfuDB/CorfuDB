@@ -16,7 +16,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
-import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TimeoutResponse;
+import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TIMEOUT_RESPONSE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -111,25 +111,25 @@ public class SenderBufferManagerTest {
         // Initial attempt, back pressure not activated, and sleep time is at initial
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(INITIAL_SLEEP_TIME_MS, TimeoutResponse);
+        assertEquals(INITIAL_SLEEP_TIME_MS, TIMEOUT_RESPONSE);
 
         // Backpressure is activated, and sleep time set to max
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertTrue(bufferManager.isBackpressureActive());
         int MAX_SLEEP_TIME_MS = 30000;
-        assertEquals(MAX_SLEEP_TIME_MS, TimeoutResponse);
+        assertEquals(MAX_SLEEP_TIME_MS, TIMEOUT_RESPONSE);
 
         // Retry occurs with backpressure still at max
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(MAX_SLEEP_TIME_MS, TimeoutResponse);
+        assertEquals(MAX_SLEEP_TIME_MS, TIMEOUT_RESPONSE);
 
         // Backpressure is reset, and sleep time is at initial wait
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertFalse(bufferManager.isBackpressureActive());
-        assertEquals(INITIAL_SLEEP_TIME_MS, TimeoutResponse);
+        assertEquals(INITIAL_SLEEP_TIME_MS, TIMEOUT_RESPONSE);
     }
 
     /**

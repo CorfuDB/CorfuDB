@@ -3,12 +3,14 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
@@ -28,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TimeoutResponse;
+import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TIMEOUT_RESPONSE;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideMetadata;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideSyncSeqNum;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideTopologyConfigId;
@@ -119,6 +121,13 @@ public abstract class SenderBufferManager {
     @Setter
     Map<Long, CompletableFuture<LogReplicationEntryMsg>> pendingCompletableFutureForAcks;
 
+    // Fields for metrics
+    private Optional<Counter> backpressureActivationCounter;
+    private Optional<Counter> backpressureDeactivationCounter;
+    private Optional<SenderBufferManager> backpressureActiveGauge;
+    private Optional<Timer> backpressureActiveDurationTimer;
+    private Timer.Sample backpressureActivationTime;
+
     /**
      * Constructor
      * @param dataSender
@@ -130,12 +139,22 @@ public abstract class SenderBufferManager {
         timeoutTimer = DefaultClusterConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultClusterConfig.isLogSenderTimeout();
         maxLogEntryWait = DefaultClusterConfig.getLogSenderWaitPeriod();
-        initialLogEntryWait = TimeoutResponse != 0 ? TimeoutResponse : DefaultClusterConfig.getLogSenderTimeoutTimer();
+        initialLogEntryWait = TIMEOUT_RESPONSE != 0 ? TIMEOUT_RESPONSE : DefaultClusterConfig.getLogSenderTimeoutTimer();
 
         readConfig();
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
         pendingCompletableFutureForAcks = new HashMap<>();
         this.dataSender = dataSender;
+
+        initMetrics();
+    }
+
+    private void initMetrics() {
+        backpressureActivationCounter = MicroMeterUtils.counter("logReplication.backpressure.activations");
+        backpressureDeactivationCounter = MicroMeterUtils.counter("logReplication.backpressure.deactivation");
+        backpressureActiveGauge = MicroMeterUtils.gauge("logReplication.backpressure.active", this,
+                sbm -> sbm.isBackpressureActive() ? 1 : 0);
+        backpressureActiveDurationTimer = MicroMeterUtils.createOrGetTimer("logReplication.backpressure.activeDuration");
     }
 
     public SenderBufferManager(DataSender dataSender, Optional<AtomicLong> counter) {
@@ -294,15 +313,22 @@ public abstract class SenderBufferManager {
         if (!isBackpressureActive) {
             log.info("Log entry ACKs timing out on sink, allocating additional time for retries.");
             isBackpressureActive = true;
-            TimeoutResponse = maxLogEntryWait;
+            TIMEOUT_RESPONSE = maxLogEntryWait;
+            backpressureActivationTime = Timer.start();
         }
+        backpressureActivationCounter.ifPresent(Counter::increment);
     }
 
     public void deactivateBackpressure() {
         if (isBackpressureActive) {
             log.info("Resetting log entry ACK timeout time.");
             isBackpressureActive = false;
-            TimeoutResponse = initialLogEntryWait;
+            TIMEOUT_RESPONSE = initialLogEntryWait;
+            backpressureDeactivationCounter.ifPresent(Counter::increment);
+            if (backpressureActivationTime != null) {
+                backpressureActiveDurationTimer.ifPresent(x -> backpressureActivationTime.stop(x));
+                backpressureActivationTime = null;
+            }
         }
     }
 

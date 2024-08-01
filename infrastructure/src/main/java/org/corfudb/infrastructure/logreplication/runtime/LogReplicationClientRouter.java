@@ -56,7 +56,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     /**
      * Sync call connection timeout (milliseconds).
      */
-    public static long TimeoutResponse;
+    public volatile static long TIMEOUT_RESPONSE;
 
     @Getter
     private final LogReplicationRuntimeParameters parameters;
@@ -134,7 +134,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
-        TimeoutResponse = parameters.getRequestTimeout().toMillis();
+        TIMEOUT_RESPONSE = parameters.getRequestTimeout().toMillis();
         this.timeoutConnect = parameters.getConnectionTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
 
@@ -245,7 +245,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
             final CompletableFuture<T> cfTimeout =
-                    CFUtils.within(cf, Duration.ofMillis(TimeoutResponse));
+                    CFUtils.within(cf, Duration.ofMillis(TIMEOUT_RESPONSE));
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
@@ -366,13 +366,11 @@ public class LogReplicationClientRouter implements IClientRouter {
     public void setTimeoutRetry(long timeoutRetry) {
     }
 
-    @Override
     public void setTimeoutResponse(long timeoutResponse) {
-        TimeoutResponse = timeoutResponse;
+        TIMEOUT_RESPONSE = timeoutResponse;
     }
 
-    @Override
-    public long getTimeoutResponse() { return TimeoutResponse; }
+    public long getTimeoutResponse() { return TIMEOUT_RESPONSE; }
 
 
     // ---------------------------------------------------------------------------
