@@ -1,7 +1,10 @@
 package org.corfudb.infrastructure.logreplication;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.send.SenderBufferManager;
+import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.junit.Before;
@@ -9,29 +12,40 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
+import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TimeoutResponse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 public class SenderBufferManagerTest {
     @Mock
     private DataSender mockDataSender;
 
+    @Mock
+    private CorfuLogReplicationRuntime mockRuntime;
+
+    @Mock
+    private LogReplicationRuntimeParameters mockParams;
+
     private TestSenderBufferManager bufferManager;
 
-    private final int INITIAL_SLEEP_TIME_MS =  DefaultClusterConfig.getLogSenderWaitPeriod() / 2;
-    private final int SLEEP_TIME_INCREMENT_MS = DefaultClusterConfig.getLogSenderWaitPeriod() / 4;
+    private final Duration INITIAL_SLEEP_TIME_DURATION = Duration.ofSeconds(5);
 
     @Before
     public void setUp() {
         MockitoAnnotations.openMocks(this);
+        doReturn(new ClusterDescriptor("123")).when(mockParams).getRemoteClusterDescriptor();
+        doReturn(INITIAL_SLEEP_TIME_DURATION).when(mockParams).getRequestTimeout();
         bufferManager = new TestSenderBufferManager(mockDataSender);
+        LogReplicationClientRouter clientRouter = new LogReplicationClientRouter(mockParams, mockRuntime);
     }
 
     /*
@@ -82,6 +96,7 @@ public class SenderBufferManagerTest {
      */
     @Test
     public void testSenderBackpressureWaitIncrease() {
+        int INITIAL_SLEEP_TIME_MS = 5000;
         LogReplicationEntryMetadataMsg testMsgMetadata = LogReplicationEntryMetadataMsg.newBuilder()
                 .setTimestamp(1L).build();
         LogReplicationEntryMsg testMsg = LogReplicationEntryMsg.newBuilder()
@@ -96,26 +111,25 @@ public class SenderBufferManagerTest {
         // Initial attempt, back pressure not activated, and sleep time is at initial
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+        assertEquals(INITIAL_SLEEP_TIME_MS, TimeoutResponse);
 
-        // Backpressure is activated, and sleep time is at initial
+        // Backpressure is activated, and sleep time set to max
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertTrue(bufferManager.isBackpressureActive());
-        assertEquals(INITIAL_SLEEP_TIME_MS,
-                bufferManager.getBackoffRetry().getCurrentSleepTime());
+        int MAX_SLEEP_TIME_MS = 30000;
+        assertEquals(MAX_SLEEP_TIME_MS, TimeoutResponse);
 
-        // Backpressure is increased, and sleep time is at initial + increment
+        // Retry occurs with backpressure still at max
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
-        assertEquals(INITIAL_SLEEP_TIME_MS + SLEEP_TIME_INCREMENT_MS,
-                bufferManager.getBackoffRetry().getCurrentSleepTime());
+        assertEquals(MAX_SLEEP_TIME_MS, TimeoutResponse);
 
         // Backpressure is reset, and sleep time is at initial wait
         bufferManager.resend(true);
         bufferManager.sendWithBuffering(testMsg);
         assertFalse(bufferManager.isBackpressureActive());
-        assertEquals(INITIAL_SLEEP_TIME_MS, bufferManager.getBackoffRetry().getCurrentSleepTime());
+        assertEquals(INITIAL_SLEEP_TIME_MS, TimeoutResponse);
     }
 
     /**

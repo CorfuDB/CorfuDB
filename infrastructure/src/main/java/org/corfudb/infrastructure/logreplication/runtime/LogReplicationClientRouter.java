@@ -53,6 +53,11 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
+    /**
+     * Sync call connection timeout (milliseconds).
+     */
+    public static long TimeoutResponse;
+
     @Getter
     private final LogReplicationRuntimeParameters parameters;
 
@@ -85,13 +90,6 @@ public class LogReplicationClientRouter implements IClientRouter {
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
     public AtomicLong requestID;
-
-    /**
-     * Sync call response timeout (milliseconds).
-     */
-    @Getter
-    @Setter
-    public long timeoutResponse;
 
     /**
      * Sync call connection timeout (milliseconds).
@@ -136,7 +134,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
-        this.timeoutResponse = parameters.getRequestTimeout().toMillis();
+        TimeoutResponse = parameters.getRequestTimeout().toMillis();
         this.timeoutConnect = parameters.getConnectionTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
 
@@ -247,7 +245,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
             final CompletableFuture<T> cfTimeout =
-                    CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+                    CFUtils.within(cf, Duration.ofMillis(TimeoutResponse));
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
@@ -370,8 +368,11 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     @Override
     public void setTimeoutResponse(long timeoutResponse) {
-        this.timeoutResponse = timeoutResponse;
+        TimeoutResponse = timeoutResponse;
     }
+
+    @Override
+    public long getTimeoutResponse() { return TimeoutResponse; }
 
 
     // ---------------------------------------------------------------------------
