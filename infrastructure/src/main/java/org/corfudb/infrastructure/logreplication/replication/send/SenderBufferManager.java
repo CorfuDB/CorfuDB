@@ -30,7 +30,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter.TIMEOUT_RESPONSE;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideMetadata;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideSyncSeqNum;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideTopologyConfigId;
@@ -60,12 +59,6 @@ public abstract class SenderBufferManager {
      * The max number of retry for a message
      */
     private int maxRetry;
-
-    /*
-     * The initial wait period to receive ack sent log entry message, in milliseconds.
-     */
-    @Getter
-    private final long initialLogEntryWait;
 
     /*
      * The max wait period waiting for ack for sent log entry message, in milliseconds.
@@ -139,7 +132,6 @@ public abstract class SenderBufferManager {
         timeoutTimer = DefaultClusterConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultClusterConfig.isLogSenderTimeout();
         maxLogEntryWait = DefaultClusterConfig.getLogSenderWaitPeriod();
-        initialLogEntryWait = TIMEOUT_RESPONSE != 0 ? TIMEOUT_RESPONSE : DefaultClusterConfig.getLogSenderTimeoutTimer();
 
         readConfig();
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
@@ -296,8 +288,9 @@ public abstract class SenderBufferManager {
                 LogReplicationEntryMsg dataEntry = entry.getData();
                 LogReplicationEntryMetadataMsg metadata = overrideTopologyConfigId(
                         dataEntry.getMetadata(), topologyConfigId);
-                CompletableFuture<LogReplicationEntryMsg> cf = dataSender
-                        .send(overrideMetadata(entry.getData(), metadata));
+                CompletableFuture<LogReplicationEntryMsg> cf = (isLogEntry && isBackpressureActive) ?
+                        dataSender.sendWithTimeout(overrideMetadata(entry.getData(), metadata), maxLogEntryWait) :
+                        dataSender.send(overrideMetadata(entry.getData(), metadata));
                 addCFToAcked(entry.getData(), cf);
                 log.debug("Resend message {}[ts={}, snapshotSyncNum={}]",
                         entry.getData().getMetadata().getEntryType(),
@@ -311,9 +304,8 @@ public abstract class SenderBufferManager {
 
     private void activateBackpressure() {
         if (!isBackpressureActive) {
-            log.info("Log entry ACKs timing out on sink, allocating additional time for retries.");
+            log.info("Log entry ACKs timing out on sink, allocating additional time for ACKs on resend.");
             isBackpressureActive = true;
-            TIMEOUT_RESPONSE = maxLogEntryWait;
             backpressureActivationTime = Timer.start();
         }
         backpressureActivationCounter.ifPresent(Counter::increment);
@@ -323,7 +315,6 @@ public abstract class SenderBufferManager {
         if (isBackpressureActive) {
             log.info("Resetting log entry ACK timeout time.");
             isBackpressureActive = false;
-            TIMEOUT_RESPONSE = initialLogEntryWait;
             backpressureDeactivationCounter.ifPresent(Counter::increment);
             if (backpressureActivationTime != null) {
                 backpressureActiveDurationTimer.ifPresent(x -> backpressureActivationTime.stop(x));

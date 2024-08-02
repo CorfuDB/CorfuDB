@@ -27,6 +27,13 @@ public class CorfuDataSender implements DataSender {
     }
 
     @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithTimeout(LogReplicationEntryMsg message, long timeoutResponse) {
+        log.trace("Send single log entry for request {} with overridden timeout of {}ms",
+                TextFormat.shortDebugString(message.getMetadata()), timeoutResponse);
+        return client.sendLogEntry(message, timeoutResponse);
+    }
+
+    @Override
     public CompletableFuture<LogReplicationEntryMsg> send(List<LogReplicationEntryMsg> messages) {
         log.trace("Send multiple log entries [{}] for request {}", messages.size(), messages.get(0).getMetadata().getSyncRequestId());
         CompletableFuture<LogReplicationEntryMsg> lastSentMessage = new CompletableFuture<>();

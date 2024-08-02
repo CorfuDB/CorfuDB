@@ -53,11 +53,6 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
-    /**
-     * Sync call connection timeout (milliseconds).
-     */
-    public volatile static long TIMEOUT_RESPONSE;
-
     @Getter
     private final LogReplicationRuntimeParameters parameters;
 
@@ -90,6 +85,13 @@ public class LogReplicationClientRouter implements IClientRouter {
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
     public AtomicLong requestID;
+
+    /**
+     * Sync call response timeout (milliseconds).
+     */
+    @Getter
+    @Setter
+    public long timeoutResponse;
 
     /**
      * Sync call connection timeout (milliseconds).
@@ -134,7 +136,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
-        TIMEOUT_RESPONSE = parameters.getRequestTimeout().toMillis();
+        this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.timeoutConnect = parameters.getConnectionTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
 
@@ -179,6 +181,22 @@ public class LogReplicationClientRouter implements IClientRouter {
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull RequestPayloadMsg payload,
             @Nonnull String nodeId) {
+        return sendRequestAndGetCompletable(payload, nodeId, timeoutResponse);
+    }
+
+    /**
+     * Send a request message and get a completable future to be fulfilled by the reply within
+     * supplied timeout response time.
+     *
+     * @param payload
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response within the allotted time.
+     */
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            @Nonnull RequestPayloadMsg payload,
+            @Nonnull String nodeId,
+            long timeoutResponse) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
                 .setVersion(getDefaultProtocolVersionMsg())
@@ -245,7 +263,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
             final CompletableFuture<T> cfTimeout =
-                    CFUtils.within(cf, Duration.ofMillis(TIMEOUT_RESPONSE));
+                    CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
             cfTimeout.exceptionally(e -> {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
@@ -366,11 +384,10 @@ public class LogReplicationClientRouter implements IClientRouter {
     public void setTimeoutRetry(long timeoutRetry) {
     }
 
+    @Override
     public void setTimeoutResponse(long timeoutResponse) {
-        TIMEOUT_RESPONSE = timeoutResponse;
+        this.timeoutResponse = timeoutResponse;
     }
-
-    public long getTimeoutResponse() { return TIMEOUT_RESPONSE; }
 
 
     // ---------------------------------------------------------------------------

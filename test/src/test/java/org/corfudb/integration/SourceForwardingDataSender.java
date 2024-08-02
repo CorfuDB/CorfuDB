@@ -188,6 +188,14 @@ public class SourceForwardingDataSender implements DataSender {
         return cf;
     }
 
+    /* For testing, utilizes same behavior as send() implementation with no timeout added.
+     *
+     */
+    @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithTimeout(LogReplicationEntryMsg message, long timeoutResponse) {
+        return send(message);
+    }
+
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(List<LogReplicationEntryMsg> messages) {
         CompletableFuture<LogReplicationEntryMsg> lastAckMessage = null;

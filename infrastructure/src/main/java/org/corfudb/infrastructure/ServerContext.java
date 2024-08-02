@@ -40,10 +40,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.ThreadPoolExecutor.AbortPolicy;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -244,34 +241,6 @@ public class ServerContext implements AutoCloseable {
      */
     public ExecutorService getExecutorService(int threadCount, @Nonnull ThreadFactory threadFactory) {
         return Executors.newFixedThreadPool(threadCount, threadFactory);
-    }
-
-    /**
-     * Get a bounded ExecutorService that can be used by the servers to
-     * process RPCs. Uses a ServerThreadFactory as the underlying
-     * thread factory.
-     * @param threadCount   The number of threads to use in the pool
-     * @param threadPrefix  The naming prefix
-     * @param queueCapacity  Max capacity of underlying linked blocking queue
-     * @return The newly created ExecutorService
-     */
-    public ExecutorService getExecutorService(int threadCount, String threadPrefix, int queueCapacity) {
-        return getBoundedExecutorService(threadCount,
-                new ServerThreadFactory(threadPrefix, new ServerThreadFactory.ExceptionHandler()),
-                queueCapacity);
-    }
-
-    /**
-     * Get a bounded ExecutorService that can be used by the servers to
-     * process RPCs.
-     * @param threadCount    The number of threads to use in the pool
-     * @param threadFactory  The underlying thread factory
-     * @param queueCapacity  Max capacity of underlying linked blocking queue
-     * @return The newly created ExecutorService
-     */
-    public ExecutorService getBoundedExecutorService(int threadCount, @Nonnull ThreadFactory threadFactory, int queueCapacity) {
-        return new ThreadPoolExecutor(threadCount, threadCount, 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(queueCapacity), threadFactory, new AbortPolicy());
     }
 
     /**

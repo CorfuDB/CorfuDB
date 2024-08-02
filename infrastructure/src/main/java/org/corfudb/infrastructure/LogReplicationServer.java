@@ -20,10 +20,9 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipResponse;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -47,6 +46,10 @@ public class LogReplicationServer extends AbstractServer {
     // node id should be the only identifier for a node in the topology
     private String localNodeId;
 
+    /* Size bounding LRs client RPC queue, set to be at least that of the sender buffer window
+     * with some padding.
+     */
+    private static final int MAX_EXECUTOR_QUEUE_SIZE = 10;
     private final ExecutorService executor;
 
     @Getter
@@ -82,18 +85,18 @@ public class LogReplicationServer extends AbstractServer {
         this.localNodeId = localNodeId;
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
-        this.executor = context.getExecutorService(1, "LogReplicationServer-",
-                DEFAULT_MAX_NUM_MSG_PER_BATCH);
+        this.executor = context.getExecutorService(1, "LogReplicationServer-");
     }
 
     /* ************ Override Methods ************ */
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        try {
+        if (((ThreadPoolExecutor)executor).getQueue().size() < MAX_EXECUTOR_QUEUE_SIZE) {
             executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
-        } catch (RejectedExecutionException e) {
-            log.info("Server request queue at capacity, dropping message {}", req.getHeader().getRequestId());
+        } else {
+            log.info("Server request queue at capacity ({}), dropping message {}",
+                    MAX_EXECUTOR_QUEUE_SIZE, req.getHeader().getRequestId());
         }
     }
 

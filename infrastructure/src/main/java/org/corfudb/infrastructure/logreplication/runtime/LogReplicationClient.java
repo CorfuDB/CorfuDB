@@ -57,6 +57,16 @@ public class LogReplicationClient extends AbstractClient {
         return getRouter().sendRequestAndGetCompletable(payload, REMOTE_LEADER);
     }
 
+    public CompletableFuture<LogReplicationEntryMsg> sendLogEntry(
+            LogReplicationEntryMsg logReplicationEntry, long timeoutResponse) {
+        CorfuMessage.RequestPayloadMsg payload =
+                CorfuMessage.RequestPayloadMsg.newBuilder()
+                        .setLrEntry(logReplicationEntry)
+                        .build();
+        return ((LogReplicationClientRouter)getRouter()).sendRequestAndGetCompletable(payload,
+                REMOTE_LEADER, timeoutResponse);
+    }
+
     @Override
     public void setRouter(IClientRouter router) {
         this.router = router;

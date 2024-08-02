@@ -17,6 +17,9 @@ public class EmptyDataSender implements DataSender {
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) { return new CompletableFuture<>(); }
 
     @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithTimeout(LogReplicationEntryMsg message, long timeoutResponse) { return new CompletableFuture<>(); }
+
+    @Override
     public CompletableFuture<LogReplicationEntryMsg> send(List<LogReplicationEntryMsg> messages) { return new CompletableFuture<>(); }
 
     @Override

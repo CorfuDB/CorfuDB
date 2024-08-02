@@ -58,6 +58,9 @@ public final class DefaultClusterConfig {
     @Getter
     private static final int logSenderRetryCount = 5;
 
+    /* Default wait period used to allow more time for client to process log entry RPCs upon
+     * receiving a timeout on a prior send of the same batch.
+     */
     @Getter
     private static final int logSenderWaitPeriod = 30000;
 
