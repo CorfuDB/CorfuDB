@@ -62,7 +62,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // Update list of valid connections.
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
-                // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
+                // If the leader is the node that become unavailable, clear the leader info in the FSM, verify new
+                // leader and attempt to reconnect.
                 if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
                     fsm.resetRemoteLeaderNodeId();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
