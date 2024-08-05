@@ -1163,7 +1163,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 UuidMsg.class,
                 null,
                 null,
-                TableOptions.builder().build())).isExactlyInstanceOf(IllegalArgumentException.class);
+                TableOptions.builder().build())).isExactlyInstanceOf(NullPointerException.class);
 
         assertThatThrownBy(() -> shimStore.openTable(
                 someNamespace,
@@ -1171,7 +1171,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 null,
                 ManagedMetadata.class,
                 null,
-                TableOptions.builder().build())).isExactlyInstanceOf(IllegalArgumentException.class);
+                TableOptions.builder().build())).isExactlyInstanceOf(NullPointerException.class);
     }
 
     /**
@@ -1694,7 +1694,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .setDataPath(dataPath)
                 .build();
 
-        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> table = shimStore.openTable(
+        var table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -1773,13 +1773,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             shimStore.freeTableData(someNamespace, tableName);
         }
 
-        final Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> newTable = shimStore.openTable(
+        var newTable = shimStore.openTable(
                 someNamespace,
                 tableName,
                 SampleSchema.Uuid.class,
                 SampleSchema.SampleTableAMsg.class,
                 ManagedResources.class,
-                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+                TableOptions.builder().persistenceOptions(persistenceOptions).build()
+        );
 
         try (ManagedTxnContext txnContext = shimStore.tx(someNamespace)) {
             assertThat(txnContext.count(table)).isEqualTo(numEntries/2);

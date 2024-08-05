@@ -1,11 +1,15 @@
 package org.corfudb.util.serializer;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.exceptions.SerializerException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 
 /**
@@ -16,21 +20,13 @@ import java.util.Map;
 public class Serializers {
 
     public static final int SYSTEM_SERIALIZERS_COUNT = 10;
-    public static final ISerializer CORFU = new CorfuSerializer((byte) 0);
-    public static final ISerializer JAVA = new JavaSerializer((byte) 1);
-    public static final ISerializer JSON = new JsonSerializer((byte) 2);
-    public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
-    public static final ISerializer QUEUE_SERIALIZER = new CorfuQueueSerializer((byte) 4);
+    public static final CorfuSerializer CORFU = new CorfuSerializer();
+    public static final JavaSerializer JAVA = new JavaSerializer();
+    public static final JsonSerializer JSON = new JsonSerializer();
+    public static final PrimitiveSerializer PRIMITIVE = new PrimitiveSerializer();
+    public static final CorfuQueueSerializer QUEUE_SERIALIZER = new CorfuQueueSerializer();
 
-
-    /**
-     * @return the recommended default serializer used for converting objects into write format.
-     */
-    public static final ISerializer getDefaultSerializer() {
-        return Serializers.JSON;
-    }
-
-    private static final Map<Byte, ISerializer> serializersMap;
+    public static final Map<Byte, ISerializer> serializersMap;
 
     static {
         serializersMap = new HashMap<>();
@@ -41,7 +37,40 @@ public class Serializers {
         serializersMap.put(QUEUE_SERIALIZER.getType(), QUEUE_SERIALIZER);
     }
 
-    private final Map<Byte, ISerializer> customSerializers = new HashMap<>();
+    private final ConcurrentMap<Byte, ISerializer> customSerializers = new ConcurrentHashMap<>();
+
+    /**
+     * @return the recommended default serializer used for converting objects into write format.
+     */
+    public static ISerializer getDefaultSerializer() {
+        return Serializers.JSON;
+    }
+
+    public <T extends ISerializer> T getSerializer(Byte type, Class<T> serializerType) {
+        ISerializer serializer = getSerializer(type);
+        if (serializerType.isInstance(serializer)) {
+            return serializerType.cast(serializer);
+        } else {
+            throw new IllegalArgumentException("The serializer cannot be cast to " + serializerType.getName());
+        }
+    }
+
+    public ProtobufSerializer getProtobufSerializer() {
+        ProtobufSerializer protoSerializer;
+        try {
+            // If protobuf serializer is already registered, reference static/global class map so schemas
+            // are shared across all runtime's and not overwritten (if multiple runtime's exist).
+            // This aims to overcome a current design limitation where the serializers are static and not
+            // per runtime (to be changed).
+            protoSerializer = ClassUtils.cast(getSerializer(SerializerType.PROTOBUF.toByte()));
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet.
+            protoSerializer = new ProtobufSerializer();
+            registerSerializer(protoSerializer);
+        }
+
+        return protoSerializer;
+    }
 
     /**
      * Return the serializer byte.
@@ -68,8 +97,7 @@ public class Serializers {
         if (serializer.getType() > SYSTEM_SERIALIZERS_COUNT) {
             customSerializers.put(serializer.getType(), serializer);
         } else {
-            String msg = String.format("Serializer id must be greater than {}",
-                    SYSTEM_SERIALIZERS_COUNT);
+            String msg = String.format("Serializer id must be greater than %s", SYSTEM_SERIALIZERS_COUNT);
             throw new RuntimeException(msg);
         }
         // clear MVOCache
@@ -85,5 +113,22 @@ public class Serializers {
     @VisibleForTesting
     public synchronized void removeSerializer(ISerializer serializer) {
         customSerializers.remove(serializer.getType());
+    }
+
+    @AllArgsConstructor
+    public enum SerializerType {
+        CORFU((byte)0),
+        JAVA((byte) 1),
+        JSON((byte) 2),
+        PRIMITIVE((byte) 3),
+        QUEUE((byte) 4),
+        PROTOBUF((byte) 25),
+        CHECKPOINT((byte) 20);
+
+        private final byte serializerType;
+
+        public byte toByte() {
+            return serializerType;
+        }
     }
 }

@@ -24,6 +24,7 @@ import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -95,7 +96,7 @@ public class StreamingTask<K extends Message, V extends Message, M extends Messa
         this.tableSchemas = tablesOfInterest
                 .stream()
                 .collect(Collectors.toMap(
-                        tName -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(namespace, tName)),
+                        tName -> FullyQualifiedTableName.streamId(namespace, tName).getId(),
                         tName -> {
                             // Subscription on special tables(ProtobufDescriptor and Registry tables) is not possible
                             // with the regular workflow as they are not opened using CorfuStore.openTable().

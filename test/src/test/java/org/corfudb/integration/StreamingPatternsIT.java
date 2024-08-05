@@ -19,6 +19,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
@@ -303,7 +304,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTable(runtime, FullyQualifiedTableName.build(namespace, tableName).toFqdn());
 
             mcw.addMap(corfuTable);
         });
@@ -442,7 +443,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTable(runtime, FullyQualifiedTableName.build(namespace, tableName).toFqdn());
 
             mcw.addMap(corfuTable);
         });
@@ -520,7 +521,7 @@ public class StreamingPatternsIT extends AbstractIT {
         List<String> tablesToCheckpoint = Arrays.asList(defaultTableName);
         tablesToCheckpoint.forEach(tableName -> {
             PersistentCorfuTable<Uuid, CorfuRecord<EventInfo, ManagedResources>> corfuTable =
-                    createCorfuTable(runtime, TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+                    createCorfuTable(runtime, FullyQualifiedTableName.build(namespace, tableName).toFqdn());
 
             mcw.addMap(corfuTable);
         });

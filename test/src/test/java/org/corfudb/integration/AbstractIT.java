@@ -17,6 +17,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.ISerializer;
 import org.junit.After;
 import org.junit.Before;
@@ -509,9 +510,8 @@ public class AbstractIT extends AbstractCorfuTest {
                 .open();
     }
 
-    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(@NonNull CorfuRuntime rt,
-                                                                     @NonNull String streamName,
-                                                                     @NonNull ISerializer serializer) {
+    public static <K, V> PersistentCorfuTable<K, V> createCorfuTable(
+            @NonNull CorfuRuntime rt, @NonNull String streamName, @NonNull ISerializer serializer) {
         // Serializer should be registered with the runtime separately
         return rt.getObjectsView()
                 .build()
@@ -526,10 +526,8 @@ public class AbstractIT extends AbstractCorfuTest {
 
         MultiCheckpointWriter<PersistentCorfuTable<?, ?>> mcw = new MultiCheckpointWriter<>();
         tablesToCheckpoint.forEach(tableName -> {
-            String fqTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
-            mcw.addMap(
-                    createCorfuTable(runtime, fqTableName)
-            );
+            String fqTableName = FullyQualifiedTableName.build(namespace, tableName).toFqdn();
+            mcw.addMap(createCorfuTable(runtime, fqTableName));
         });
 
         CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));

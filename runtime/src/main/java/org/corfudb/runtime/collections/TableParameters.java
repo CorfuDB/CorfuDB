@@ -19,7 +19,7 @@ import org.corfudb.runtime.CorfuOptions.SchemaOptions;
  * @param <M> - Default instance type of the protobuf generated metadata schema
  */
 @Builder(access = AccessLevel.PUBLIC)
-public class TableParameters<K extends Message, V extends Message, M extends Message>{
+public class TableParameters<K extends Message, V extends Message, M extends Message> {
 
     // Namespace of the table
     @NonNull

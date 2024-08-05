@@ -59,4 +59,4 @@ jobs:
 
       - name: Publish corfu artifacts
         working-directory: ./
-        run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -T 1C
+        run: ./mvnw clean deploy -s ./.mvn/settings.xml -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip -Dorg.slf4j.simpleLogger.defaultLogLevel=error -T 1C

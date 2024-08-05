@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -66,7 +67,7 @@ public abstract class SinkWriter {
             CorfuRecord<TableDescriptors, TableMetadata> record =
                     (CorfuRecord<TableDescriptors, TableMetadata>) protobufSerializer.deserialize(valueBuf, null);
 
-            UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+            UUID streamId = FullyQualifiedTableName.streamId(tableName).getId();
             if (ignoreEntryForRegistryTable(streamId, record)) {
                 log.info("Ignoring registry table's record for {}", tableName);
             } else {

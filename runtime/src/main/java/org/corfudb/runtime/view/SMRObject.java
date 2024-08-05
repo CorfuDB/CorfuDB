@@ -2,28 +2,46 @@ package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
+import lombok.Builder.Default;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Singular;
+import lombok.ToString;
+import lombok.With;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.DiskBackedCorfuTable;
+import org.corfudb.runtime.collections.ImmutableCorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
+import org.corfudb.runtime.object.CorfuCompileWrapperBuilder.CorfuTableType;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.SnapshotGenerator;
+import org.corfudb.runtime.view.ObjectsView.ObjectID;
+import org.corfudb.runtime.view.SMRObject.SmrObjectConfig.SmrObjectConfigBuilder;
+import org.corfudb.runtime.view.SMRObject.SmrTableConfig.SmrTableConfigBuilder;
+import org.corfudb.runtime.view.StreamsView.StreamId;
+import org.corfudb.runtime.view.StreamsView.StreamName;
+import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  *
  * This class provides a builder that takes an SMR object definition with some options, wraps it with
- * a proxy and returns a object reference consumable through the ObjectsView (i.e. becomes replicated and
+ * a proxy and returns an object reference consumable through the ObjectsView (i.e. becomes replicated and
  * transactional)
- *
- * Created by mwei on 4/6/16.
  */
 @Slf4j
 @Getter
@@ -34,150 +52,218 @@ public class SMRObject<T extends ICorfuSMR<?>> {
     private final CorfuRuntime runtime;
 
     @NonNull
-    private final Class<T> type;
+    private final SmrObjectConfig<T> smrConfig;
 
-    @NonNull
-    @SuppressWarnings("checkstyle:abbreviation")
-    private final UUID streamID;
+    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
+        return new Builder<>();
+    }
 
-    private final String streamName;
+    public static <T extends ICorfuSMR<?>> T open(CorfuRuntime rt, SmrObjectConfig<T> smrConfig) {
+        return new SMRObject<>(rt, smrConfig).open();
+    }
 
-    @NonNull
-    private final ISerializer serializer;
+    private T open() {
+        String msg = "ObjectBuilder: open Corfu stream {} id {}";
 
-    @NonNull
-    private ObjectOpenOption openOption;
+        StreamName streamName = smrConfig.tableConfig.streamName;
+        log.info(CorfuRuntime.LOG_NOT_IMPORTANT, msg, streamName.getName(), streamName.getId().getId());
 
-    @NonNull
-    private final Object[] arguments;
+        var oid = smrConfig.getObjectId();
 
-    @NonNull
-    private final Set<UUID> streamTags;
+        if (smrConfig.isCacheDisabled()) {
+            return getWrapper();
+        }
+
+        Function<ObjectID, T> tableFactory = x -> {
+            // Get object serializer to check if we didn't attempt to set another serializer
+            // to an already existing map
+            final T result = getWrapper();
+            ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
+            if (smrConfig.getSerializer() != objectSerializer) {
+                log.warn("open: Attempt to open an existing object with a different serializer {}. " +
+                                "Object {} opened with original serializer {}.",
+                        smrConfig.getSerializer().getClass().getSimpleName(),
+                        oid,
+                        objectSerializer.getClass().getSimpleName()
+                );
+            }
+            log.info("Added SMRObject {} to objectCache", oid);
+            return result;
+        };
+
+        ICorfuSMR<?> obj = getRuntime()
+                .getObjectsView()
+                .getObjectCache()
+                .computeIfAbsent(oid, tableFactory);
+
+        return ClassUtils.cast(obj);
+    }
+
+    private T getWrapper() {
+        try {
+            return new CorfuCompileWrapperBuilder<T>()
+                    .getWrapper(this);
+        } catch (Exception ex) {
+            var errMsg = "Runtime instrumentation no longer supported and no compiled class found for {}";
+            log.error(errMsg, smrConfig.type, ex);
+            throw new UnrecoverableCorfuError(ex);
+        }
+    }
 
     public static class Builder<T extends ICorfuSMR<?>> {
 
-        private String streamName;
-        private ISerializer serializer = Serializers.getDefaultSerializer();
-        private Object[] arguments = new Object[0];
-        private ObjectOpenOption openOption = ObjectOpenOption.CACHE;
+        private final SmrObjectConfigBuilder<T> configBuilder;
+        private final SmrTableConfigBuilder tableConfigBuilder;
+
         private CorfuRuntime corfuRuntime;
 
-        @Getter
-        private Class<T> type;
-        @Getter
-        public UUID streamID;
-        @Getter
-        private Set<UUID> streamTags = new HashSet<>();
-
-        private void verify() {
-            if (this.streamName != null && !UUID.nameUUIDFromBytes(streamName.getBytes()).equals(streamID)) {
-                throw new IllegalArgumentException("Stream id must be derived from stream name");
-            }
+        public Builder() {
+            configBuilder = SmrObjectConfig.builder();
+            tableConfigBuilder = SmrTableConfig.builder();
         }
-        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setCorfuRuntime(CorfuRuntime corfuRuntime) {
+
+        public Builder(CorfuRuntime corfuRuntime) {
+            this(corfuRuntime, SmrObjectConfig.builder(), SmrTableConfig.builder());
+        }
+
+        public Builder(CorfuRuntime corfuRuntime, SmrObjectConfigBuilder<T> configBuilder, SmrTableConfigBuilder tableConfigBuilder) {
+            this.configBuilder = configBuilder;
+            this.tableConfigBuilder = tableConfigBuilder;
             this.corfuRuntime = corfuRuntime;
-            return (SMRObject.Builder<R>) this;
         }
 
-        @SuppressWarnings("unchecked")
-        public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setType(Class<R> type) {
-            this.type = (Class<T>) type;
-            return (SMRObject.Builder<R>) this;
+        public SMRObject.Builder<T> setCorfuRuntime(CorfuRuntime corfuRuntime) {
+            this.corfuRuntime = corfuRuntime;
+            return this;
         }
 
         @SuppressWarnings("unchecked")
         public <R extends ICorfuSMR<?>> SMRObject.Builder<R> setTypeToken(TypeToken<R> typeToken) {
-            this.type = (Class<T>) typeToken.getRawType();
+            configBuilder.type((TypeToken<T>) typeToken);
             return (SMRObject.Builder<R>) this;
         }
 
         public SMRObject.Builder<T> setArguments(Object ... arguments) {
-            this.arguments = arguments;
+            tableConfigBuilder.arguments(arguments);
             return this;
         }
 
         public SMRObject.Builder<T> setStreamName(String streamName) {
-            this.streamName = streamName;
+            tableConfigBuilder.streamName(StreamName.build(streamName));
             return this;
         }
 
-        public SMRObject.Builder<T> setStreamID(UUID streamID) {
-            this.streamID = streamID;
+        public SMRObject.Builder<T> setStreamID(UUID streamId) {
+            if (tableConfigBuilder.streamName == null){
+                var streamName = new StreamName(new StreamId(streamId), Optional.empty());
+                tableConfigBuilder.streamName(streamName);
+            } else {
+                tableConfigBuilder.streamName.withId(new StreamId(streamId));
+            }
             return this;
         }
 
         public SMRObject.Builder<T> setSerializer(ISerializer serializer) {
-            this.serializer = serializer;
+            configBuilder.serializer(serializer);
             return this;
         }
 
         public SMRObject.Builder<T> addOpenOption(ObjectOpenOption openOption) {
-            this.openOption = openOption;
+            tableConfigBuilder.openOption(openOption);
             return this;
         }
 
         public SMRObject.Builder<T> setStreamTags(Set<UUID> tags) {
-            this.streamTags = new HashSet<>(tags);
+            tableConfigBuilder.streamTags(tags);
             return this;
         }
 
         public SMRObject.Builder<T> setStreamTags(UUID... tags) {
-            this.streamTags = new HashSet<>(Arrays.asList(tags));
+            tableConfigBuilder.streamTags(new HashSet<>(Arrays.asList(tags)));
             return this;
         }
 
         public SMRObject<T> build() {
-            if (streamID == null && streamName != null) {
-                streamID = UUID.nameUUIDFromBytes(streamName.getBytes());
-            }
-            verify();
-            return new SMRObject<>(corfuRuntime, type, streamID, streamName,
-                serializer, openOption, arguments, streamTags);
+            var tableConfig = tableConfigBuilder.build();
+            var config = configBuilder
+                    .tableConfig(tableConfig)
+                    .build();
+            return new SMRObject<>(corfuRuntime, config);
         }
 
         public T open() {
-            final SMRObject<T> smrObject = build();
-
-            try {
-                log.info(CorfuRuntime.LOG_NOT_IMPORTANT, "ObjectBuilder: open Corfu stream {} id {}", smrObject.getStreamName(),
-                        smrObject.getStreamID());
-
-                if (smrObject.getOpenOption() == ObjectOpenOption.NO_CACHE) {
-                    return CorfuCompileWrapperBuilder.getWrapper(smrObject);
-                } else {
-                    ObjectsView.ObjectID oid = new ObjectsView.ObjectID(streamID, type);
-                    return (T) smrObject.getRuntime().getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                                try {
-                                    T result = CorfuCompileWrapperBuilder.getWrapper(smrObject);
-
-                                    // Get object serializer to check if we didn't attempt to set another serializer
-                                    // to an already existing map
-                                    ISerializer objectSerializer = result.getCorfuSMRProxy().getSerializer();
-                                    if (smrObject.getSerializer() != objectSerializer) {
-                                        log.warn("open: Attempt to open an existing object with a different serializer {}. " +
-                                                        "Object {} opened with original serializer {}.",
-                                                smrObject.getSerializer().getClass().getSimpleName(),
-                                                oid,
-                                                objectSerializer.getClass().getSimpleName());
-                                    }
-                                    log.info("Added SMRObject {} to objectCache", oid);
-                                    return result;
-                                } catch (Exception ex) {
-                                    throw new UnrecoverableCorfuError(ex);
-                                }
-                            }
-                    );
-                }
-
-            } catch (Exception ex) {
-                log.error("Runtime instrumentation no longer supported and no compiled class found"
-                        + " for {}", type, ex);
-                throw new UnrecoverableCorfuError(ex);
-            }
+            return build().open();
         }
     }
 
-    public static <T extends ICorfuSMR<?>> Builder<T> builder() {
-        return new Builder<>();
+    @lombok.Builder
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @Getter
+    @ToString
+    public static class SmrTableConfig {
+        @NonNull
+        @With
+        private final StreamName streamName;
+
+        @NonNull
+        @Default
+        private ObjectOpenOption openOption = ObjectOpenOption.CACHE;
+
+        @NonNull
+        @Default
+        private final Object[] arguments = new Object[0];
+
+        @NonNull
+        @Singular
+        private final Set<UUID> streamTags;
+    }
+
+    @lombok.Builder
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    @Getter
+    @ToString
+    public static class SmrObjectConfig<T extends ICorfuSMR<?>> {
+        @NonNull
+        private final TypeToken<T> type;
+
+        @NonNull
+        @Default
+        private final ISerializer serializer = Serializers.getDefaultSerializer();
+
+        @NonNull
+        private final SmrTableConfig tableConfig;
+
+        public ObjectID getObjectId() {
+            return new ObjectID(tableConfig.streamName.getId().getId(), type.getRawType());
+        }
+
+        public boolean isCacheDisabled() {
+            return tableConfig.openOption == ObjectOpenOption.NO_CACHE;
+        }
+
+        public CorfuTableType getTableType() {
+            return CorfuTableType.parse(type);
+        }
+
+        public <S extends SnapshotGenerator<S>> Class<S> tableImplementationType() {
+            switch (getTableType()) {
+                case PERSISTENT:
+                    return ClassUtils.cast(ImmutableCorfuTable.class);
+                case PERSISTED:
+                    return ClassUtils.cast(DiskBackedCorfuTable.class);
+            }
+
+            throw new IllegalStateException("Unknown table type");
+        }
+
+        public T newSmrTableInstance() {
+            Constructor<?>[] constructors = type
+                    .getRawType()
+                    .getDeclaredConstructors();
+
+            return ReflectionUtils.findMatchingConstructor(constructors, new Object[0]);
+        }
     }
 }

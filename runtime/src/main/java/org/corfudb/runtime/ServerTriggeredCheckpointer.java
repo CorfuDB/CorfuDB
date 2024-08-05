@@ -11,7 +11,7 @@ import org.corfudb.runtime.collections.PersistentCorfuTable;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.PersistenceOptions;
 import org.corfudb.runtime.view.ObjectOpenOption;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.KeyDynamicProtobufSerializer;
 
@@ -54,9 +54,11 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         log.info("{}: Finished checkpointing tables", checkpointerBuilder.clientName);
     }
 
-    private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(TableName tableName,
-                                                              KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
-        UUID streamId = CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(tableName));
+    private CheckpointWriter<ICorfuTable<?,?>> getCheckpointWriter(
+            TableName tableName,
+            KeyDynamicProtobufSerializer keyDynamicProtobufSerializer) {
+
+        UUID streamId = FullyQualifiedTableName.streamId(tableName).getId();
         ICorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = openTable(
                 tableName, keyDynamicProtobufSerializer, checkpointerBuilder.cpRuntime.get());
         CheckpointWriter<ICorfuTable<?,?>> cpw =
@@ -82,7 +84,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
                     .build();
 
             return rt.getObjectsView().<PersistedCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
-                    .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                    .setStreamName(FullyQualifiedTableName.build(tableName).toFqdn())
                     .setSerializer(serializer)
                     .addOpenOption(ObjectOpenOption.NO_CACHE)
                     .setTypeToken(PersistedCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
@@ -91,7 +93,7 @@ public class ServerTriggeredCheckpointer extends DistributedCheckpointer {
         } else {
             return rt.getObjectsView()
                             .<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>>build()
-                            .setStreamName(TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName()))
+                            .setStreamName(FullyQualifiedTableName.build(tableName).toFqdn())
                             .setSerializer(serializer)
                             .addOpenOption(ObjectOpenOption.NO_CACHE)
                             .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())

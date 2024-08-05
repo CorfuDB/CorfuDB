@@ -32,6 +32,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.test.SampleAppliance;
@@ -56,7 +57,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
+import static org.corfudb.runtime.view.TableRegistry.FQ_REGISTRY_TABLE_NAME;
 import static org.junit.Assert.fail;
 
 /**
@@ -977,8 +978,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> tableRegistry = runtime.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
-                        TableRegistry.REGISTRY_TABLE_NAME))
+                .setStreamName(FQ_REGISTRY_TABLE_NAME.toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -986,8 +986,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> descriptorTable = runtime.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(TableRegistry.getFullyQualifiedTableName(TableRegistry.CORFU_SYSTEM_NAMESPACE,
-                        TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME))
+                .setStreamName(TableRegistry.FQ_PROTO_DESC_TABLE_NAME.toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
@@ -1002,7 +1001,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void checkpointWithoutDeserializingValueTest() throws Exception {
         final String streamName = "mystream9";
         final String namespace = "test";
-        UUID streamId = UUID.nameUUIDFromBytes(getFullyQualifiedTableName(namespace, streamName).getBytes());
+        UUID streamId = FullyQualifiedTableName.streamId(namespace, streamName).getId();
         final int numKeys = 123;
 
         // Create and populate the test table
@@ -1036,12 +1035,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord> corfuTable = r.getObjectsView()
                 .build()
                 .setTypeToken(PersistentCorfuTable.<CorfuDynamicKey, OpaqueCorfuDynamicRecord>getTypeToken())
-                .setStreamName(getFullyQualifiedTableName(namespace, streamName))
+                .setStreamName(FullyQualifiedTableName.build(namespace, streamName).toFqdn())
                 .setSerializer(serializer)
                 .addOpenOption(ObjectOpenOption.NO_CACHE)
                 .open();
-        CheckpointWriter<PersistentCorfuTable<CorfuDynamicKey, OpaqueCorfuDynamicRecord>> cpw =
-                new CheckpointWriter<>(r, streamId, "author", corfuTable);
+        var cpw = new CheckpointWriter<>(r, streamId, "author", corfuTable);
         cpw.setSerializer(serializer);
 
         Token trimToken = Token.min(checkpointUfoSystemTables(r, serializer), cpw.appendCheckpoint());
@@ -1127,12 +1125,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .open();
     }
 
-    private CheckpointWriter<PersistentCorfuTable<String, String>> setupEnvironment(int maxWriteSize, UUID streamId, String author,
-                                                                                     PersistentCorfuTable<String, String> m) {
+    private CheckpointWriter<PersistentCorfuTable<String, String>> setupEnvironment(
+            int maxWriteSize, UUID streamId, String author, PersistentCorfuTable<String, String> m) {
         // set the max write size to 25 MB
         getRuntime().getParameters().setMaxWriteSize(maxWriteSize);
         getRuntime().getParameters().setCodecType(Codec.Type.NONE);
-        CheckpointWriter<PersistentCorfuTable<String, String>> cpw = new CheckpointWriter<>(getRuntime(), streamId, author, m);
+        var cpw = new CheckpointWriter<>(getRuntime(), streamId, author, m);
         cpw.setSerializer(serializer);
         return cpw;
     }
@@ -1167,11 +1165,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
-    private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
-                                        Object[] objects) throws Exception {
+    private void writeCheckpointRecords(
+            UUID streamId, String checkpointAuthor, UUID checkpointId, Object[] objects) throws Exception {
         Runnable l = () -> {};
-        writeCheckpointRecords(streamId, checkpointAuthor, checkpointId, objects,
-                l, l, true, true, true);
+        writeCheckpointRecords(streamId, checkpointAuthor, checkpointId, objects, l, l, true, true, true);
     }
 
     long startAddress;
