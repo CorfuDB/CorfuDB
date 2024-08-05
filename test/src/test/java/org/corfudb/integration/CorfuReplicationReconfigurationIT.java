@@ -229,6 +229,93 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
     }
 
     /**
+     * This test verifies that if the Standby leader stops or changes when Active is in the Negotiating state, the
+     * Active cluster performs leadership verification and connects/re-connects(if no leadership change) to the leader
+     * on Standby.  Once connected, sync between the clusters is successful.
+     * @throws Exception
+     */
+    @Test
+    public void testStandbyStopInNegotiatingState() throws Exception {
+        String testStreamName = "Table001";
+        int batchSize = 5;
+
+        setupActiveAndStandbyCorfu();
+
+        // Open tables
+        Table<StringKey, IntValue, Metadata> mapActive = corfuStoreActive.openTable(
+            NAMESPACE,
+            testStreamName,
+            StringKey.class,
+            IntValue.class,
+            Metadata.class,
+            TableOptions.builder().schemaOptions(
+                    CorfuOptions.SchemaOptions.newBuilder()
+                        .setIsFederated(true)
+                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                        .build())
+                .build()
+        );
+        Table<StringKey, IntValue, Metadata> mapStandby = corfuStoreStandby.openTable(
+            NAMESPACE,
+            testStreamName,
+            StringKey.class,
+            IntValue.class,
+            Metadata.class,
+            TableOptions.builder().schemaOptions(
+                    CorfuOptions.SchemaOptions.newBuilder()
+                        .setIsFederated(true)
+                        .addStreamTag(ObjectsView.LOG_REPLICATOR_STREAM_INFO.getTagName())
+                        .build())
+                .build()
+        );
+        corfuStoreStandby.openTable(LogReplicationMetadataManager.NAMESPACE,
+            REPLICATION_STATUS_TABLE,
+            ReplicationStatusKey.class,
+            ReplicationStatusVal.class,
+            null,
+            TableOptions.fromProtoSchema(LogReplicationMetadata.ReplicationStatusVal.class));
+
+        // Write batchSize num of entries to active map
+        for (int i = 0; i < batchSize; i++) {
+            try (TxnContext txn = corfuStoreActive.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                    IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(batchSize);
+        assertThat(mapStandby.count()).isZero();
+
+        // Start LR on both sides.  Introduce a latency of 20 seconds when Active is in negotiating state
+        int waitInNegotiatingStateMs = 20000;
+        startActiveLogReplicator(waitInNegotiatingStateMs);
+        startStandbyLogReplicator();
+
+        // Wait for 10 seconds for the Active to reach Negotiating State.
+        // Note: This wait time was empirically determined and may require to be changed if source code behavior
+        // changes in future.
+        TimeUnit.SECONDS.sleep(10);
+
+        // Shutdown LR on the Standby for 5 seconds to cause a connection loss
+        shutdownCorfuServer(standbyReplicationServer);
+        TimeUnit.SECONDS.sleep(5);
+
+        // Subscribe listener to know when data is consistent on the Standby.  This would indicate a successful sync
+        // on reconnection after Standby starts.
+        CountDownLatch awaitSyncCompletion = new CountDownLatch(1);
+        DataConsistentListener standbyListener = new DataConsistentListener(awaitSyncCompletion);
+        corfuStoreStandby.subscribeListener(standbyListener, LogReplicationMetadataManager.NAMESPACE,
+            LogReplicationMetadataManager.LR_STATUS_STREAM_TAG);
+
+        // Start LR on the Standby
+        startStandbyLogReplicator();
+
+        // Wait for successful sync
+        awaitSyncCompletion.await();
+        tearDown();
+    }
+
+    /**
      * This test verifies that concurrent Snapshot Syncs are handled gracefully on the Standby.  If messages from
      * a new Snapshot Sync are received on the Standby when it is in 'apply' phase of a previous sync, these new
      * messages are rejected.  This avoids the race between transfer and apply phases on Standby.

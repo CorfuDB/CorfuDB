@@ -65,7 +65,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
-                    + "[--disable-cert-expiry-check-file=<file_path>] [--wait-before-apply-ms=<wait_before_apply_ms>]"
+                    + "[--disable-cert-expiry-check-file=<file_path>] [--wait-before-apply-ms=<wait_before_apply_ms>] "
+                    + "[--wait-in-negotiating-state-ms=<wait_in_negotiating_state_ms>] "
                     + "[--metrics]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
@@ -197,7 +198,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --version                                                                "
                     + "              Show version\n"
                     + " --wait-before-apply-ms=<wait_before_apply_ms>                                  "
-                    + "             Duration in ms to wait before before starting the apply phase [default: 0] \n";
+                    + "             Duration in ms to wait before before starting the apply phase.  For Testing Only."
+                    + " [default: 0] \n"
+                    + " --wait-in-negotiating-state-ms=<wait_in_negotiating_state_ms>            "
+                    + "             Duration in ms to wait in the Negotiating State.  For Testing Only. [default: 0] \n";
 
     // Active Corfu Server Node.
     private volatile CorfuInterClusterReplicationServerNode activeServer;

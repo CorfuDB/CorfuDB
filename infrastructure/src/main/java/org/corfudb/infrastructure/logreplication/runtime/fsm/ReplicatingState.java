@@ -67,7 +67,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
             case LOCAL_LEADER_LOSS:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
+                log.warn("Unexpected communication event {} when in {} state.", event.getType(), getType().name());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }

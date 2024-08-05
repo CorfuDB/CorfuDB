@@ -129,7 +129,11 @@ public class AbstractIT extends AbstractCorfuTest {
         }
 
         shutdownAllCorfuServers(shouldForceKill);
-        FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+        try {
+            FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+        } catch (Exception e) {
+
+        }
     }
 
     public static String getCodeCoverageCmd() {
@@ -417,6 +421,19 @@ public class AbstractIT extends AbstractCorfuTest {
             .setPluginConfigFilePath(pluginConfigFilePath)
             .setMsg_size(MSG_SIZE)
             .setWaitSnapshotApplyMs(waitInSnapshotApplyMs)
+            .runServer();
+    }
+
+    public Process runReplicationServerWaitInNegotiatingState(int port, String pluginConfigFilePath,
+                                                              int lockLeaseDuration, int waitInNegotiatingStateMs)
+                                                            throws IOException {
+        return new CorfuReplicationServerRunner()
+            .setHost(DEFAULT_HOST)
+            .setPort(port)
+            .setLockLeaseDuration(lockLeaseDuration)
+            .setPluginConfigFilePath(pluginConfigFilePath)
+            .setMsg_size(MSG_SIZE)
+            .setWaitInNegotiatingStateMs(waitInNegotiatingStateMs)
             .runServer();
     }
 
@@ -733,6 +750,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private int maxWriteSize = 0;
         private int maxSnapshotEntriesApplied;
         private int waitSnapshotApplyMs;
+        private int waitInNegotiatingStateMs;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -798,6 +816,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (waitSnapshotApplyMs != 0) {
                 command.append(" --wait-before-apply-ms=").append(waitSnapshotApplyMs);
+            }
+
+            if (waitInNegotiatingStateMs != 0) {
+                command.append(" --wait-in-negotiating-state-ms=").append(waitInNegotiatingStateMs);
             }
 
             command.append(" -d ").append(logLevel).append(" ")

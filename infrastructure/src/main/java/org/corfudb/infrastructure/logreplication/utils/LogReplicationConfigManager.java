@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.utils;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.LRRollingUpgradeHandler;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationVersionAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -98,6 +99,10 @@ public class LogReplicationConfigManager {
 
     private long lastRegistryTableLogTail;
 
+    @Getter
+    @VisibleForTesting
+    private ServerContext serverContext;
+
     /**
      * Used for non-upgrade testing purpose only. Note that this constructor will keep the version table in
      * uninitialized state, in which case LR will be constantly considered to be not upgraded.
@@ -110,9 +115,10 @@ public class LogReplicationConfigManager {
         this.lastRegistryTableLogTail = Address.NON_ADDRESS;
     }
 
-    public LogReplicationConfigManager(CorfuRuntime runtime, String pluginConfigFilePath) {
+    public LogReplicationConfigManager(CorfuRuntime runtime, ServerContext serverContext) {
         this.rt = runtime;
-        this.pluginConfigFilePath = pluginConfigFilePath;
+        this.serverContext = serverContext;
+        this.pluginConfigFilePath = serverContext.getPluginConfigFilePath();
         this.corfuStore = new CorfuStore(runtime);
         this.lastRegistryTableLogTail = Address.NON_ADDRESS;
         initLogReplicationVersionPlugin(runtime);

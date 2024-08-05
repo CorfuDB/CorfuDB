@@ -428,7 +428,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         try {
             replicationConfigManager =
-                new LogReplicationConfigManager(runtime, serverContext.getPluginConfigFilePath());
+                new LogReplicationConfigManager(runtime, serverContext);
 
             return new LogReplicationConfig(
                     replicationConfigManager,

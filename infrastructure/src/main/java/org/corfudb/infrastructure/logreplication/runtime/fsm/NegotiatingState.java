@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -31,8 +32,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private final CorfuLogReplicationRuntime fsm;
 
-    private Optional<String> leaderNodeId;
-
     private final ThreadPoolExecutor worker;
 
     private final LogReplicationClientRouter router;
@@ -63,9 +62,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // Update list of valid connections.
                 fsm.updateDisconnectedNodes(nodeIdDown);
 
-                // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeIdDown)) {
-                    leaderNodeId = Optional.empty();
+                // If the leader is the node that become unavailable, clear the leader info in the FSM, verify new
+                // leader and attempt to reconnect.
+                if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
+                    fsm.resetRemoteLeaderNodeId();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
                     // Router will attempt reconnection of non-leader endpoint
@@ -89,9 +89,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case NEGOTIATION_FAILED:
                 return this;
-            case REMOTE_LEADER_NOT_FOUND:
-                leaderNodeId = Optional.empty();
-                return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case REMOTE_LEADER_LOSS:
                 if (fsm.getRemoteLeaderNodeId().get().equals(event.getNodeId())) {
                     fsm.resetRemoteLeaderNodeId();
@@ -104,7 +101,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
             default: {
-                log.warn("Unexpected communication event {} when in init state.", event.getType());
+                log.warn("Unexpected communication event {} when in {} state", event.getType(), getType().name());
                 throw new IllegalTransitionException(event.getType(), getType());
             }
         }
@@ -121,6 +118,15 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     private void negotiate() {
 
         log.debug("Enter :: negotiate");
+
+        // Note:  This is for testing only.  Currently used in tests to introduce a delay in the Negotiating State.
+        if (tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime() != 0) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(tableManagerPlugin.getServerContext().getNegotiatingStateWaitTime());
+            } catch (InterruptedException e) {
+                log.error("Interrupted Exception When Waiting in the Negotiating State", e);
+            }
+        }
 
         try {
             if(fsm.getRemoteLeaderNodeId().isPresent()) {
@@ -154,16 +160,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         } finally {
             log.debug("Exit :: negotiate");
         }
-    }
-
-    /**
-     * Set Leader Endpoint, determined during the transition from VERIFYING_REMOTE_LEADER
-     * to NEGOTIATING state.
-     *
-     * @param nodeId leader node on remote cluster
-     */
-    public void setLeaderNodeId(String nodeId) {
-        this.leaderNodeId = Optional.of(nodeId);
     }
 
     /**

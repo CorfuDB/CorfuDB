@@ -314,6 +314,11 @@ public class ServerContext implements AutoCloseable {
         return val == null ? 0 : Integer.parseInt(val);
     }
 
+    public int getNegotiatingStateWaitTime() {
+        String val = getServerConfig(String.class, "--wait-in-negotiating-state-ms");
+        return val == null ? 0 : Integer.parseInt(val);
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
