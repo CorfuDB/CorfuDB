@@ -36,6 +36,7 @@ public class LogReplicationPluginConfig {
 
     // Topology Manager Plugin
     public static final String DEFAULT_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
+    public static final String PG_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager";
 
     // Snapshot Sync Plugin
     public static final String DEFAULT_SNAPSHOT_SYNC_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin";
@@ -105,7 +106,7 @@ public class LogReplicationPluginConfig {
             this.snapshotSyncPluginCanonicalName = DEFAULT_SNAPSHOT_SYNC_CLASSNAME;
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
-            this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
+            this.topologyManagerAdapterName = PG_CLUSTER_MANAGER_CLASSNAME;
 
             this.nodeIdFilePath = null;
         }
