@@ -28,6 +28,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -75,6 +76,7 @@ import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dr
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.dropSubscriptions;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllPublications;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getAllSubscriptions;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.getPgReplicationStatus;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesReadOnly;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesWriteable;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.truncateTables;
@@ -936,12 +938,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        // if (event.getTopologyConfig().getTopologyConfigID() == topologyDescriptor.getTopologyConfigID()){
-        //     log.debug("Repeated Topology Change Notification, current={}, received={}",
-        //             topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
-        //     return;
-        // }
-
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
@@ -1165,24 +1161,39 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
-            log.warn("Cluster configuration has not been pushed to current LR node.");
-            return null;
-        } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
-            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
-            // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
-            // has an active role.
-            if (mapToSend.containsKey(localClusterDescriptor.getClusterId())) {
-                log.warn("Remove localClusterDescriptor {} from replicationStatusMap", localClusterDescriptor.getClusterId());
-                mapToSend.remove(localClusterDescriptor.getClusterId());
+        if (isPostgres) {
+            Map<String, ReplicationStatusVal> mapToSend = new HashMap<>();
+            if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                topologyDescriptor.getStandbyClusters().values().forEach(
+                        standbyCluster -> standbyCluster.getNodesDescriptors().forEach(
+                                nodeDescriptor -> {
+                                    // TODO (Postgres): Will need leadership check after clustering implemented
+                                    String standbyNodeIp = nodeDescriptor.getHost().split(":")[0];
+                                    mapToSend.put(localClusterDescriptor.clusterId, getPgReplicationStatus(connector, standbyNodeIp));
+                                })
+                );
             }
             return mapToSend;
-        } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            return logReplicationMetadataManager.getDataConsistentOnStandby();
+        } else {
+            if (localClusterDescriptor == null || logReplicationMetadataManager == null) {
+                log.warn("Cluster configuration has not been pushed to current LR node.");
+                return null;
+            } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+                Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
+                Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
+                // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
+                // has an active role.
+                if (mapToSend.containsKey(localClusterDescriptor.getClusterId())) {
+                    log.warn("Remove localClusterDescriptor {} from replicationStatusMap", localClusterDescriptor.getClusterId());
+                    mapToSend.remove(localClusterDescriptor.getClusterId());
+                }
+                return mapToSend;
+            } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+                return logReplicationMetadataManager.getDataConsistentOnStandby();
+            }
+            log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
+            return null;
         }
-        log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
-        return null;
     }
 
     @Override
@@ -1191,6 +1202,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
             log.error(errorStr);
             throw new LogReplicationDiscoveryServiceException(errorStr);
+        } else if (isPostgres) {
+            log.warn("Full sync not supported for postgres, returning random uuid.");
+            return UUID.randomUUID();
         }
 
         UUID forceSyncId = UUID.randomUUID();
