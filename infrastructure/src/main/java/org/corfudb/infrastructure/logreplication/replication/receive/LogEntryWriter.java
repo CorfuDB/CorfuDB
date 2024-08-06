@@ -110,7 +110,7 @@ public class LogEntryWriter extends SinkWriter {
 
                         // Validate the message metadata with the local metadata table
                         if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                            baseSnapshotTs != persistedSnapshotDone || prevTs != persistedBatchTs) {
+                            baseSnapshotTs != persistedSnapshotDone || prevTs > persistedBatchTs) {
                             log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
                                     "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
                                 txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
@@ -230,8 +230,7 @@ public class LogEntryWriter extends SinkWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        // If the entry is the expected entry, process it and process the messages in the queue.
-        if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
+        if (msg.getMetadata().getPreviousTimestamp() <= lastMsgTs && msg.getMetadata().getTimestamp() > lastMsgTs) {
             return applyMsg(msg);
         }
 
