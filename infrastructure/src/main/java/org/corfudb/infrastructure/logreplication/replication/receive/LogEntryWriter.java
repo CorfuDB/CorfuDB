@@ -230,14 +230,12 @@ public class LogEntryWriter extends SinkWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        // If the entry is the expected entry, process it and process the messages in the queue.
-        if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
-            return applyMsg(msg);
-        }
+        return applyMsg(msg);
 
-        log.warn("Transactions from {} to {} were not processed.  Last timestamp processed = {}, srcGlobalSnapshot={}",
+        /*log.warn("Transactions from {} to {} were not processed.  Last timestamp processed = {},
+        srcGlobalSnapshot={}",
             msg.getMetadata().getPreviousTimestamp(), msg.getMetadata().getTimestamp(), lastMsgTs, srcGlobalSnapshot);
-        return false;
+        return false; */
     }
 
     /**
