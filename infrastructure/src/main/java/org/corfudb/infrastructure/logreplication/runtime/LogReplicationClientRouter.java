@@ -181,6 +181,22 @@ public class LogReplicationClientRouter implements IClientRouter {
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull RequestPayloadMsg payload,
             @Nonnull String nodeId) {
+        return sendRequestAndGetCompletable(payload, nodeId, timeoutResponse);
+    }
+
+    /**
+     * Send a request message and get a completable future to be fulfilled by the reply within
+     * supplied timeout response time.
+     *
+     * @param payload
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response within the allotted time.
+     */
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            @Nonnull RequestPayloadMsg payload,
+            @Nonnull String nodeId,
+            long timeoutResponse) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
                 .setVersion(getDefaultProtocolVersionMsg())

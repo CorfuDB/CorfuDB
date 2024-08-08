@@ -33,7 +33,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.google.protobuf.UnsafeByteOperations.unsafeWrap;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
@@ -185,7 +184,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         // For interested entry, if its size is too big we should skip and report error
         if (currentEntrySize > maxDataSizePerMsg) {
             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported.",
-                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+                    currentEntrySize, maxDataSizePerMsg);
             // If a message cannot be sent due to its size exceeding the maximum boundary, the replication will be stopped.
             messageExceededSize = true;
             return false;

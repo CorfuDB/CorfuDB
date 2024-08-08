@@ -58,11 +58,11 @@ public final class DefaultClusterConfig {
     @Getter
     private static final int logSenderRetryCount = 5;
 
+    /*
+     * Default wait period for client to process log msg RPCs.
+     */
     @Getter
-    private static final int logSenderResendTimer = 5000;
-
-    @Getter
-    private static final int logSenderTimeoutTimer = 5000;
+    private static final int logSenderTimeoutTimer = 20000;
 
     @Getter
     private static final boolean logSenderTimeout = true;

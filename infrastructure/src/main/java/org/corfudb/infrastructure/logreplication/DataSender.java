@@ -24,6 +24,16 @@ public interface DataSender {
     CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message);
 
     /**
+     * Application callback on next available message for transmission to remote cluster,
+     * using specified timeout time.
+     *
+     * @param message LogReplicationEntry representing the data to send across sites.
+     * @param timeoutResponse Time allotted to receive ACK from client before completing exceptionally.
+     * @return {@link CompletableFuture} containing the acknowledgement.
+     */
+    CompletableFuture<LogReplicationEntryMsg> sendWithTimeout(LogReplicationEntryMsg message, long timeoutResponse);
+
+    /**
      * Application callback on next available messages for transmission to remote cluster.
      *
      * @param messages list of LogReplicationEntry representing the data to send across sites.

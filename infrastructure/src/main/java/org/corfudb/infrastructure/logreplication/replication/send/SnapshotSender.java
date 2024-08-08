@@ -31,7 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
@@ -121,7 +120,7 @@ public class SnapshotSender {
         // Skip if no data is present in the log
         if (Address.isAddress(baseSnapshotTimestamp)) {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
-            // or snapshot sync is stopped
+            // or snapshot sync is stopped.
             dataSenderBufferManager.resend();
 
             while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
@@ -155,7 +154,8 @@ public class SnapshotSender {
                 // Block until ACK from last sent message is received
                 try {
                     // TODO V2: the fix to retry for the last msg incase of ack timeout is present in PR 3750
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    LogReplicationEntryMsg ack = snapshotSyncAck.get(dataSenderBufferManager.getTimeoutTimer(),
+                            TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
@@ -193,7 +193,7 @@ public class SnapshotSender {
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                snapshotSyncAck.get(dataSenderBufferManager.getTimeoutTimer(), TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
