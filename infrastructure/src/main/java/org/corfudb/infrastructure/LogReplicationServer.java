@@ -46,8 +46,8 @@ public class LogReplicationServer extends AbstractServer {
     // node id should be the only identifier for a node in the topology
     private String localNodeId;
 
-    /* Size bounding LRs client RPC queue, set to be at least that of the sender buffer window
-     * with some padding.
+    /*
+     * Size bounding LRs client RPC queue, set to be at least that of the sender buffer window.
      */
     private static final int MAX_EXECUTOR_QUEUE_SIZE = 10;
     private final ExecutorService executor;
