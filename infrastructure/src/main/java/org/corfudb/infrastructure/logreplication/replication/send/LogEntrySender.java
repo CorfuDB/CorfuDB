@@ -81,7 +81,7 @@ public class LogEntrySender {
         /*
          * It will first resend entries in the buffer that hasn't ACKed
          */
-        LogReplicationEntryMsg ack = dataSenderBufferManager.resend(true);
+        LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
         if (ack != null) {
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
                     new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp())));

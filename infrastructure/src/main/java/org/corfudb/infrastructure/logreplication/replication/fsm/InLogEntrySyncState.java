@@ -168,10 +168,6 @@ public class InLogEntrySyncState implements LogReplicationState {
 
     @Override
     public void onExit(LogReplicationState to) {
-        if (!to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
-            fsm.getLogEntrySender().getDataSenderBufferManager().deactivateBackpressure();
-        }
-
         if (to.getType().equals(LogReplicationStateType.INITIALIZED)) {
             fsm.getAckReader().markSyncStatus(SyncStatus.STOPPED);
             log.debug("Log Entry replication status changed to STOPPED");

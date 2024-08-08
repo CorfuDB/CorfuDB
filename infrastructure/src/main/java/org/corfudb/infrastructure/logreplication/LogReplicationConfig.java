@@ -37,9 +37,9 @@ public class LogReplicationConfig {
     // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
     public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
 
-    // Default Corfu txn size is 25MB. Log Replication uses this limit as the maximum message
-    // size to batch and send data across over to the other side.
-    public static final int MAX_DATA_MSG_SIZE_SUPPORTED = (25 << 20);
+    // Log Replication uses 25MB limit as the default max message size to batch and
+    // send data across over to the other side.
+    public static final int DEFAULT_MAX_MSG_BATCH_SIZE = (25 << 20);
 
     // Log Replication default max cache number of entries
     // Note: if we want to improve performance for large scale this value should be tuned as it
@@ -105,8 +105,8 @@ public class LogReplicationConfig {
                                 int maxNumMsgPerBatch, int maxMsgSize, int cacheSize, int maxSnapshotEntriesApplied) {
         this.configManager = configManager;
         this.maxNumMsgPerBatch = maxNumMsgPerBatch;
-        this.maxMsgSize = maxMsgSize;
         this.maxCacheSize = cacheSize;
+        this.maxMsgSize = maxMsgSize;
         this.maxDataSizePerMsg = (int) ((maxMsgSize * DATA_FRACTION_PER_MSG) / 100L);
         this.maxSnapshotEntriesApplied = maxSnapshotEntriesApplied;
         syncWithRegistry();
