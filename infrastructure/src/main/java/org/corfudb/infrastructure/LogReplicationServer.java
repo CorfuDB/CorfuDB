@@ -20,6 +20,7 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
@@ -45,6 +46,10 @@ public class LogReplicationServer extends AbstractServer {
     // node id should be the only identifier for a node in the topology
     private String localNodeId;
 
+    /*
+     * Size bounding LRs client RPC queue, set to be at least that of the sender buffer window.
+     */
+    private static final int MAX_EXECUTOR_QUEUE_SIZE = 10;
     private final ExecutorService executor;
 
     @Getter
@@ -87,7 +92,12 @@ public class LogReplicationServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        if (((ThreadPoolExecutor)executor).getQueue().size() < MAX_EXECUTOR_QUEUE_SIZE) {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        } else {
+            log.warn("Server request queue at capacity ({}), dropping message {}",
+                    MAX_EXECUTOR_QUEUE_SIZE, req.getHeader().getRequestId());
+        }
     }
 
     @Override

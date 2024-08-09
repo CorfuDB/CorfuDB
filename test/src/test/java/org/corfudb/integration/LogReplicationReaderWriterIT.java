@@ -56,7 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_MSG_BATCH_SIZE;
 
 @Slf4j
 public class LogReplicationReaderWriterIT extends AbstractIT {
@@ -240,7 +240,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
         int cnt = 0;
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
         LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                DEFAULT_MAX_MSG_BATCH_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -271,7 +271,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void writeSnapLogMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt) {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
         LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                DEFAULT_MAX_MSG_BATCH_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
@@ -294,7 +294,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, CorfuRuntime rt, boolean blockOnce) throws TrimmedException {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
         LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                DEFAULT_MAX_MSG_BATCH_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
@@ -326,7 +326,7 @@ public class LogReplicationReaderWriterIT extends AbstractIT {
     public static void writeLogEntryMsgs(List<LogReplicationEntryMsg> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(rt);
         LogReplicationConfig config = new LogReplicationConfig(configManager, DEFAULT_MAX_NUM_MSG_PER_BATCH,
-                MAX_DATA_MSG_SIZE_SUPPORTED, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                DEFAULT_MAX_MSG_BATCH_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(config, logReplicationMetadataManager);
 
