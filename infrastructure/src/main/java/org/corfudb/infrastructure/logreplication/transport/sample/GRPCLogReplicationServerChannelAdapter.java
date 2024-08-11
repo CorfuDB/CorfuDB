@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
@@ -42,6 +44,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         // a single-threaded executor here.
         this.server = ServerBuilder.forPort(port).addService(service)
                 .executor(Executors.newSingleThreadScheduledExecutor()).build();
+
+        LoadBalancerRegistry.getDefaultRegistry().register(new PickFirstLoadBalancerProvider());
     }
 
     @Override
