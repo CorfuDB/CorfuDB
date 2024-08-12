@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import io.grpc.internal.PickFirstLoadBalancerProvider;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
@@ -70,6 +72,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         this.connectionFuture = new CompletableFuture<>();
         this.requestObserverMap = new ConcurrentHashMap<>();
         this.responseObserverMap = new ConcurrentHashMap<>();
+
+        LoadBalancerRegistry.getDefaultRegistry().register(new PickFirstLoadBalancerProvider());
     }
 
     @Override
