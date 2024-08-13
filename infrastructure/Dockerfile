@@ -8,8 +8,8 @@ ARG CORFU_TOOLS_JAR
 WORKDIR /app
 
 RUN apt update && apt -y install iptables bash jq python3 sudo iproute2 python3-pip curl
-RUN python3 -m pip install pyyaml==6.0.1
-RUN python3 -m pip install netifaces==0.11.0
+RUN apt-get install -y --no-install-recommends python3-yaml
+RUN apt-get install -y --no-install-recommends python3-netifaces
 
 RUN echo "$BASE_IMAGE" > docker.container.info.txt
 
