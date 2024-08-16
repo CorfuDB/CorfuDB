@@ -1169,7 +1169,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                                 nodeDescriptor -> {
                                     // TODO (Postgres): Will need leadership check after clustering implemented
                                     String standbyNodeIp = nodeDescriptor.getHost().split(":")[0];
-                                    mapToSend.put(localClusterDescriptor.clusterId, getPgReplicationStatus(connector, standbyNodeIp));
+                                    mapToSend.put(nodeDescriptor.getClusterId(), getPgReplicationStatus(connector, standbyNodeIp));
                                 })
                 );
             }
