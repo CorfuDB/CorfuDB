@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.Timestamp;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
@@ -25,20 +26,52 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Sn
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.ACTIVE_CONTAINER_VIRTUAL_HOST;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.ACTIVE_CONTAINER_PHYSICAL_PORT;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.TEST_PG_DATABASE;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.PG_CONTAINER_PHYSICAL_HOST;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.TEST_PG_PASSWORD;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.TEST_PG_USER;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.STANDBY_CONTAINER_PHYSICAL_PORT;
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.isTestEnvironment;
+
 @Slf4j
 public class PostgresUtils {
 
     private PostgresUtils() {}
+
+    @Setter
+    private static PostgresConnector testClusterConnector = null;
 
     public static String quoteIdentifier(String identifier) {
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
+        return tryExecuteCommand(sql, connector, isTestEnvironment);
+    }
+
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) {
+        return tryExecutePreparedStatementsCommand(sql, params, connector, isTestEnvironment);
+    }
+
+    public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector) {
+        return executeQuery(sql, connector, isTestEnvironment);
+    }
+
+    public static List<Map<String, Object>> executePreparedStatementQuery(String sql, Object[] params, PostgresConnector connector) {
+        return executePreparedStatementQuery(sql, params, connector, isTestEnvironment);
+    }
+
+    public static boolean tryExecuteCommand(String sql, PostgresConnector connector, boolean useContainerConnection) {
+        if (useContainerConnection) {
+            connector = testClusterConnector;
+        }
+
         boolean successOrExists = false;
         log.info("Executing command: {}, on connector {} ", sql, connector);
         if (!sql.isEmpty()) {
-            try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+            try (Connection conn = DriverManager.getConnection(connector.url, connector.user, connector.password)) {
                 Statement statement = conn.createStatement();
                 statement.execute(sql);
                 statement.close();
@@ -60,10 +93,14 @@ public class PostgresUtils {
         return successOrExists;
     }
 
-    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) {
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector, boolean useContainerConnection) {
+        if (useContainerConnection) {
+            connector = testClusterConnector;
+        }
+
         boolean successOrExists = false;
         if (!sql.isEmpty()) {
-            try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+            try (Connection conn = DriverManager.getConnection(connector.url, connector.user, connector.password)) {
                 try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
                     setParameters(pstmt, params);
                     log.info("tryExecutePreparedStatementsCommand: Executing command: {}", pstmt.toString());
@@ -107,11 +144,19 @@ public class PostgresUtils {
         }
     }
 
-    public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector) {
+    public static List<Map<String, Object>> executeQuery(String sql, PostgresConnector connector, boolean useContainerConnection) {
+        if (useContainerConnection) {
+            if (testClusterConnector == null) {
+                log.warn("Test cluster connector not initialized, invalid usage, continuing with supplied connector!");
+            } else{
+                connector = testClusterConnector;
+            }
+        }
+
         List<Map<String, Object>> result = new ArrayList<>();
         log.info("Executing command: {}, on connector {} ", sql, connector);
 
-        try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+        try (Connection conn = DriverManager.getConnection(connector.url, connector.user, connector.password)) {
             Statement statement = conn.createStatement();
             ResultSet results = statement.executeQuery(sql);
             ResultSetMetaData metaData = results.getMetaData();
@@ -127,16 +172,24 @@ public class PostgresUtils {
 
             statement.close();
         } catch (SQLException e) {
-           log.info("ERROR", e);
+            log.info("ERROR", e);
         }
         return result;
     }
 
-    public static List<Map<String, Object>> executePreparedStatementQuery(String sql, Object[] params, PostgresConnector connector) {
+    public static List<Map<String, Object>> executePreparedStatementQuery(String sql, Object[] params, PostgresConnector connector, boolean useContainerConnection) {
+        if (useContainerConnection) {
+            if (testClusterConnector == null) {
+                log.warn("Test cluster connector not initialized, invalid usage, continuing with supplied connector!");
+            } else{
+                connector = testClusterConnector;
+            }
+        }
+
         List<Map<String, Object>> result = new ArrayList<>();
         log.info("Executing query: {}, on connector {} ", sql, connector);
 
-        try (Connection conn = DriverManager.getConnection(connector.URL, connector.USER, connector.PASSWORD)) {
+        try (Connection conn = DriverManager.getConnection(connector.url, connector.user, connector.password)) {
             ResultSet results;
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
                 setParameters(pstmt, params);
@@ -181,7 +234,7 @@ public class PostgresUtils {
 
     public static String createPublicationCmd(Set<String> tablesToReplicate, PostgresConnector connector) {
         return "CREATE PUBLICATION \"" +
-                String.join("_", connector.ADDRESS.split("\\.")) +
+                String.join("_", connector.address.split("\\.")) +
                 "_pub\"" +
                 " FOR TABLE " +
                 String.join(", ", tablesToReplicate) +
@@ -189,28 +242,42 @@ public class PostgresUtils {
     }
 
     public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica) {
+        PostgresConnector containerToQuery = replica;
+        if (isTestEnvironment) {
+            if (Objects.equals(primary.address, ACTIVE_CONTAINER_VIRTUAL_HOST)) {
+                containerToQuery = new PostgresConnector(PG_CONTAINER_PHYSICAL_HOST,
+                        String.valueOf(ACTIVE_CONTAINER_PHYSICAL_PORT), TEST_PG_USER, TEST_PG_PASSWORD, TEST_PG_DATABASE);
+            } else {
+                containerToQuery = new PostgresConnector(PG_CONTAINER_PHYSICAL_HOST,
+                        String.valueOf(STANDBY_CONTAINER_PHYSICAL_PORT), TEST_PG_USER, TEST_PG_PASSWORD, TEST_PG_DATABASE);
+            }
+        }
+        return createSubscriptionCmd(primary, replica, containerToQuery);
+    }
+
+    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica, PostgresConnector primaryToQuery) {
         String createSubCmd = "";
 
-        if (Objects.equals(primary.ADDRESS, replica.ADDRESS)) {
-            log.error("Skipping subscribing to self {}. This is an invalid state!", primary.ADDRESS);
+        if (Objects.equals(primary.address + primary.port, replica.address + replica.port)) {
+            log.error("Skipping subscribing to self {}. This is an invalid state!", primary.address);
         } else {
             int max_retry = 10;
-            String primaryPrefix = String.join("_", primary.ADDRESS.split("\\."));
-            String replicaPrefix = String.join("_", replica.ADDRESS.split("\\."));
+            String primaryPrefix = String.join("_", primary.address.split("\\."));
+            String replicaPrefix = String.join("_", replica.address.split("\\."));
             String pubName = String.join("_", primaryPrefix, "pub");
 
             for (int i = 0; i < max_retry; i++) {
                 String pubExistsQuery = String.format("SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '%s');", pubName);
                 log.info("check exists: {}", pubExistsQuery);
                 try {
-                    List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primary);
+                    List<Map<String, Object>> queryResult = executeQuery(pubExistsQuery, primaryToQuery, false);
 
                     if (!queryResult.isEmpty()) {
-                        // if publication exists
-                        if (queryResult.get(0).values().stream().findAny().isPresent()) {
+                        boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
+                        if (publicationExists) {
                             String subName = String.join("_", replicaPrefix, "sub");
-                            createSubCmd = String.format("CREATE SUBSCRIPTION %s CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION %s;",
-                                    quoteIdentifier(subName), primary.ADDRESS, primary.PORT, primary.USER, primary.DATABASE_NAME, primary.PASSWORD, quoteIdentifier(pubName));
+                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
+                                    subName, primary.address, primary.port, primary.user, primary.databaseName, primary.password, pubName);
                             break;
                         } else {
                             log.info("PUB WITH THAT NAME DOES NOT EXIST");

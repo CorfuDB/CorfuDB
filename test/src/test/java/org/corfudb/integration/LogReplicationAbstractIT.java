@@ -776,6 +776,11 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void startActiveLogReplicator() {
+        startActiveLogReplicator(pluginConfigFilePath);
+    }
+
+    public void startActiveLogReplicator(String pluginConfigFilePath) {
+        log.info("Plugin file path: {}", pluginConfigFilePath);
         try {
             if (runProcess) {
                 // Start Log Replication Server on Active Site
@@ -792,6 +797,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void startStandbyLogReplicator() {
+        startStandbyLogReplicator(pluginConfigFilePath);
+    }
+
+    public void startStandbyLogReplicator(String pluginConfigFilePath) {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Active Site
