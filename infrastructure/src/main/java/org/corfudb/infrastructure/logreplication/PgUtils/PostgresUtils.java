@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import com.google.protobuf.Timestamp;
@@ -38,6 +39,8 @@ import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.P
 @Slf4j
 public class PostgresUtils {
 
+    private static final long RETRY_DELAY_MS = 5000;
+
     private PostgresUtils() {}
 
     @Setter
@@ -45,6 +48,28 @@ public class PostgresUtils {
 
     public static String quoteIdentifier(String identifier) {
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
+    public static <T> T retryIndefinitely(Supplier<T> operation, String operationName) {
+        int attempts = 0;
+        while (true) {
+            try {
+                T result = operation.get();
+                if (attempts > 0) {
+                    log.info("{} succeeded after {} attempts", operationName, attempts + 1);
+                }
+                return result;
+            } catch (Exception e) {
+                attempts++;
+                log.warn("{} failed. Attempt {}. Error: {}. Retrying in {} ms...",
+                        operationName, attempts, e.getMessage(), RETRY_DELAY_MS);
+                try {
+                    TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException ie) {
+                    throw new RuntimeException("Interrupted during retry delay", ie);
+                }
+            }
+        }
     }
 
     public static boolean tryExecuteCommand(String sql, PostgresConnector connector) {
@@ -86,7 +111,7 @@ public class PostgresUtils {
                     log.info("Table already exists!!!");
                     successOrExists = true;
                 } else {
-                    log.info("ERROR", e);
+                    log.error("Encountered error in executing command.", e);
                 }
             }
         }
@@ -117,7 +142,7 @@ public class PostgresUtils {
                     log.info("tryExecutePreparedStatementsCommand: Table already exists!");
                     successOrExists = true;
                 } else {
-                    log.info("ERROR", e);
+                    log.info("Encountered error in executing prepared statement command.", e);
                 }
             }
         }
@@ -172,7 +197,7 @@ public class PostgresUtils {
 
             statement.close();
         } catch (SQLException e) {
-            log.info("ERROR", e);
+            log.info("Encountered error while querying.", e);
         }
         return result;
     }
@@ -211,7 +236,7 @@ public class PostgresUtils {
             }
 
         } catch (Exception e) {
-            log.info("Error with query.", e);
+            log.info("Encountered error while querying.", e);
         }
         return result;
     }
@@ -312,28 +337,22 @@ public class PostgresUtils {
     }
 
     public static void dropSubscriptions(List<String> subscriptionsToDrop, PostgresConnector connector) {
-        // TODO (POSTGRES): Add retry logic for failed drops, can also decouple from slot to guarantee
-        //  drop and have service to clean up inactive slots
+        // TODO (Postgres): Can also decouple from slot to guarantee drop and have service
+        //  to clean up inactive slots
 
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};
             String dropQuery = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
-            if (!tryExecutePreparedStatementsCommand(dropQuery, params, connector)) {
-                log.info("Unable to drop subscription: {}", subscription);
-            } else {
-                log.info("Dropped subscription: {}", subscription);
-            }
+            retryIndefinitely(() -> tryExecutePreparedStatementsCommand(dropQuery, params, connector),
+                    String.format("Drop for subscription [%s]", subscription));
         }
     }
 
     public static void truncateTables(List<String> tablesToTruncate, PostgresConnector connector) {
         String truncatePrefix = "TRUNCATE TABLE ";
         for (String table : tablesToTruncate) {
-            if (!tryExecuteCommand(truncatePrefix + table + ";", connector)) {
-                log.info("Unable to truncate table: {}", table);
-            } else {
-                log.info("Truncated table: {}", table);
-            }
+            retryIndefinitely(() -> tryExecuteCommand(truncatePrefix + table + ";", connector),
+                    String.format("Truncate table for table [%s]", table));
         }
     }
 
@@ -344,13 +363,9 @@ public class PostgresUtils {
 
         for (Map<String, Object> row : rolenamesResult) {
             String roleName = row.get("rolname").toString();
-
             for (String table : readOnlyTables) {
-                if (!tryExecuteCommand(String.format(readOnlySql, table, roleName), connector)) {
-                    log.info("Unable to make table readonly: {}", table);
-                } else {
-                    log.info("Made table readonly: {}", table);
-                }
+                retryIndefinitely(() -> tryExecuteCommand(String.format(readOnlySql, table, roleName), connector),
+                        String.format("Make table readonly for table [%s]", table));
             }
         }
     }
@@ -362,13 +377,9 @@ public class PostgresUtils {
 
         for (Map<String, Object> row : rolenamesResult) {
             String roleName = row.get("rolname").toString();
-
             for (String table : writeableTables) {
-                if (!tryExecuteCommand(String.format(writeableSql, table, roleName), connector)) {
-                    log.info("Unable to make table writeable: {}", table);
-                } else {
-                    log.info("Made table writeable: {}", table);
-                }
+                retryIndefinitely(() -> tryExecuteCommand(String.format(writeableSql, table, roleName), connector),
+                        String.format("Make table writeable for table [%s]", table));
             }
         }
     }
@@ -390,11 +401,8 @@ public class PostgresUtils {
     public static void dropPublications(List<String> publicationsToDrop, PostgresConnector connector) {
         String dropPrefix = "DROP PUBLICATION ";
         for (String publication : publicationsToDrop) {
-            if (!tryExecuteCommand(dropPrefix + "\"" +  publication + "\";", connector)) {
-                log.info("Unable to drop publication: {}", publication);
-            } else {
-                log.info("Dropped publication: {}", publication);
-            }
+            retryIndefinitely(() -> tryExecuteCommand(dropPrefix + "\"" +  publication + "\";", connector),
+                    String.format("Drop for publication [%s]", publication));
         }
     }
 

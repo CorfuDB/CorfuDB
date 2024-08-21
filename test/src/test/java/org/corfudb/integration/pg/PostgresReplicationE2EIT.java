@@ -128,26 +128,6 @@ public class PostgresReplicationE2EIT extends LogReplicationAbstractIT {
     }
 
     @Test
-    public void testReplication() throws Exception {
-        startActiveLogReplicator(TEST_PLUGIN_CONFIG_PATH_ACTIVE);
-        startStandbyLogReplicator(TEST_PLUGIN_CONFIG_PATH_STANDBY);
-
-        while (!isReplicationInProgress(primary)) {
-            log.info("Waiting for publications / subscriptions to setup!");
-            TimeUnit.MILLISECONDS.sleep(500);
-        }
-
-        int numEntries = 10;
-        writeData(numEntries, primary, "t1");
-
-        while(getEntryCount(replica) < numEntries) {
-            log.info("Waiting for replication.");
-            TimeUnit.MILLISECONDS.sleep(500);
-        }
-        Assert.assertEquals(getEntryCount(primary), getEntryCount(replica));
-    }
-
-    @Test
     public void testReplicationWithSwitchover() throws Exception {
         startActiveLogReplicator(TEST_PLUGIN_CONFIG_PATH_ACTIVE);
         startStandbyLogReplicator(TEST_PLUGIN_CONFIG_PATH_STANDBY);

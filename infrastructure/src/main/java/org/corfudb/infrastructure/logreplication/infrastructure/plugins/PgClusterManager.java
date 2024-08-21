@@ -318,14 +318,15 @@ public class PgClusterManager extends DefaultClusterManager {
             statement.close();
 
             if (!result.isEmpty()) {
-                Map<String, Object> row = result.get(0);
-                if(!processedTopologyIds.contains((String) row.get("id"))) {
-                    processedTopologyIds.add((String) row.get("id"));
-                    String configKey = (String) row.get("config_key");
-                    String configValue = (String) row.get("config_value");
+                for (Map<String, Object> row : result) {
+                    if(!processedTopologyIds.contains((String) row.get("id"))) {
+                        processedTopologyIds.add((String) row.get("id"));
+                        String configKey = (String) row.get("config_key");
+                        String configValue = (String) row.get("config_value");
 
-                    if ("TOPOLOGY_CHANGE".equals(configKey)) {
-                        applyTopologyChange(configValue);
+                        if ("TOPOLOGY_CHANGE".equals(configKey)) {
+                            applyTopologyChange(configValue);
+                        }
                     }
                 }
             }
