@@ -267,7 +267,7 @@ public class PostgresUtils {
     }
 
     public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica) {
-        PostgresConnector containerToQuery = replica;
+        PostgresConnector containerToQuery = primary;
         if (isTestEnvironment) {
             if (Objects.equals(primary.address, ACTIVE_CONTAINER_VIRTUAL_HOST)) {
                 containerToQuery = new PostgresConnector(PG_CONTAINER_PHYSICAL_HOST,
