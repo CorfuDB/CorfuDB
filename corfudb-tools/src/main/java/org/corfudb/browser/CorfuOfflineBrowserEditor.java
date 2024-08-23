@@ -20,6 +20,7 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
 import javax.annotation.Nonnull;
@@ -394,8 +395,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         public CorfuTableDescriptor(String namespace, String tableName) {
             this.namespace = namespace;
             this.tableName = tableName;
-            String name = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
-            streamID = CorfuRuntime.getStreamID(name);
+            streamID = FullyQualifiedTableName.streamId(namespace, tableName).getId();
             checkpointID = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
         }
 

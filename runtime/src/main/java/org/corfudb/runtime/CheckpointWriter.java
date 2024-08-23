@@ -15,11 +15,13 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -208,11 +210,13 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
 
     private Set<UUID> discoverTableTags(UUID stream) {
         Set<UUID> tags = new HashSet<>();
-        Set<CorfuStoreMetadata.TableName> names = ((DynamicProtobufSerializer) serializer).getCachedRegistryTable().keySet();
-        for (CorfuStoreMetadata.TableName tableName : names) {
-            String qName = TableRegistry.getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName());
-            if (CorfuRuntime.getStreamID(qName).equals(stream)) {
-                ((DynamicProtobufSerializer) serializer)
+        DynamicProtobufSerializer dynamicSerializer = (DynamicProtobufSerializer) serializer;
+        Set<TableName> names = dynamicSerializer.getCachedRegistryTable().keySet();
+
+        for (TableName tableName : names) {
+            UUID tableId = FullyQualifiedTableName.streamId(tableName).getId();
+            if (tableId.equals(stream)) {
+                dynamicSerializer
                         .getCachedRegistryTable()
                         .get(tableName)
                         .getMetadata().getTableOptions().getStreamTagList()
@@ -240,7 +244,7 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
 
         streamsToAdvance.add(streamId);
         TokenResponse writeToken = rt.getSequencerView()
-                .next(streamsToAdvance.toArray(new UUID[streamsToAdvance.size()]));
+                .next(streamsToAdvance.toArray(new UUID[0]));
         LogData logData = new LogData(DataType.HOLE);
         rt.getAddressSpaceView().write(writeToken, logData, CacheOption.WRITE_AROUND);
         return writeToken.getToken();
@@ -251,7 +255,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
      *  <p>Corfu client transaction management, if desired, is the
      *  caller's responsibility.</p>
      *
-     * @return Global log address of the START record.
      */
     public void startCheckpoint(Token txnSnapshot) {
         long vloVersion = txnSnapshot.getSequence();
@@ -392,8 +395,6 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
      *
      *  <p>Corfu client transaction management, if desired, is the
      *  caller's responsibility.</p>
-     *
-     * @return Global log address of the END record.
      */
     public void finishCheckpoint() {
         LocalDateTime endTime = LocalDateTime.now();

@@ -4,6 +4,8 @@ import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
+import org.corfudb.runtime.view.TableRegistry.TableDescriptor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -14,7 +16,7 @@ import java.util.List;
 /**
  * CorfuStoreShim is a thin layer over CorfuStore that provides certain metadata management
  * that carry business logic specific to verticals.
- *
+ * <p>
  * Created by hisundar on 2020-09-16
  */
 public class CorfuStoreShim {
@@ -42,15 +44,16 @@ public class CorfuStoreShim {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull String namespace,
-                             @Nonnull String tableName,
-                             @Nonnull Class<K> kClass,
-                             @Nonnull Class<V> vClass,
-                             @Nullable Class<M> mClass,
-                             @Nonnull TableOptions tableOptions)
+    Table<K, V, M> openTable(
+            @Nonnull String namespace, @Nonnull String tableName,
+            @Nonnull Class<K> kClass, @Nonnull Class<V> vClass,
+            @Nullable Class<M> mClass, @Nonnull TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return corfuStore.openTable(namespace, tableName, kClass, vClass, mClass,
-                TableOptions.fromProtoSchema(vClass, tableOptions));
+        TableOptions tableOpts = TableOptions.fromProtoSchema(vClass, tableOptions);
+        return corfuStore.openTable(
+                FullyQualifiedTableName.build(namespace, tableName),
+                TableDescriptor.build(kClass, vClass, mClass, tableOpts)
+        );
     }
 
     /**
@@ -64,7 +67,7 @@ public class CorfuStoreShim {
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> getTable(@Nonnull String namespace, @Nonnull String tableName) {
-        return corfuStore.getTable(namespace, tableName);
+        return corfuStore.getTable(FullyQualifiedTableName.build(namespace, tableName));
     }
 
     /**
@@ -76,17 +79,12 @@ public class CorfuStoreShim {
      * @param vClass       Class of the Queue's record Model.
      * @param tableOptions Table options.
      * @return Table instance.
-     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
-     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
-     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
      */
     @Nonnull
     public <V extends Message>
-    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(@Nonnull String namespace,
-                                                                        @Nonnull String queueName,
-                                                                        @Nonnull Class<V> vClass,
-                                                                        @Nonnull TableOptions tableOptions)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(
+            @Nonnull String namespace, @Nonnull String queueName,
+            @Nonnull Class<V> vClass, @Nonnull TableOptions tableOptions) {
         return corfuStore.openQueue(namespace, queueName, vClass, tableOptions);
     }
 

@@ -60,7 +60,7 @@ public class SnowflakeGuidGenerator implements OrderedGuidGenerator {
     public UUID nextUUID() {
         long currentTime = System.currentTimeMillis();
         long counter = this.sequence.incrementAndGet();
-        counter |= node << NODE_SHIFT_UUID;
+        counter |= (long) node << NODE_SHIFT_UUID;
         return new UUID(currentTime, counter);
     }
 }

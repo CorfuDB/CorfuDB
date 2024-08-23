@@ -1,7 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
@@ -39,7 +38,7 @@ import static com.google.common.base.Preconditions.checkState;
  * Instead of a dequeue() this Queue supports a <b>remove()</b> which accepts the id of the element.
  * Entries cannot be modified in-place (or will lose ordering) but can be removed from anywhere
  * from the persisted queue.
- *
+ * <p>
  * Created by hisundar on 5/8/19.
  *
  */
@@ -53,8 +52,9 @@ public class CorfuQueue {
 
     @VisibleForTesting
     CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer) {
-        corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<PersistentCorfuTable<CorfuRecordId, ByteString>>() {})
+        corfuTable = runtime.getObjectsView()
+                .build()
+                .setTypeToken(PersistentCorfuTable.<CorfuRecordId, ByteString>getTypeToken())
                 .setStreamName(streamName)
                 .setSerializer(serializer)
                 .open();

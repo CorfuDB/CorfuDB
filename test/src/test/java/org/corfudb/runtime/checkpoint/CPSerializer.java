@@ -8,6 +8,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,6 +25,11 @@ public class CPSerializer implements ISerializer {
 
     private final byte type;
 
+    public CPSerializer() {
+        this.type = SerializerType.CHECKPOINT.toByte();
+    }
+
+    @Deprecated
     public CPSerializer(byte type) {
         this.type = type;
     }

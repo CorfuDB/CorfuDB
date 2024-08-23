@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -92,7 +93,8 @@ public class LogReplicationLogicalGroupClient {
                 .build();
 
         try {
-            this.replicationRegistrationTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
+            var tableName = FullyQualifiedTableName.build(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME);
+            this.replicationRegistrationTable = corfuStore.getTable(tableName);
         } catch (NoSuchElementException | IllegalArgumentException e) {
             log.warn("Failed getTable operation, opening table.", e);
             this.replicationRegistrationTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_REGISTRATION_TABLE_NAME,
@@ -103,7 +105,8 @@ public class LogReplicationLogicalGroupClient {
         }
 
         try {
-            this.sourceMetadataTable = corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
+            var tableName = FullyQualifiedTableName.build(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME);
+            this.sourceMetadataTable = corfuStore.getTable(tableName);
         } catch (NoSuchElementException | IllegalArgumentException e) {
             log.warn("Failed getTable operation, opening table.", e);
             this.sourceMetadataTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LR_MODEL_METADATA_TABLE_NAME,
@@ -124,7 +127,9 @@ public class LogReplicationLogicalGroupClient {
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-                    ClientRegistrationInfo clientRegistrationInfo = txn.getRecord(replicationRegistrationTable, clientKey).getPayload();
+                    ClientRegistrationInfo clientRegistrationInfo = txn
+                            .getRecord(replicationRegistrationTable, clientKey)
+                            .getPayload();
 
                     if (clientRegistrationInfo != null) {
                         log.warn(String.format("Client already registered.\n--- ClientRegistrationId ---\n%s" +

@@ -1,11 +1,10 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Definition of the fully qualified Corfu Store Table initialized with default protobuf instances.
@@ -20,24 +19,16 @@ import javax.annotation.Nullable;
  */
 
 @EqualsAndHashCode
+@AllArgsConstructor
+@Getter
 public class TableSchema<K extends Message, V extends Message, M extends Message> {
-    @Getter
     private final String tableName;
 
-    @Getter
     private final Class<K> keyClass;
-
-    @Getter
     private final Class<V> payloadClass;
-
-    @Getter
     private final Class<M> metadataClass;
 
-    public TableSchema(@Nonnull String tableName, @Nonnull Class<K> keyClass,
-                       @Nonnull Class<V> payloadClass, @Nullable Class<M> metadataClass) {
-        this.tableName = tableName;
-        this.keyClass = keyClass;
-        this.payloadClass = payloadClass;
-        this.metadataClass = metadataClass;
+    public String getTableName() {
+        return this.tableName;
     }
 }

@@ -4,6 +4,7 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuQueue;
+import org.corfudb.util.serializer.Serializers.SerializerType;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -17,6 +18,11 @@ public class CorfuQueueSerializer implements ISerializer {
 
     private final byte type;
 
+    public CorfuQueueSerializer() {
+        this.type = SerializerType.QUEUE.toByte();
+    }
+
+    @Deprecated
     public CorfuQueueSerializer(byte type) {
         this.type = type;
     }

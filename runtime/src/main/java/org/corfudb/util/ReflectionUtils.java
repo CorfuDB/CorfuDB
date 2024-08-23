@@ -89,25 +89,22 @@ public class ReflectionUtils {
      * @param args           Constructor arguments.
      * @param <T>            Type
      * @return instantiated  wrapper class.
-     *
-     * @throws IllegalAccessException should not be thrown
-     * @throws InvocationTargetException should not be thrown
-     * @throws InstantiationException should not be thrown
      */
-    public static <T> Object findMatchingConstructor(
-            @NonNull Constructor[] constructors, @NonNull Object[] args)
-            throws IllegalAccessException, InvocationTargetException, InstantiationException {
+    public static <T> T findMatchingConstructor(Constructor<?>[] constructors, Object[] args) {
+
         // Figure out the argument types.
-        final List<Class> argTypes = Arrays.stream(args).map(Object::getClass)
+        final List<Class<?>> argTypes = Arrays.stream(args)
+                .map(Object::getClass)
                 .collect(Collectors.toList());
+
         // Filter out the constructors that do not have the same arity.
-        final List<Constructor> constructorCandidates = Arrays.stream(constructors)
+        final List<Constructor<?>> constructorCandidates = Arrays.stream(constructors)
                 .filter(constructor -> constructor.getParameterTypes().length == args.length)
                 .collect(Collectors.toList());
 
-        Map<Integer, Constructor> matchingConstructors = new HashMap<>();
-        for (Constructor candidate: constructorCandidates) {
-            final List<Class> parameterTypes = Arrays.asList(candidate.getParameterTypes());
+        Map<Integer, Constructor<?>> matchingConstructors = new HashMap<>();
+        for (Constructor<?> candidate: constructorCandidates) {
+            final List<Class<?>> parameterTypes = Arrays.asList(candidate.getParameterTypes());
             final List<Integer> resolutionList = new LinkedList<>();
             // Compare each argument type with the corresponding constructor parameter type.
             for (int idx = 0; idx < parameterTypes.size(); idx++) {
@@ -127,16 +124,25 @@ public class ReflectionUtils {
 
             // Put all matching constructors in a map in form of:
             // (L1 Norm (Distance) -> Constructor)
-            matchingConstructors.put(
-                    resolutionList.stream().reduce(0, Integer::sum),
-                    candidate);
+            Integer key = resolutionList.stream().reduce(0, Integer::sum);
+            matchingConstructors.put(key, candidate);
         }
 
         // Instantiate the wrapper object with a constructor that has the lowest L1 norm.
-        return matchingConstructors.entrySet().stream()
-                .min(Map.Entry.comparingByKey()).orElseThrow(
-                        () -> new IllegalStateException("No matching constructors found."))
-                .getValue().newInstance(args);
+        Object instance;
+        try {
+            instance = matchingConstructors
+                    .entrySet()
+                    .stream()
+                    .min(Map.Entry.comparingByKey())
+                    .orElseThrow(() -> new IllegalStateException("No matching constructors found."))
+                    .getValue()
+                    .newInstance(args);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalArgumentException(e);
+        }
+
+        return org.corfudb.common.util.ClassUtils.cast(instance);
     }
 
     /**

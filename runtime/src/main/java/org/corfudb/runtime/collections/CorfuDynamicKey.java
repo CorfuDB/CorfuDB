@@ -25,8 +25,7 @@ public class CorfuDynamicKey {
      */
     private final CorfuDynamicMessage key;
 
-    public CorfuDynamicKey(String keyTypeUrl,
-                           DynamicMessage key) {
+    public CorfuDynamicKey(String keyTypeUrl, DynamicMessage key) {
         this.keyTypeUrl = keyTypeUrl;
         this.key = new CorfuDynamicMessage(key);
     }

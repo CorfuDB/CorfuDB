@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
@@ -55,7 +56,6 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MER
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REGISTRY_TABLE_ID;
 import static org.corfudb.runtime.view.ObjectsView.LOG_REPLICATOR_STREAM_INFO;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
-import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 
 /**
  * Handle creation and maintenance of the Corfu table/s containing names of tables
@@ -202,16 +202,19 @@ public class LogReplicationConfigManager {
         // Get streams to replicate from registry table and add to streamNameSet.
         registryTableEntries.stream()
                 .filter(entry -> entry.getValue().getMetadata().getTableOptions().getIsFederated())
-                .map(entry -> getFullyQualifiedTableName(entry.getKey()))
+                .map(entry -> FullyQualifiedTableName.build(entry.getKey()).toFqdn())
                 .forEachOrdered(streamNameSet::add);
         // Add registryTable to the streams
-        String registryTable = getFullyQualifiedTableName(
-                CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME);
+        String registryTable = FullyQualifiedTableName
+                .build(CORFU_SYSTEM_NAMESPACE, TableRegistry.REGISTRY_TABLE_NAME)
+                .toFqdn();
         streamNameSet.add(registryTable);
 
         // Add protoBufDescriptorTable to the streams
-        String protoTable = getFullyQualifiedTableName(
-                CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME);
+        String protoTable = FullyQualifiedTableName
+                .build(CORFU_SYSTEM_NAMESPACE, TableRegistry.PROTOBUF_DESCRIPTOR_TABLE_NAME)
+                .toFqdn();
+
         streamNameSet.add(protoTable);
         return streamNameSet;
     }
@@ -231,7 +234,7 @@ public class LogReplicationConfigManager {
         registryTableEntries.forEach(entry -> {
             TableName tableName = entry.getKey();
             CorfuRecord<TableDescriptors, TableMetadata> tableRecord = entry.getValue();
-            UUID streamId = CorfuRuntime.getStreamID(getFullyQualifiedTableName(tableName));
+            UUID streamId = FullyQualifiedTableName.streamId(tableName).getId();
             streamToTagsMap.putIfAbsent(streamId, new ArrayList<>());
             streamToTagsMap.get(streamId).addAll(
                     tableRecord.getMetadata()
@@ -263,7 +266,7 @@ public class LogReplicationConfigManager {
         // Get streams to replicate from registry table and add to streamNameSet.
         registryTableEntries.stream()
                 .filter(entry -> !entry.getValue().getMetadata().getTableOptions().getIsFederated())
-                .map(entry -> CorfuRuntime.getStreamID(getFullyQualifiedTableName(entry.getKey())))
+                .map(entry -> FullyQualifiedTableName.streamId(entry.getKey()).getId())
                 .filter(streamId -> !MERGE_ONLY_STREAMS.contains(streamId))
                 .forEachOrdered(streamsToDrop::add);
 

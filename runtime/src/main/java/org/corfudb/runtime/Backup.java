@@ -10,7 +10,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.exceptions.BackupRestoreException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.TableRegistry.FullyQualifiedTableName;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.Nonnull;
@@ -33,9 +33,9 @@ import java.util.stream.Stream;
 
 /**
  * Provides Corfu native backup support.
- *
+ * <p>
  * Backup a selective set of tables specified by stream id or UFO table option.
- *
+ * <p>
  * Steps:
  * 1. Open the selective set of tables as OpaqueStreams
  * 2. Write each table to individual temporary file
@@ -92,7 +92,7 @@ public class Backup {
     /**
      * Start the backup process
      *
-     * @throws IOException
+     * @throws IOException io exception
      */
     public void start() throws IOException {
         log.info("started corfu backup");
@@ -101,7 +101,7 @@ public class Backup {
                 .getRegistryTable()
                 .entryStream()
                 .filter(this::filterTable)
-                .map(table -> CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(table.getKey())))
+                .map(table -> FullyQualifiedTableName.streamId(table.getKey()).getId())
                 .collect(Collectors.toList()));
 
         if (streamsToBackUp.isEmpty()) {
@@ -141,7 +141,7 @@ public class Backup {
     /**
      * All temp backupTable files will be placed under BACKUP_DIR_PATH directory.
      *
-     * @throws IOException
+     * @throws IOException io exception
      */
     private void backup() throws IOException {
         long startTime = System.currentTimeMillis();
@@ -162,13 +162,13 @@ public class Backup {
 
     /**
      * Back up a single table
-     *
+     * <p>
      * If the log is trimmed at timestamp, the backupTable will fail.
      * If the table has no data to be backed up, it will create a file with empty contents.
      *
      * @param filePath   - the path of the backup file
      * @param uuid       - the uuid of the table which is being backed up
-     * @throws IOException
+     * @throws IOException io exception
      */
     private void backupTable(Path filePath, UUID uuid) throws IOException {
         long startTime = System.currentTimeMillis();
@@ -218,7 +218,7 @@ public class Backup {
     /**
      * All generated files under tmp directory will be composed into one tar file
      *
-     * @throws IOException
+     * @throws IOException io exception
      */
     private void generateTarFile() throws IOException {
         File folder = new File(backupTempDirPath);
@@ -248,7 +248,7 @@ public class Backup {
      *
      * @param tableFile    - the table backup file
      * @param tarOutput    - the backup tar file which contains all tables
-     * @throws IOException
+     * @throws IOException io exception
      */
     private void addToTarFile(File tableFile,TarArchiveOutputStream tarOutput) throws IOException {
         try (FileInputStream fileInput = new FileInputStream(tableFile)) {
@@ -276,8 +276,8 @@ public class Backup {
     private Map<UUID, String> getStreamIdToTableNameMap() {
         Map<UUID, String> streamIdToTableNameMap = new HashMap<>();
         runtime.getTableRegistry().listTables().forEach(tableName -> {
-                String name = TableRegistry.getFullyQualifiedTableName(tableName);
-                streamIdToTableNameMap.put(CorfuRuntime.getStreamID(name), name);
+                FullyQualifiedTableName name = FullyQualifiedTableName.build(tableName);
+                streamIdToTableNameMap.put(name.toStreamId().getId(), name.toFqdn());
         });
         return streamIdToTableNameMap;
     }

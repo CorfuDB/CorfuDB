@@ -124,18 +124,18 @@ public class MultiVersionObject<S extends SnapshotGenerator<S> & ConsistencyView
      *                      retrieve versions for this object.
      * @param newObjectFn   A function passed to instantiate a new instance of this object.
      * @param smrStream     The stream View backing this object.
-     * @param wrapperObject The wrapper over the actual object.
+     * @param smrInstance The wrapper over the actual object.
      */
     public MultiVersionObject(
             @Nonnull CorfuRuntime corfuRuntime, @Nonnull Supplier<S> newObjectFn,
-            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR wrapperObject,
+            @Nonnull StreamViewSMRAdapter smrStream, @Nonnull ICorfuSMR<?> smrInstance,
             @Nonnull MVOCache<S> mvoCache, @Nonnull ObjectOpenOption objectOpenOption) {
 
         this.mvoCache = mvoCache;
         this.objectOpenOption = objectOpenOption;
 
         this.smrStream = smrStream;
-        this.upcallTargetMap = wrapperObject.getSMRUpcallMap();
+        this.upcallTargetMap = smrInstance.getSMRUpcallMap();
         this.newObjectFn = newObjectFn;
 
         this.lock = new StampedLock();
