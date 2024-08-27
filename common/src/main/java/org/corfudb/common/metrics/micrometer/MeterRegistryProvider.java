@@ -141,6 +141,9 @@ public class MeterRegistryProvider {
                     log.info("Registering provider: {}", registryProvider);
                     provider = Optional.of(registryProvider);
                     final Map<String, String> registryMetadata = loadRegistryData();
+                    String classPath = System.getProperty("java.class.path");
+                    log.info("Classpath: {}", classPath);
+                    log.info("Registry metadata: {}", registryMetadata);
                     MeterRegistry registry = registryProvider.provideRegistry(registryMetadata);
                     addToCompositeRegistry(() -> Optional.of(registry));
                 } catch (Throwable exception) {
