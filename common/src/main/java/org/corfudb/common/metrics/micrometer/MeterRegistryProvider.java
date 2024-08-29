@@ -98,6 +98,7 @@ public class MeterRegistryProvider {
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, externalMetricsSuppliers);
                 registry.config().commonTags("id", identifier);
+                registry.config().clock()
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
                 return ret;
@@ -141,10 +142,9 @@ public class MeterRegistryProvider {
                     log.info("Registering provider: {}", registryProvider);
                     provider = Optional.of(registryProvider);
                     final Map<String, String> registryMetadata = loadRegistryData();
-                    String classPath = System.getProperty("java.class.path");
-                    log.info("Classpath: {}", classPath);
                     log.info("Registry metadata: {}", registryMetadata);
                     MeterRegistry registry = registryProvider.provideRegistry(registryMetadata);
+                    id.ifPresent(s -> registry.config().commonTags("id", s));
                     addToCompositeRegistry(() -> Optional.of(registry));
                 } catch (Throwable exception) {
                     log.error("Problems registering a registry", exception);
