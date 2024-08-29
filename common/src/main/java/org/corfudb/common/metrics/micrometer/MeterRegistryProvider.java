@@ -98,7 +98,6 @@ public class MeterRegistryProvider {
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, externalMetricsSuppliers);
                 registry.config().commonTags("id", identifier);
-                registry.config().clock()
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
                 return ret;
