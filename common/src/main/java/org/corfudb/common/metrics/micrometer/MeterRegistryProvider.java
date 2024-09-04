@@ -133,21 +133,27 @@ public class MeterRegistryProvider {
         }
 
         private static synchronized void registerProvidedRegistries() {
-            RegistryLoader loader = new RegistryLoader();
-            Iterator<RegistryProvider> registries = loader.getRegistries();
-            while (registries.hasNext()) {
-                try {
-                    RegistryProvider registryProvider = registries.next();
-                    log.info("Registering provider: {}", registryProvider);
-                    provider = Optional.of(registryProvider);
-                    final Map<String, String> registryMetadata = loadRegistryData();
-                    log.info("Registry metadata: {}", registryMetadata);
-                    MeterRegistry registry = registryProvider.provideRegistry(registryMetadata);
-                    id.ifPresent(s -> registry.config().commonTags("id", s));
-                    addToCompositeRegistry(() -> Optional.of(registry));
-                } catch (Throwable exception) {
-                    log.error("Problems registering a registry", exception);
+            final Map<String, String> registryMetadata = loadRegistryData();
+            if (!registryMetadata.isEmpty()) {
+                log.info("Registry metadata: {}", registryMetadata);
+                RegistryLoader loader = new RegistryLoader();
+                Iterator<RegistryProvider> registries = loader.getRegistries();
+                while (registries.hasNext()) {
+                    try {
+                        RegistryProvider registryProvider = registries.next();
+                        log.info("Registering provider: {}", registryProvider);
+                        provider = Optional.of(registryProvider);
+                        MeterRegistry registry = registryProvider.provideRegistry(registryMetadata);
+                        id.ifPresent(s -> registry.config().commonTags("id", s));
+                        addToCompositeRegistry(() -> Optional.of(registry));
+                    }
+                    catch (Throwable exception) {
+                        log.error("Problems registering a registry", exception);
+                    }
                 }
+            }
+            else {
+                log.info("Registry metadata is empty. Skipping.");
             }
         }
 
