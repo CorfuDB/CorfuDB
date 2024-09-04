@@ -143,6 +143,9 @@ public class MeterRegistryProvider {
                     final Map<String, String> registryMetadata = loadRegistryData();
                     log.info("Registry metadata: {}", registryMetadata);
                     Optional<MeterRegistry> registry = registryProvider.provideRegistry(registryMetadata);
+                    if (!registry.isPresent()) {
+                        log.warn("Custom registry was not provided.");
+                    }
                     id.ifPresent(s -> registry.ifPresent(r -> r.config().commonTags("id", s)));
                     addToCompositeRegistry(() -> registry);
                 } catch (Throwable exception) {
