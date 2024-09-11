@@ -19,7 +19,7 @@ public class PostgresReplicationConfig extends ReplicationConfig {
      */
     public PostgresReplicationConfig(LogReplicationConfigManager configManager, PostgresReplicationConnectionConfig config) {
         this.configManager = configManager;
-        this.streamsToReplicatePath = config.getTABLES_TO_REPLICATE_PATH();
+        this.streamsToReplicatePath = config.getTablesToReplicatePath();
         syncWithRegistry();
     }
 

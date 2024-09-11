@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.isTestEnvironment;
+
 /**
  * This class is an abstraction for all Log Replication plugin's configurations.
  *
@@ -36,6 +38,7 @@ public class LogReplicationPluginConfig {
 
     // Topology Manager Plugin
     public static final String DEFAULT_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
+    public static final String PG_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager";
 
     // Snapshot Sync Plugin
     public static final String DEFAULT_SNAPSHOT_SYNC_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin";
@@ -105,7 +108,7 @@ public class LogReplicationPluginConfig {
             this.snapshotSyncPluginCanonicalName = DEFAULT_SNAPSHOT_SYNC_CLASSNAME;
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
-            this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
+            this.topologyManagerAdapterName = isTestEnvironment ? PG_CLUSTER_MANAGER_CLASSNAME : DEFAULT_CLUSTER_MANAGER_CLASSNAME;
 
             this.nodeIdFilePath = null;
         }
