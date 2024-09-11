@@ -4,24 +4,24 @@ import lombok.ToString;
 
 @ToString
 public class PostgresConnector {
-    public final String ADDRESS;
-    public final String PORT;
+    public final String address;
+    public final String port;
 
-    public final String URL;
+    public final String url;
 
-    public final String USER;
+    public final String user;
 
-    public final String PASSWORD;
+    public final String password;
 
-    public final String DATABASE_NAME;
+    public final String databaseName;
 
     public PostgresConnector(String address, String port, String user, String password, String databaseName) {
-        this.ADDRESS = address;
-        this.PORT = port;
-        this.URL = getConnectionString(address, port, databaseName);
-        this.USER = user;
-        this.PASSWORD = password;
-        this.DATABASE_NAME = databaseName;
+        this.address = address;
+        this.port = port;
+        this.url = getConnectionString(address, port, databaseName);
+        this.user = user;
+        this.password = password;
+        this.databaseName = databaseName;
     }
 
     private static String getConnectionString(String address, String port, String databaseName) {
