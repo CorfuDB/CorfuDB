@@ -240,7 +240,6 @@ public class HealthMonitorTest {
                         .reason(OVERALL_STATUS_DOWN)
                         .status(DOWN)
                         .build();
-        System.out.println(expectedReport.asJson());
 
         healthReport = HealthMonitor.generateHealthReport();
         assertThat(healthReport).isEqualTo(expectedReport);
