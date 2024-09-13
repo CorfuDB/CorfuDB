@@ -81,7 +81,7 @@ import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.ge
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesReadOnly;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.makeTablesWriteable;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.retryIndefinitely;
-import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.truncateTables;
+import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.clearTables;
 import static org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils.tryExecuteCommand;
 import static org.corfudb.infrastructure.logreplication.PostgresReplicationConnectionConfig.isPostgres;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.PG_CONTAINER_PHYSICAL_HOST;
@@ -400,7 +400,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Publications successfully created on active postgres!");
             } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
                 dropAllSubscriptions(connector);
-                truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                clearTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                 makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                 log.info("Cleared tables to be replicated!");
 
@@ -774,7 +774,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     dropPublications(getAllPublications(connector), connector);
 
                     // Clear tables
-                    truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                    clearTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                     makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
 
                     publicationsNotAvailable = true;
@@ -796,7 +796,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     // Drop all publications if any
                     dropPublications(getAllPublications(connector), connector);
 
-                    truncateTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
+                    clearTables(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                     makeTablesReadOnly(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
 
                     publicationsNotAvailable = true;
