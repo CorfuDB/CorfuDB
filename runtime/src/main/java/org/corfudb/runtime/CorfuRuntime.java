@@ -436,6 +436,11 @@ public class CorfuRuntime {
          */
         private int streamingSchedulerPollThreshold = 5;
 
+        /**
+         * Allow the caller to specify a different source/build number to identify protobuf upgrades
+         */
+        long sourceCodeVersion = GitRepositoryState.getCorfuSourceCodeVersion();
+
         public static CorfuRuntimeParametersBuilder builder() {
             return new CorfuRuntimeParametersBuilder();
         }
@@ -476,6 +481,7 @@ public class CorfuRuntime {
             private Duration streamingPollPeriod = Duration.ofMillis(50);
             private int streamingSchedulerPollBatchSize = 25;
             private int streamingSchedulerPollThreshold = 5;
+            private long sourceCodeVersion = GitRepositoryState.getCorfuSourceCodeVersion();
             private boolean cacheWrites = true;
             private String clientName = "CorfuClient";
             private long checkpointTriggerFreqMillis = 0;
@@ -497,6 +503,11 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParametersBuilder streamingSchedulerPollThreshold(int streamingSchedulerPollThreshold) {
                 this.streamingSchedulerPollThreshold = streamingSchedulerPollThreshold;
+                return this;
+            }
+
+            public CorfuRuntimeParametersBuilder sourceCodeVersion(long sourceCodeVersion) {
+                this.sourceCodeVersion = sourceCodeVersion;
                 return this;
             }
 
@@ -859,6 +870,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setStreamingPollPeriod(streamingPollPeriod);
                 corfuRuntimeParameters.setStreamingSchedulerPollBatchSize(streamingSchedulerPollBatchSize);
                 corfuRuntimeParameters.setStreamingSchedulerPollThreshold(streamingSchedulerPollThreshold);
+                corfuRuntimeParameters.setSourceCodeVersion(sourceCodeVersion);
                 corfuRuntimeParameters.setCacheWrites(cacheWrites);
                 corfuRuntimeParameters.setClientName(clientName);
                 corfuRuntimeParameters.setCheckpointTriggerFreqMillis(checkpointTriggerFreqMillis);
