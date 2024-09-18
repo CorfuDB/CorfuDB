@@ -68,7 +68,7 @@ jobs:
         run: ./gradlew clean test -Dtags=version-compatibility
 
       - name: Upload compatibility test logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: compatibility-test-logs
           retention-days: 3
