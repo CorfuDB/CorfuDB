@@ -309,23 +309,23 @@ public class SourceForwardingDataSender implements DataSender {
         return false;
     }
 
-    /** Change the msg such that Sink ignores the msg. Used to test that the ACK received is not for this msg,
+    /** Change the msg such that Sink ignores the msg (previousTimestamp is decremented by 1, which means no new
+     * messages to apply). Used to test that the ACK received is not for this msg,
      * i.e., the lastProcessedTs on Sink doesn't change when the msg is ignored.
      **/
     private LogReplicationEntryMsg changeMsgMetadata(LogReplicationEntryMsg message) {
         LogReplicationEntryMsg newMessage = LogReplicationEntryMsg.newBuilder().mergeFrom(message)
                 .setMetadata(LogReplication.LogReplicationEntryMetadataMsg.newBuilder().mergeFrom(message.getMetadata())
-                        .setTimestamp(message.getMetadata().getTimestamp() + 1)
                         .setPreviousTimestamp(message.getMetadata().getPreviousTimestamp() - 1)
                         .build())
                 .build();
 
         assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
                 .getLastProcessedLogEntryBatchTimestamp())
-                .isGreaterThanOrEqualTo(newMessage.getMetadata().getPreviousTimestamp());
+                .isGreaterThan(newMessage.getMetadata().getPreviousTimestamp());
         assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
                 .getLastProcessedLogEntryBatchTimestamp())
-                .isLessThan(newMessage.getMetadata().getTimestamp());
+                .isEqualTo(newMessage.getMetadata().getTimestamp());
 
         lastAckDropped = Long.MAX_VALUE;
 
