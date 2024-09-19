@@ -158,7 +158,7 @@ public class PostgresUtilsTest {
             PostgresUtils.dropAllPublications(primary);
 
             // "Clear" tables on the primary
-            PostgresUtils.truncateTables(new ArrayList<>(tablesToReplicate), primary);
+            PostgresUtils.clearTables(new ArrayList<>(tablesToReplicate), primary);
 
             // Create subscription on primary, "full sync" and start streaming from the replica
             tryExecuteCommand(PostgresUtils.createSubscriptionCmd(replicaContainer, primaryContainer, replica), primary);

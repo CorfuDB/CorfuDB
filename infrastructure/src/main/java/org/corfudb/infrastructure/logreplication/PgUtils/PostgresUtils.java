@@ -348,11 +348,11 @@ public class PostgresUtils {
         }
     }
 
-    public static void truncateTables(List<String> tablesToTruncate, PostgresConnector connector) {
-        String truncatePrefix = "TRUNCATE TABLE ";
+    public static void clearTables(List<String> tablesToTruncate, PostgresConnector connector) {
+        String truncatePrefix = "DELETE FROM ";
         for (String table : tablesToTruncate) {
             retryIndefinitely(() -> tryExecuteCommand(truncatePrefix + table + ";", connector),
-                    String.format("Truncate table for table [%s]", table));
+                    String.format("Delete from table for table [%s]", table));
         }
     }
 
@@ -390,7 +390,10 @@ public class PostgresUtils {
 
         for (Map<String, Object> row : executeQuery(getSubQuery, connector)) {
             String pubname = row.get("pubname").toString();
-            if (pubname != null && !pubname.isEmpty()) {
+
+            // TODO (Postgres): filtering out non replication pubs manually, can filter for just replication
+            // pubs once naming is standardized.
+            if (pubname != null && !pubname.isEmpty() && !pubname.contains("dbz")) {
                 publicationNames.add(pubname);
             }
         }
