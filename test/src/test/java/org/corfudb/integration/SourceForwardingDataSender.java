@@ -164,7 +164,8 @@ public class SourceForwardingDataSender implements DataSender {
                 ack = destinationLogReplicationManager.receive(message);
                 assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
             }
-            // test negative scenario: when a msg is ignored by Sink, the ACK received should not be for the ignored msg
+            // test negative scenario: send a msg with lower 'previousTimestamp' and no new data to apply.  Verify
+            // that last timestamp in the ACK remains the same.
             ack = destinationLogReplicationManager.receive(changeMsgMetadata(message));
             assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
         } else {
@@ -309,13 +310,14 @@ public class SourceForwardingDataSender implements DataSender {
         return false;
     }
 
-    /** Change the msg such that Sink ignores the msg (previousTimestamp is decremented by 1, which means no new
-     * messages to apply). Used to test that the ACK received is not for this msg,
+    /** Change the msg such that Sink ignores the msg (previousTimestamp and current timestamp are decremented by 1,
+     * which means no new messages to apply). Used to test that the ACK received is not for this msg,
      * i.e., the lastProcessedTs on Sink doesn't change when the msg is ignored.
      **/
     private LogReplicationEntryMsg changeMsgMetadata(LogReplicationEntryMsg message) {
         LogReplicationEntryMsg newMessage = LogReplicationEntryMsg.newBuilder().mergeFrom(message)
                 .setMetadata(LogReplication.LogReplicationEntryMetadataMsg.newBuilder().mergeFrom(message.getMetadata())
+                        .setTimestamp(message.getMetadata().getTimestamp() - 1)
                         .setPreviousTimestamp(message.getMetadata().getPreviousTimestamp() - 1)
                         .build())
                 .build();
@@ -325,7 +327,10 @@ public class SourceForwardingDataSender implements DataSender {
                 .isGreaterThan(newMessage.getMetadata().getPreviousTimestamp());
         assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
                 .getLastProcessedLogEntryBatchTimestamp())
-                .isEqualTo(newMessage.getMetadata().getTimestamp());
+                .isGreaterThan(newMessage.getMetadata().getTimestamp());
+        assertThat(destinationLogReplicationManager.getLogReplicationMetadataManager()
+                .getLastProcessedLogEntryBatchTimestamp())
+                .isEqualTo(message.getMetadata().getTimestamp());
 
         lastAckDropped = Long.MAX_VALUE;
 
