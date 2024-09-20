@@ -1,10 +1,7 @@
 name: Publish CorfuDB Artifacts
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - master
+  pull_request:
 
 # Cancel Previous Runs
 concurrency:
@@ -15,7 +12,6 @@ jobs:
   publish_corfu_db_artifacts:
 
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
