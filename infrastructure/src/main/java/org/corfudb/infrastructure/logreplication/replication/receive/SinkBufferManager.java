@@ -132,7 +132,7 @@ public abstract class SinkBufferManager {
         long currentTs = getCurrentSeq(dataMessage);
 
         // This message contains entries that haven't been applied yet
-        if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
+        if (preTs <= lastProcessedSeq && lastProcessedSeq < currentTs) {
             // The received message is either the next in sequence OR the same message as the last one with a few
             // more opaque entries.
             log.debug("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);

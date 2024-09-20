@@ -230,7 +230,7 @@ public class LogEntryWriter extends SinkWriter {
             lastMsgTs = srcGlobalSnapshot;
         }
 
-        if (msg.getMetadata().getPreviousTimestamp() <= lastMsgTs && msg.getMetadata().getTimestamp() > lastMsgTs) {
+        if (msg.getMetadata().getPreviousTimestamp() <= lastMsgTs && lastMsgTs < msg.getMetadata().getTimestamp()) {
             return applyMsg(msg);
         }
 
