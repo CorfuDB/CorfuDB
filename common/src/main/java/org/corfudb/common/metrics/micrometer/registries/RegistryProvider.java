@@ -3,6 +3,7 @@ package org.corfudb.common.metrics.micrometer.registries;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Clients who are willing to integrate their registries into Corfu metrics composite registry
@@ -10,7 +11,7 @@ import java.util.Map;
  */
 public interface RegistryProvider {
 
-    MeterRegistry provideRegistry(Map<String, String> registryMetadata);
+    Optional<MeterRegistry> provideRegistry(Map<String, String> registryMetadata);
 
     void close();
 
