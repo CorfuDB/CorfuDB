@@ -19,8 +19,6 @@ jobs:
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
       PUBLISH_TOKEN: ${{ secrets.publish_token }}
-      DOCKER_USERNAME: ${{ secrets.docker_username }}
-      DOCKER_PASSWORD: ${{ secrets.docker_password }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +30,9 @@ jobs:
           java-version: '11'
           check-latest: true
           cache-dependency-path: '**/pom.xml'
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.docker_password }}" | docker login -u "${{ secrets.docker_username }}" --password-stdin
 
       - name: Cache local Maven repository
         uses: actions/cache@v3
