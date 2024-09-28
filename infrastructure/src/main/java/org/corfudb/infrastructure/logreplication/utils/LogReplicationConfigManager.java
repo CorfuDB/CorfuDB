@@ -120,6 +120,11 @@ public class LogReplicationConfigManager {
         this.lastRegistryTableLogTail = Address.NON_ADDRESS;
     }
 
+    public LogReplicationConfigManager(String pluginConfigFilePath) {
+        this.pluginConfigFilePath = pluginConfigFilePath;
+        this.lastRegistryTableLogTail = Address.NON_ADDRESS;
+    }
+
     public LogReplicationConfigManager(CorfuRuntime runtime, ServerContext serverContext) {
         this.rt = runtime;
         this.serverContext = serverContext;
