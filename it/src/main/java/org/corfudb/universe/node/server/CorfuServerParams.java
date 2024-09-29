@@ -128,6 +128,6 @@ public class CorfuServerParams implements NodeParams {
          */
         @Getter
         @Default
-        private final Optional<Long> memory = Optional.of(1048L * 1024 * 1024);
+        private final Optional<Long> memory = Optional.of(1048L * 1024 * 1024 * 4);
     }
 }
