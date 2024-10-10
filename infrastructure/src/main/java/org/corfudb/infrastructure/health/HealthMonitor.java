@@ -65,6 +65,7 @@ public final class HealthMonitor {
                 LIVENESS_INTERVAL.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        log.debug("HealthMonitor is ready.");
 
     }
 
@@ -105,6 +106,7 @@ public final class HealthMonitor {
 
     private void updateOverallStatus() {
         final HealthReport healthReport = generateHealthReport();
+        log.debug("Health Report: {}", healthReport.asJson());
         final ComponentStatus status = healthReport.getStatus();
         final int metricStatus = statusMap.get(status);
         overallHealthStatus.ifPresent(ohs -> ohs.set(metricStatus));
