@@ -4,6 +4,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.infrastructure.health.HealthReport.ComponentStatus;
 import org.corfudb.util.LambdaUtils;
 
 import java.lang.management.ManagementFactory;
@@ -17,7 +19,10 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.corfudb.infrastructure.health.HealthReport.ComponentStatus.*;
 
 /**
  * HealthMonitor keeps track of the HealthStatus of each Component.
@@ -35,21 +40,32 @@ public final class HealthMonitor {
 
     private static final Duration LIVENESS_INTERVAL = Duration.ofMinutes(1);
 
+    private static final Map<ComponentStatus, Integer> statusMap = Map.of(
+            UNKNOWN, -1, UP, 0, FAILURE, 1, DOWN, 2);
+
+    private final Optional<AtomicInteger> overallHealthStatus;
+
     private static Optional<HealthMonitor> instance = Optional.empty();
 
     private HealthMonitor() {
         this.componentHealthStatus = new ConcurrentHashMap<>();
         this.livenessStatus = new AtomicReference<>(new LivenessStatus(true, ""));
+        this.overallHealthStatus =
+                MicroMeterUtils.gauge("overall.status", new AtomicInteger(-1));
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setNameFormat("HealthMonitorLivenessThread")
                         .build());
         this.scheduledExecutorService.scheduleWithFixedDelay(
-                () -> LambdaUtils.runSansThrow(this::checkLiveness),
+                () -> LambdaUtils.runSansThrow(() -> {
+                    checkLiveness();
+                    updateOverallStatus();
+                }),
                 0,
                 LIVENESS_INTERVAL.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+        log.debug("HealthMonitor is ready.");
 
     }
 
@@ -86,6 +102,14 @@ public final class HealthMonitor {
     @VisibleForTesting
     static void liveness() {
         instance.ifPresent(HealthMonitor::checkLiveness);
+    }
+
+    private void updateOverallStatus() {
+        final HealthReport healthReport = generateHealthReport();
+        log.debug("Health Report: {}", healthReport.asJson());
+        final ComponentStatus status = healthReport.getStatus();
+        final int metricStatus = statusMap.get(status);
+        overallHealthStatus.ifPresent(ohs -> ohs.set(metricStatus));
     }
 
     private void checkLiveness() {
