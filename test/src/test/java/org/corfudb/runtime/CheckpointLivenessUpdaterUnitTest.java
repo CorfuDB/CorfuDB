@@ -55,13 +55,13 @@ public class CheckpointLivenessUpdaterUnitTest {
         when((ActiveCPStreamMsg) corfuStoreEntry.getPayload()).thenReturn(activeCPStreamMsg);
 
         livenessUpdater.start();
-        livenessUpdater.updateLiveness(tableName);
+        livenessUpdater.setCurrentTable(tableName);
         try {
             TimeUnit.SECONDS.sleep(INTERVAL.getSeconds());
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted: ", e);
         }
-        livenessUpdater.notifyOnSyncComplete();
+        livenessUpdater.unsetCurrentTable();
 
         ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
         verify(txn).putRecord(any(), any(), captor.capture(), any());
@@ -73,9 +73,9 @@ public class CheckpointLivenessUpdaterUnitTest {
         ActiveCPStreamMsg activeCPStreamMsg = ActiveCPStreamMsg.newBuilder().setSyncHeartbeat(0).build();
         when((ActiveCPStreamMsg) corfuStoreEntry.getPayload()).thenReturn(activeCPStreamMsg);
 
-        livenessUpdater.updateLiveness(tableName);
+        livenessUpdater.setCurrentTable(tableName);
         livenessUpdater.updateHeartbeat();
-        livenessUpdater.notifyOnSyncComplete();
+        livenessUpdater.unsetCurrentTable();
 
         livenessUpdater.updateHeartbeat();
 
@@ -92,13 +92,13 @@ public class CheckpointLivenessUpdaterUnitTest {
                 .thenReturn(activeCPStreamMsg);
         livenessUpdater.start();
 
-        livenessUpdater.updateLiveness(tableName);
+        livenessUpdater.setCurrentTable(tableName);
         try {
             TimeUnit.SECONDS.sleep(INTERVAL.getSeconds()*2);
         } catch (InterruptedException e) {
             log.warn("Sleep interrupted: ", e);
         }
-        livenessUpdater.notifyOnSyncComplete();
+        livenessUpdater.unsetCurrentTable();
 
         ArgumentCaptor<ActiveCPStreamMsg> captor = ArgumentCaptor.forClass(ActiveCPStreamMsg.class);
         verify(txn).putRecord(any(), any(), captor.capture(), any());
