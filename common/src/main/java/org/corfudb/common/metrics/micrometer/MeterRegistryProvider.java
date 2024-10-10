@@ -143,9 +143,16 @@ public class MeterRegistryProvider {
                         RegistryProvider registryProvider = registries.next();
                         log.info("Registering provider: {}", registryProvider);
                         provider = Optional.of(registryProvider);
-                        MeterRegistry registry = registryProvider.provideRegistry(registryMetadata);
-                        id.ifPresent(s -> registry.config().commonTags("id", s));
-                        addToCompositeRegistry(() -> Optional.of(registry));
+                        Optional<MeterRegistry> registry = registryProvider.provideRegistry(registryMetadata);
+                        if (registry.isPresent()) {
+                            MeterRegistry providedRegistry = registry.get();
+                            id.ifPresent(s -> providedRegistry.config().commonTags("id", s));
+                            addToCompositeRegistry(() -> registry);
+                        }
+                        else {
+                            log.warn("Registry was not configured");
+                        }
+
                     }
                     catch (Throwable exception) {
                         log.error("Problems registering a registry", exception);
