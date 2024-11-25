@@ -377,9 +377,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .ksPasswordFile((String) serverContext.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
                     .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
-                    // This runtime is used for the LockStore, Metadata Manager and Log Entry Sync, which don't rely
-                    // heavily on the cache (hence can be smaller)
-                    .maxCacheEntries(serverContext.getLogReplicationCacheMaxSize()/2)
+                    .cacheDisabled(true)
                     .maxWriteSize(serverContext.getMaxWriteSize())
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
