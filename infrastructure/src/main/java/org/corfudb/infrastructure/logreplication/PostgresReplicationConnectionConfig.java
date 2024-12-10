@@ -15,9 +15,6 @@ public class PostgresReplicationConnectionConfig {
     public static boolean isPostgres = false;
 
     @Getter
-    private String pgVersion;
-
-    @Getter
     private String user;
 
     @Getter
@@ -45,8 +42,7 @@ public class PostgresReplicationConnectionConfig {
         try (InputStream input = new FileInputStream(filepath)) {
             Properties prop = new Properties();
             prop.load(input);
-            if (prop.get("pg_version") != null) {
-                this.pgVersion = prop.getProperty("pg_version");
+            if (prop.get("pg_user") != null) {
                 this.user = prop.getProperty("pg_user");
                 this.password = prop.getProperty("pg_password");
                 this.port = prop.getProperty("pg_port");
