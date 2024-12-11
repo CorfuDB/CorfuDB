@@ -541,7 +541,7 @@ public class HealthMonitorTest {
         try {
             Runnable run = () -> {
                 try {
-                    Issue issue = Issue.createIssue(Component.SEQUENCER,
+                    Issue issue = Issue.createIssue(SEQUENCER,
                             SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer " +
                                     "requires bootstrap");
                     HealthMonitor.reportIssue(issue);
@@ -556,12 +556,12 @@ public class HealthMonitorTest {
             };
 
             HealthMonitor.init();
-            HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
+            HealthMonitor.reportIssue(Issue.createInitIssue(SEQUENCER));
             scheduledExecutorService
                     .scheduleAtFixedRate(
                             () -> LambdaUtils.runSansThrow(run),0,  1, SECONDS);
 
-            if (!errorLatch.await(3, TimeUnit.SECONDS)) {
+            if (!errorLatch.await(3, SECONDS)) {
                 throw new IllegalStateException("First Condition was not " +
                         "met within the timeout period");
             }
@@ -571,7 +571,7 @@ public class HealthMonitorTest {
             // Now resolve the init issue, so the runtime issues can be reported
             HealthMonitor.resolveIssue(Issue.createInitIssue(Component.SEQUENCER));
 
-            if (!resolutionLatch.await(3, TimeUnit.SECONDS)) {
+            if (!resolutionLatch.await(3, SECONDS)) {
                 throw new IllegalStateException("Second Condition was not " +
                         "met within the timeout period");
             }
@@ -581,13 +581,14 @@ public class HealthMonitorTest {
 
         catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Test interrupted while waiting for conditions.", e);
+            throw new IllegalStateException("Test interrupted while waiting for conditions.", e);
         }
 
         finally {
+            HealthMonitor.shutdown();
             scheduledExecutorService.shutdown();
             try {
-                if (!scheduledExecutorService.awaitTermination(1, TimeUnit.SECONDS)) {
+                if (!scheduledExecutorService.awaitTermination(1, SECONDS)) {
                     scheduledExecutorService.shutdownNow();
                 }
             } catch (InterruptedException e) {
