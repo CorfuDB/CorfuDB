@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.health;
 
 import lombok.Getter;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.LinkedHashSet;
 import java.util.Optional;
@@ -14,6 +15,7 @@ import java.util.Set;
  * runtimeHealthIssues can appear.
  */
 @ToString
+@Slf4j
 public class HealthStatus {
     
     @Getter
@@ -40,6 +42,7 @@ public class HealthStatus {
     public void addInitHealthIssue(Issue issue) {
         verifyComponent(issue);
         if (!issue.isInitIssue()) {
+            log.warn("addInitHealthIssue: trying to add a non-init issue - {}", issue);
             throw new IllegalArgumentException("Only issues of type INIT are allowed");
         }
         if (initStatus == InitStatus.UNKNOWN || initStatus == InitStatus.INITIALIZED) {
@@ -72,6 +75,7 @@ public class HealthStatus {
     public void addRuntimeHealthIssue(Issue issue) {
         verifyComponent(issue);
         if (initStatus != InitStatus.INITIALIZED) {
+            log.warn("addRuntimeHealthIssue: trying to add a runtime health issue to NOT_INITIALIZED component - {}", issue);
             throw new IllegalStateException("Runtime health issue can only be reported if the component is initialized");
         }
         runtimeHealthIssues.add(issue);
@@ -96,6 +100,7 @@ public class HealthStatus {
 
     private void verifyComponent(Issue issue) {
         if (issue.getComponent() != this.component) {
+            log.warn("verifyComponent: this issue: {} is for the wrong component: {}", issue, this.component);
             String msg = String.format("Only the issues belonging to %s are allowed but got: %s", this.component,
                     issue.getComponent());
 

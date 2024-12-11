@@ -37,6 +37,7 @@ import org.corfudb.runtime.proto.service.Sequencer.TokenRequestMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
@@ -214,7 +215,7 @@ public class SequencerServer extends AbstractServer {
         streamTailToGlobalTailMap = sequencerFactoryHelper.getStreamTailToGlobalTailMap();
         healthReportScheduler = sequencerFactoryHelper.getHealthReportScheduler("sequencer-health");
         HealthMonitor.reportIssue(Issue.createInitIssue(Component.SEQUENCER));
-        healthReportScheduler.scheduleAtFixedRate(this::reportSequencerHealth, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
+        healthReportScheduler.scheduleAtFixedRate(() -> LambdaUtils.runSansThrow(this::reportSequencerHealth), INIT_DELAY, DELAY_NUM, DELAY_UNITS);
     }
 
     @Override
