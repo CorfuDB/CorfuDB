@@ -569,7 +569,7 @@ public class HealthMonitorTest {
             // Check that the issue persists
             assertTrue(issuePersists.get());
             // Now resolve the init issue, so the runtime issues can be reported
-            HealthMonitor.resolveIssue(Issue.createInitIssue(Component.SEQUENCER));
+            HealthMonitor.resolveIssue(Issue.createInitIssue(SEQUENCER));
 
             if (!resolutionLatch.await(3, SECONDS)) {
                 throw new IllegalStateException("Second Condition was not " +
