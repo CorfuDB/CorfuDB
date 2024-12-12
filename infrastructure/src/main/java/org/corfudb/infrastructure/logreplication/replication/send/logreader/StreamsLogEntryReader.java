@@ -185,6 +185,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
         if (currentEntrySize > maxDataSizePerMsg) {
             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported.",
                     currentEntrySize, maxDataSizePerMsg);
+            lastOpaqueEntry.getEntries().keySet().forEach(key -> {
+                log.error("Stream Id {}, Serialized Size = {}", key,
+                    ReaderUtility.calculateSize(lastOpaqueEntry.getEntries().get(key)));
+            });
             // If a message cannot be sent due to its size exceeding the maximum boundary, the replication will be stopped.
             messageExceededSize = true;
             return false;
