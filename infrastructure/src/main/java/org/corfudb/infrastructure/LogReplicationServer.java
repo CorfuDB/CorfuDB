@@ -47,9 +47,12 @@ public class LogReplicationServer extends AbstractServer {
     private String localNodeId;
 
     /*
-     * Size bounding LRs client RPC queue, set to be at least that of the sender buffer window.
+     * Size bounding LRs client RPC queue, set to be at least that of the sender buffer window
+     * (LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH).
+     * Consider optimizations like de-duplication of resent messages and/or disk-backed receiver queue to avoid tuning
+     * this parameter for higher scale.
      */
-    private static final int MAX_EXECUTOR_QUEUE_SIZE = 10;
+    private static final int MAX_EXECUTOR_QUEUE_SIZE = 5;
     private final ExecutorService executor;
 
     @Getter
