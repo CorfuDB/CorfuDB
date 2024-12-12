@@ -2,17 +2,26 @@ package org.corfudb.infrastructure.health;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
 import org.corfudb.infrastructure.health.HealthReport.ReportedLivenessStatus;
+import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.Sleep;
 import org.junit.jupiter.api.Test;
-
+import java.util.concurrent.CountDownLatch;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.health.Component.COMPACTOR;
@@ -34,7 +43,11 @@ import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UNKN
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.SEQUENCER_REQUIRES_FULL_BOOTSTRAP;
 import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNRESPONSIVE;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 public class HealthMonitorTest {
 
@@ -510,4 +523,78 @@ public class HealthMonitorTest {
         HealthMonitor.shutdown();
     }
 
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    void testRuntimeIssueReportIsResolvedInRescheduledContext() {
+        // Schedule a thread that reports the runtime issue
+        // but wrap the runnable in runSansThrow, so it's rescheduled
+        final ScheduledExecutorService scheduledExecutorService =
+                Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("sequencer-health")
+                        .build());
+        AtomicBoolean issuePersists = new AtomicBoolean(false);
+        CountDownLatch errorLatch = new CountDownLatch(1);
+        CountDownLatch resolutionLatch = new CountDownLatch(1);
+
+        try {
+            Runnable run = () -> {
+                try {
+                    Issue issue = Issue.createIssue(SEQUENCER,
+                            SEQUENCER_REQUIRES_FULL_BOOTSTRAP, "Sequencer " +
+                                    "requires bootstrap");
+                    HealthMonitor.reportIssue(issue);
+                    issuePersists.set(false);
+                    resolutionLatch.countDown();
+                }
+                catch (IllegalStateException ie) {
+                    issuePersists.set(true);
+                    errorLatch.countDown();
+                    throw ie;
+                }
+            };
+
+            HealthMonitor.init();
+            HealthMonitor.reportIssue(Issue.createInitIssue(SEQUENCER));
+            scheduledExecutorService
+                    .scheduleAtFixedRate(
+                            () -> LambdaUtils.runSansThrow(run),0,  1, SECONDS);
+
+            if (!errorLatch.await(3, SECONDS)) {
+                throw new IllegalStateException("First Condition was not " +
+                        "met within the timeout period");
+            }
+
+            // Check that the issue persists
+            assertTrue(issuePersists.get());
+            // Now resolve the init issue, so the runtime issues can be reported
+            HealthMonitor.resolveIssue(Issue.createInitIssue(SEQUENCER));
+
+            if (!resolutionLatch.await(3, SECONDS)) {
+                throw new IllegalStateException("Second Condition was not " +
+                        "met within the timeout period");
+            }
+
+            assertFalse(issuePersists.get());
+        }
+
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Test interrupted while waiting for conditions.", e);
+        }
+
+        finally {
+            HealthMonitor.shutdown();
+            scheduledExecutorService.shutdown();
+            try {
+                if (!scheduledExecutorService.awaitTermination(1, SECONDS)) {
+                    scheduledExecutorService.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                scheduledExecutorService.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
 }
