@@ -75,11 +75,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Getter
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
-
     private boolean lastOpaqueEntryValid = true;
-
-    private boolean messageExceededSize = false;
-
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
@@ -180,19 +176,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
     }
 
-    private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
-        // For interested entry, if its size is too big we should skip and report error
+    private boolean sizeExceeded(int currentMsgSize, int currentEntrySize) {
+        // Check the size of current entry
         if (currentEntrySize > maxDataSizePerMsg) {
-            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported.",
-                    currentEntrySize, maxDataSizePerMsg);
-            // If a message cannot be sent due to its size exceeding the maximum boundary, the replication will be stopped.
-            messageExceededSize = true;
-            return false;
+            log.warn("The current entry size {} is bigger than the maxDataSizePerMsg {} supported.  Streams in this " +
+                    "transaction are {}", currentEntrySize, maxDataSizePerMsg, lastOpaqueEntry.getEntries().keySet());
+            return true;
         }
 
         // If it exceeds the maximum size of this message, skip appending this entry,
         // it will be processed with the next message;
-        return currentEntrySize + currentMsgSize <= maxDataSizePerMsg;
+        return currentEntrySize + currentMsgSize > maxDataSizePerMsg;
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
@@ -221,7 +215,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
                         // append it to the next message as the first entry.
                         currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
 
-                        if (!checkValidSize(currentMsgSize, currentEntrySize)) {
+                        // If adding this entry to the current batch can exceed maxDataSizePerMsg, it must be added
+                        // to the next batch.  However, if it is the first entry(single transaction bigger than
+                        // maxDataSizePerMsg), it cannot be skipped.  In this case, create a batch with this entry
+                        // and send it.
+                        if (sizeExceeded(currentMsgSize, currentEntrySize) && !opaqueEntryList.isEmpty()) {
                             break;
                         }
 
@@ -309,7 +307,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         // Sync with registry when entering into IN_LOG_ENTRY_SYNC state
         config.syncWithRegistry();
         refreshStreamUUIDs();
-        messageExceededSize = false;
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         lastOpaqueEntry = null;
@@ -408,10 +405,5 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
-    }
-
-    @Override
-    public boolean hasMessageExceededSize() {
-        return messageExceededSize;
     }
 }
