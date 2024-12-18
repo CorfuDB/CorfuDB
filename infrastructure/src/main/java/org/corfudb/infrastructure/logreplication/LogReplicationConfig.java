@@ -32,14 +32,14 @@ public class LogReplicationConfig {
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
     // Log Replication default max number of messages generated at the active cluster for each batch
-    public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
+    public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 5;
 
     // Default value for the max number of entries applied in a single transaction on Sink during snapshot sync
     public static final int DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED = 50;
 
-    // Log Replication uses 25MB limit as the default max message size to batch and
+    // Log Replication uses 15MB limit as the default max message size to batch and
     // send data across over to the other side. (Arbitrary limit, can be changed)
-    public static final int DEFAULT_MAX_MSG_BATCH_SIZE = (25 << 20);
+    public static final int DEFAULT_MAX_MSG_BATCH_SIZE = (15 << 20);
 
     // Log Replication default max cache number of entries
     // Note: if we want to improve performance for large scale this value should be tuned as it
