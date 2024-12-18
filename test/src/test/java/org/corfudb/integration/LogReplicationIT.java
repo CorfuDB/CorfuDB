@@ -104,7 +104,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Number of messages per batch
     private static final int BATCH_SIZE = 4;
 
-    private static final int SMALL_MSG_SIZE = 12000;
+    private static final int SMALL_MSG_SIZE = 30000;
 
     private TestConfig testConfig;
 
