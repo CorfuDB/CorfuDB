@@ -48,7 +48,7 @@ public class PostgresUtilsTest {
     private PostgresConnector replicaContainer = null;
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
 
         Startables.deepStart(pgActive, pgReplica).join();
         Testcontainers.exposeHostPorts(pgActive.getFirstMappedPort(), pgReplica.getFirstMappedPort());
@@ -147,7 +147,11 @@ public class PostgresUtilsTest {
         Thread replicaSwitch = new Thread(() -> {
             // Replication is working, now try switchover
             // Start by stop receiving updates on the standby
-            PostgresUtils.dropAllSubscriptions(replica);
+            try {
+                PostgresUtils.dropAllSubscriptions(replica);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // Create publications on replica
             PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, replicaContainer), replica);
@@ -155,10 +159,18 @@ public class PostgresUtilsTest {
 
         Thread primarySwitch = new Thread(() -> {
             // Remove publications from primary
-            PostgresUtils.dropAllPublications(primary);
+            try {
+                PostgresUtils.dropAllPublications(primary);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // "Clear" tables on the primary
-            PostgresUtils.clearTables(new ArrayList<>(tablesToReplicate), primary);
+            try {
+                PostgresUtils.clearTables(new ArrayList<>(tablesToReplicate), primary);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // Create subscription on primary, "full sync" and start streaming from the replica
             tryExecuteCommand(PostgresUtils.createSubscriptionCmd(replicaContainer, primaryContainer, replica), primary);
