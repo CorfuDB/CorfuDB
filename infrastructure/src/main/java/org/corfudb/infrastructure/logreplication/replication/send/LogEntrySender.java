@@ -121,12 +121,6 @@ public class LogEntrySender {
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
-
-                if (logEntryReader.hasMessageExceededSize()) {
-                    cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
-                    return;
-                }
-
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
