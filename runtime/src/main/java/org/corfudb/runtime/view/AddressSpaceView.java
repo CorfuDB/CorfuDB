@@ -104,7 +104,7 @@ public class AddressSpaceView extends AbstractView implements AutoCloseable {
             maxCacheEntries = 0;
         }
         cacheBuilder.maximumSize(maxCacheEntries);
-        log.info("AddressSpaceView readCache size is set to {}", maxCacheEntries);
+        log.info("Runtime = {}, AddressSpaceView readCache size is set to {}", runtime, maxCacheEntries);
 
         if (maxCacheEntries == 0) {
             log.warn("Since AddressSpaceView readCache size is 0, " +
