@@ -631,7 +631,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
                     makeTablesWriteable(new ArrayList<>(logReplicationConfig.getStreamsToReplicate()), connector);
                     retryOperation(() -> tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(),
-                            connector), connector), "Create publications");
+                            connector, localClusterDescriptor.getClusterId()), connector), "Create publications");
 
                     log.info("Publications successfully created on active postgres!");
                     break;
@@ -657,7 +657,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                                                 pgConfig.getRemotePgPort(), pgConfig.getUser(), pgConfig.getPassword(), pgConfig.getDbName());
 
                                         if (!getPostgresInRecovery(activeConnector)) {
-                                            if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, connector), connector)) {
+                                            if (!tryExecuteCommand(createSubscriptionCmd(activeConnector, connector, activeCluster.getClusterId()), connector)) {
                                                 log.error("bootstrapLogReplicationService: Error while subscribing to new remote active {} ", activeNodeIp);
                                                 success.set(false);
                                             } else {
@@ -792,7 +792,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
-    public void processLockRenew() throws Exception {
+    public void processLockRenew() {
         // If we are standby and also the leader and see no subs, create new ones
         if (Objects.requireNonNull(localClusterDescriptor.getRole()) == ClusterRole.STANDBY) {
             if (isLeader.get() && getAllSubscriptions(connector).isEmpty()) {
@@ -809,7 +809,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                                         log.info("Trying to connect to remote active leader: {}", activeNodeIp);
                                         PostgresConnector activeConnector = new PostgresConnector(activeNodeIp,
                                                 pgConfig.getRemotePgPort(), pgConfig.getUser(), pgConfig.getPassword(), pgConfig.getDbName());
-                                        success.set(tryExecuteCommand(createSubscriptionCmd(activeConnector, connector), connector));
+                                        success.set(tryExecuteCommand(createSubscriptionCmd(activeConnector, connector, activeCluster.getClusterId()), connector));
                                     }
                                 })
                 );
@@ -895,7 +895,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                         List<String> subscriptionsToDrop = getAllSubscriptions(connector);
                         dropSubscriptions(subscriptionsToDrop, connector);
 
-                        retryOperation(() -> tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector),
+                        retryOperation(() -> tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(),
+                                        connector, localClusterDescriptor.getClusterId()), connector),
                                 String.format("onClusterRoleChange: Create publication on new active [%s]", localNodeId));
 
                         log.info("Role change successful from standby to active.");
@@ -917,7 +918,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                         List<String> subscriptionsToDrop = getAllSubscriptions(connector);
                         dropSubscriptions(subscriptionsToDrop, connector);
 
-                        retryOperation(() -> tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector), connector),
+                        retryOperation(() -> tryExecuteCommand(createPublicationCmd(logReplicationConfig.getStreamsToReplicate(), connector,
+                                        localClusterDescriptor.getClusterId()), connector),
                                 String.format("onClusterRoleChange: Create publication on new active [%s]", localNodeId));
 
                         log.info("Role change successful from none to active.");
@@ -934,7 +936,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                                                 pgConfig.getRemotePgPort(), pgConfig.getUser(), pgConfig.getPassword(), pgConfig.getDbName());
                                         if (!getPostgresInRecovery(activeConnector)) {
                                             try {
-                                                retryOperation(() -> tryExecuteCommand(createSubscriptionCmd(activeConnector, connector), connector),
+                                                retryOperation(() -> tryExecuteCommand(createSubscriptionCmd(activeConnector, connector, activeCluster.getClusterId()), connector),
                                                         String.format("onClusterRoleChange: Subscribe to publication for active node [%s]", activeNodeIp));
                                             } catch (Exception e) {
                                                 throw new RuntimeException(e);
@@ -1024,11 +1026,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             // Update replication server, in case there is a role change
             logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
             logReplicationServerHandler.setStandby(localClusterDescriptor.getRole().equals(ClusterRole.STANDBY));
-        }
 
-        // On Topology Config Change, only if this node is the leader take action
-        if (isLeader.get()) {
-            onLeadershipAcquire();
+            // On Topology Config Change, only if this node is the leader take action
+            if (isLeader.get()) {
+                onLeadershipAcquire();
+            }
         }
     }
 
