@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
 import com.google.protobuf.Timestamp;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ObjectAlreadyExistsException;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ObjectUndefinedException;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ReplicationSlotDoesNotExistException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
@@ -83,7 +86,7 @@ public class PostgresUtils {
         return tryExecuteCommand(sql, connector, isTestEnvironment);
     }
 
-    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) throws SQLException {
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) throws PostgresException {
         return tryExecutePreparedStatementsCommand(sql, params, connector, isTestEnvironment);
     }
 
@@ -109,15 +112,16 @@ public class PostgresUtils {
                 statement.close();
                 successOrExists = true;
             } catch (SQLException e) {
-                if ("42710".equals(e.getSQLState())) {
+                try {
+                    SQLExceptionHandler.handleSQLException(e);
+                } catch (ObjectAlreadyExistsException ex) {
                     log.info("Object already exists!!!");
                     successOrExists = true;
-                } else if ("42704".equals(e.getSQLState())) {
+                } catch (ObjectUndefinedException ex) {
                     log.info("Object is undefined!!!");
-                } else if ("42P07".equals(e.getSQLState())) {
-                    log.info("Table already exists!!!");
-                    successOrExists = true;
-                } else {
+                } catch (ReplicationSlotDoesNotExistException ex) {
+                    throw ex;
+                } catch (PostgresException ex) {
                     log.error("Encountered error in executing command.", e);
                 }
             }
@@ -125,7 +129,7 @@ public class PostgresUtils {
         return successOrExists;
     }
 
-    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector, boolean useContainerConnection) throws SQLException {
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector, boolean useContainerConnection) {
         if (useContainerConnection) {
             connector = testClusterConnector;
         }
@@ -140,18 +144,16 @@ public class PostgresUtils {
                     successOrExists = true;
                 }
             } catch (SQLException e) {
-                if ("42710".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Object already exists!");
+                try {
+                    SQLExceptionHandler.handleSQLException(e);
+                } catch (ObjectAlreadyExistsException ex) {
+                    log.info("Object already exists!!!");
                     successOrExists = true;
-                } else if ("42704".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Object is undefined!");
-                } else if ("42P07".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Table already exists!");
-                    successOrExists = true;
-                } else if (e.getMessage().contains("replication slot") && e.getMessage().contains("does not exist")) {
-                    // TODO: Have custom exceptions for these sql errors
-                    throw e;
-                } else {
+                } catch (ObjectUndefinedException ex) {
+                    log.info("Object is undefined!!!");
+                } catch (ReplicationSlotDoesNotExistException ex) {
+                    throw ex;
+                } catch (PostgresException ex) {
                     log.info("Encountered error in executing prepared statement command.", e);
                 }
             }
@@ -315,11 +317,11 @@ public class PostgresUtils {
                                     subName, primary.address, primary.port, primary.user, primary.databaseName, primary.password, pubName);
                             break;
                         } else {
-                            log.info("PUB WITH THAT NAME DOES NOT EXIST");
+                            log.info("Publication with that name does not exist, retrying after a while.");
                             TimeUnit.SECONDS.sleep(5);
                         }
                     } else {
-                        log.info("PUB DOES NOT EXIST");
+                        log.info("No publications exist yet, retrying after a while.");
                         TimeUnit.SECONDS.sleep(5);
                     }
                 } catch (InterruptedException e) {
@@ -327,8 +329,6 @@ public class PostgresUtils {
                 }
             }
         }
-
-        log.info("CREATE_SUB_CMD: {}", createSubCmd);
 
         return createSubCmd;
     }
@@ -347,13 +347,10 @@ public class PostgresUtils {
     }
 
     public static void dropSubscriptions(List<String> subscriptionsToDrop, PostgresConnector connector) {
-        // TODO (Postgres): Can also decouple from slot to guarantee drop and have service
-        //  to clean up inactive slots
-
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};
-            String dropQuery = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
-            String dropInactive = String.format(
+            String dropSql = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
+            String dropInactiveSql = String.format(
                     "DO $$ \n" +
                             "BEGIN \n" +
                             "  ALTER SUBSCRIPTION %s DISABLE;\n" +
@@ -365,18 +362,18 @@ public class PostgresUtils {
 
             retryOperation(() -> {
                         try {
-                            return tryExecutePreparedStatementsCommand(dropQuery, params, connector);
-                        } catch (SQLException e) {
-                            if (e.getMessage().contains("replication slot") && e.getMessage().contains("does not exist")) {
+                            return tryExecutePreparedStatementsCommand(dropSql, params, connector);
+                        } catch (ReplicationSlotDoesNotExistException e) {
+                            try {
                                 // If leader has changed the old sub will have no corresponding slot, so decouple before drop
-                                try {
-                                    return tryExecutePreparedStatementsCommand(dropInactive, params, connector);
-                                } catch (SQLException ex) {
-                                   log.warn("SQL error while dropping subscriptions!");
-                                }
+                                return tryExecutePreparedStatementsCommand(dropInactiveSql, params, connector);
+                            } catch (PostgresException ex) {
+                                log.warn("SQL error while dropping subscriptions!", ex);
                             }
-                            return false;
+                        } catch (PostgresException ex) {
+                            log.warn("SQL error while dropping subscriptions!", ex);
                         }
+                        return false;
                     },
                     String.format("Drop for subscription [%s]", subscription));
         }
