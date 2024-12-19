@@ -39,7 +39,7 @@ public class PostgresReplicationE2EIT extends LogReplicationAbstractIT {
             "./test/src/test/resources/transport/postgresConfigStandby.properties";
 
     private static final Network network = Network.newNetwork();
-    private final PostgreSQLContainer<?> pgActive = new PostgreSQLContainer<>("postgres:14")
+    private final PostgreSQLContainer<?> pgActive = new PostgreSQLContainer<>("postgres:17")
             .withNetwork(network)
             .withNetworkAliases(ACTIVE_CONTAINER_VIRTUAL_HOST)
             .withCopyFileToContainer(MountableFile.forClasspathResource("pg_hba.conf"), "/postgresql/conf/conf.d/pg_hba.conf")
@@ -49,7 +49,7 @@ public class PostgresReplicationE2EIT extends LogReplicationAbstractIT {
                             new PortBinding(Ports.Binding.bindPort(ACTIVE_CONTAINER_PHYSICAL_PORT), new ExposedPort(5432))
                     )
             ));
-    private final PostgreSQLContainer<?> pgReplica = new PostgreSQLContainer<>("postgres:14")
+    private final PostgreSQLContainer<?> pgReplica = new PostgreSQLContainer<>("postgres:17")
             .withNetwork(network)
             .withNetworkAliases(STANDBY_CONTAINER_VIRTUAL_HOST)
             .withCopyFileToContainer(MountableFile.forClasspathResource("pg_hba.conf"), "/postgresql/conf/conf.d/pg_hba.conf")
@@ -59,7 +59,7 @@ public class PostgresReplicationE2EIT extends LogReplicationAbstractIT {
                             new PortBinding(Ports.Binding.bindPort(STANDBY_CONTAINER_PHYSICAL_PORT), new ExposedPort(5432))
                     )
             ));
-    private final PostgreSQLContainer<?> pgConfig = new PostgreSQLContainer<>("postgres:14")
+    private final PostgreSQLContainer<?> pgConfig = new PostgreSQLContainer<>("postgres:17")
             .withNetwork(network)
             .withNetworkAliases("postgres_config")
             .withCopyFileToContainer(MountableFile.forClasspathResource("pg_hba.conf"), "/postgresql/conf/conf.d/pg_hba.conf")
@@ -75,7 +75,7 @@ public class PostgresReplicationE2EIT extends LogReplicationAbstractIT {
     private PostgresConnector config = null;
 
     @Before
-    public void setup() throws IOException {
+    public void setup() throws Exception {
 
         Startables.deepStart(pgActive, pgReplica, pgConfig).join();
         Testcontainers.exposeHostPorts(pgActive.getFirstMappedPort(), pgReplica.getFirstMappedPort(), pgConfig.getFirstMappedPort());
