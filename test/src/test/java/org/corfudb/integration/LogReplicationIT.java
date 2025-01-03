@@ -1264,8 +1264,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
         LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, BATCH_SIZE,
-            maxMsgSize, MAX_CACHE_NUM_ENTRIES,
-            DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                maxMsgSize, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,
