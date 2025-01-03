@@ -1100,7 +1100,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         startLogEntrySync(waitCondition, true, this::changeState);
 
         blockUntilFSMTransition.await();
-        log.info("State Transition Complete");
 
         checkStateChange(logReplicationSourceManager.getLogReplicationFSM(),
                 LogReplicationStateType.INITIALIZED, true);
