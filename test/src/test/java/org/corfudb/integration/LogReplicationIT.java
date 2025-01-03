@@ -55,7 +55,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.*;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
@@ -100,7 +101,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final int STATE_CHANGE_CHECKS = 20;
     private static final int WAIT_STATE_CHANGE = 300;
 
-    private int maxMsgSize = DEFAULT_MAX_MSG_BATCH_SIZE;
+    private int maxMsgSize = LogReplicationConfig.DEFAULT_MAX_MSG_BATCH_SIZE;
 
     // Number of messages per batch
     private static final int BATCH_SIZE = 4;
