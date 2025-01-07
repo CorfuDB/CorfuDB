@@ -300,7 +300,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getMaxWriteSize() {
         String val = getServerConfig(String.class, "--max-replication-write-size");
-        return val == null ? Integer.MAX_VALUE : Integer.parseInt(val);
+        return val == null ? (25 << 20) : Integer.parseInt(val);
     }
 
     public int getMaxSnapshotEntriesApplied() {
