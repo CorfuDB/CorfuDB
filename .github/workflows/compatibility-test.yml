@@ -10,7 +10,7 @@ concurrency:
 jobs:
   compatibility_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
