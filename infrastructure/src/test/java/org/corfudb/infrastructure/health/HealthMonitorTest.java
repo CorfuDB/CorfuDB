@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.health;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.health.HealthReport.ComponentReportedHealthStatus;
 import org.corfudb.infrastructure.health.HealthReport.ReportedLivenessStatus;
 import org.corfudb.util.LambdaUtils;
@@ -13,11 +12,9 @@ import java.util.concurrent.CountDownLatch;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -44,10 +41,8 @@ import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.SEQUENCER_REQUIRES_FULL_BOOTSTRAP;
-import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNRESPONSIVE;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 
 public class HealthMonitorTest {
 
@@ -104,7 +99,6 @@ public class HealthMonitorTest {
         final String compactionMsg = "Last compaction cycle failed";
         final String fdMsg = FD_TASK_FAILURE_MSG;
         final String unresponsiveMsg = UNRESPONSIVE_MSG;
-        final int expectedSize = 2;
         HealthMonitor.init();
         // Init status is UNKNOWN this makes it NOT_INITIALIZED, so you can not add runtime issues
         assertThatThrownBy(() -> HealthMonitor.reportIssue(Issue.createIssue(COMPACTOR, COMPACTION_CYCLE_FAILED, compactionMsg)))
@@ -124,12 +118,11 @@ public class HealthMonitorTest {
         HealthMonitor.reportIssue(Issue.createInitIssue(FAILURE_DETECTOR));
         HealthMonitor.resolveIssue(Issue.createInitIssue(FAILURE_DETECTOR));
         HealthMonitor.reportIssue(Issue.createIssue(FAILURE_DETECTOR, FAILURE_DETECTOR_TASK_FAILED, fdMsg));
-        HealthMonitor.reportIssue(Issue.createIssue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE, unresponsiveMsg));
         healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
-        assertThat(healthStatusSnapshot).hasSize(expectedSize);
+        assertThat(healthStatusSnapshot).hasSize(2);
         assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).isInitHealthy()).isTrue();
         assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).isRuntimeHealthy()).isFalse();
-        assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).getRuntimeHealthIssues()).hasSize(expectedSize);
+        assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).getRuntimeHealthIssues()).hasSize(1);
         HealthMonitor.shutdown();
     }
 
@@ -143,17 +136,9 @@ public class HealthMonitorTest {
         HealthMonitor.reportIssue(Issue.createInitIssue(FAILURE_DETECTOR));
         HealthMonitor.resolveIssue(Issue.createInitIssue(FAILURE_DETECTOR));
         HealthMonitor.reportIssue(Issue.createIssue(FAILURE_DETECTOR, FAILURE_DETECTOR_TASK_FAILED, fdMsg));
-        HealthMonitor.reportIssue(Issue.createIssue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE, unresponsiveMsg));
         Map<Component, HealthStatus> healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
-        assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).getLatestRuntimeIssue().get())
-                .isEqualTo(new Issue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE, unresponsiveMsg));
         HealthMonitor.resolveIssue(Issue.createIssue(FAILURE_DETECTOR,
                 FAILURE_DETECTOR_TASK_FAILED, resolved));
-        healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
-        assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).getLatestRuntimeIssue().get())
-                .isEqualTo(new Issue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE, unresponsiveMsg));
-        HealthMonitor.resolveIssue(Issue.createIssue(FAILURE_DETECTOR,
-                SOME_NODES_ARE_UNRESPONSIVE, resolved));
         healthStatusSnapshot = HealthMonitor.getHealthStatusSnapshot();
         assertThat(healthStatusSnapshot.get(FAILURE_DETECTOR).isRuntimeHealthy()).isTrue();
         HealthMonitor.shutdown();
@@ -319,27 +304,6 @@ public class HealthMonitorTest {
                         .status(FAILURE)
                         .build();
         assertThat(healthReport).isEqualTo(expectedReport);
-        // Node becomes unresponsive, the most recent failure is reflected in the report
-        String nodeUnresponsive = "Node is in the unresponsive list";
-        HealthMonitor.reportIssue(new Issue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE, nodeUnresponsive));
-        healthReport = HealthMonitor.generateHealthReport();
-        expectedReport =
-                HealthReport.builder()
-                        .init(ImmutableSet.of(
-                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED)))
-                        .runtime(ImmutableSet.of(
-                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE, nodeUnresponsive),
-                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
-                                new ComponentReportedHealthStatus(COMPACTOR, FAILURE, compactorFailure),
-                                new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
-                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
-                        .reason(OVERALL_STATUS_FAILURE)
-                        .status(FAILURE)
-                        .build();
-        assertThat(healthReport).isEqualTo(expectedReport);
         // Compactor is running again
         HealthMonitor.resolveIssue(new Issue(COMPACTOR, COMPACTION_CYCLE_FAILED, "Compaction finished"));
         healthReport = HealthMonitor.generateHealthReport();
@@ -351,7 +315,6 @@ public class HealthMonitorTest {
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_INITIALIZED),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED)))
                         .runtime(ImmutableSet.of(
-                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE, nodeUnresponsive),
                                 new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
                                 new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
@@ -359,28 +322,6 @@ public class HealthMonitorTest {
                         .reason(OVERALL_STATUS_FAILURE)
                         .status(FAILURE)
                         .build();
-        assertThat(healthReport).isEqualTo(expectedReport);
-        // The unresponsive node is healed -> display the previous issue if it's still there
-        HealthMonitor.resolveIssue(new Issue(FAILURE_DETECTOR, SOME_NODES_ARE_UNRESPONSIVE,
-                "Node is healed"));
-        healthReport = HealthMonitor.generateHealthReport();
-        expectedReport =
-                HealthReport.builder()
-                        .init(ImmutableSet.of(
-                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_INITIALIZED),
-                                new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED)))
-                        .runtime(ImmutableSet.of(
-                                new ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE, fdFailure),
-                                new ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING),
-                                new ComponentReportedHealthStatus(COMPACTOR, UP, COMPONENT_IS_RUNNING),
-                                new ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING)))
-                        .liveness(new ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
-                        .reason(OVERALL_STATUS_FAILURE)
-                        .status(FAILURE)
-                        .build();
-        assertThat(healthReport).isEqualTo(expectedReport);
         // The network partition is restored and the node can run FD again
         HealthMonitor.resolveIssue(new Issue(FAILURE_DETECTOR, FAILURE_DETECTOR_TASK_FAILED,
                 "Last Failure Detection task ran successfully"));
