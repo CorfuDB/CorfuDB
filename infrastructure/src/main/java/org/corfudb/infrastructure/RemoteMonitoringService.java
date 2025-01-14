@@ -42,8 +42,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-import static org.corfudb.infrastructure.health.Issue.IssueId.SOME_NODES_ARE_UNRESPONSIVE;
-
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
  * This service is responsible for heartbeat and aggregating the cluster view. This is
@@ -271,20 +269,7 @@ public class RemoteMonitoringService implements ManagementService {
                             })
                             //Execute failure detector task using failureDetectorWorker executor
                             .thenCompose(pollReport -> fdService.runFailureDetectorTask(pollReport, ourLayout, localEndpoint));
-                }).thenApply(task -> {
-                    Issue issue = Issue.createIssue(Component.FAILURE_DETECTOR,
-                            SOME_NODES_ARE_UNRESPONSIVE,
-                            "There are nodes in the unresponsive list");
-                    final Layout layout = serverContext.getCurrentLayout();
-                    if (layout.getUnresponsiveServers().isEmpty()) {
-                        HealthMonitor.resolveIssue(issue);
-                    } else {
-                        HealthMonitor.reportIssue(issue);
-                    }
-                    return task;
-                })
-                //Print exceptions to log
-                .whenComplete((taskResult, ex) -> {
+                }).whenComplete((taskResult, ex) -> {
                     if (ex != null) {
                         log.error("Failure detection task finished with an error", ex);
 
