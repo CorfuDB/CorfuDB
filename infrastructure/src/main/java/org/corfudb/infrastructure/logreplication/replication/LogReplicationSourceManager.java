@@ -87,6 +87,7 @@ public class LogReplicationSourceManager {
                 .cacheDisabled(true)
                 .maxWriteSize(params.getMaxWriteSize())
                 .build());
+        log.info("Runtime Created for Readers {}", runtime);
         runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
 
         this.parameters = params;
