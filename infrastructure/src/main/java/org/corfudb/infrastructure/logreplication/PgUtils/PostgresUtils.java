@@ -21,11 +21,15 @@ import java.util.stream.Collectors;
 import com.google.protobuf.Timestamp;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ObjectAlreadyExistsException;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ObjectUndefinedException;
+import org.corfudb.infrastructure.logreplication.PgUtils.SQLExceptionHandler.ReplicationSlotDoesNotExistException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.ACTIVE_CONTAINER_VIRTUAL_HOST;
 import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.PgClusterManager.ACTIVE_CONTAINER_PHYSICAL_PORT;
@@ -40,6 +44,7 @@ import static org.corfudb.infrastructure.logreplication.infrastructure.plugins.P
 public class PostgresUtils {
 
     private static final long RETRY_DELAY_MS = 5000;
+    private static final int RETRY_LIMIT = 15;
 
     private PostgresUtils() {}
 
@@ -50,7 +55,7 @@ public class PostgresUtils {
         return "\"" + identifier.replace("\"", "\"\"") + "\"";
     }
 
-    public static <T> T retryIndefinitely(Supplier<T> operation, String operationName) {
+    public static <T> T retryOperation(Supplier<T> operation, String operationName) {
         int attempts = 0;
         while (true) {
             try {
@@ -61,12 +66,17 @@ public class PostgresUtils {
                 return result;
             } catch (Exception e) {
                 attempts++;
-                log.warn("{} failed. Attempt {}. Error: {}. Retrying in {} ms...",
-                        operationName, attempts, e.getMessage(), RETRY_DELAY_MS);
+
+                if (attempts == RETRY_LIMIT) {
+                    throw new UnrecoverableCorfuError(String.format("%s failed!", operationName));
+                } else {
+                    log.warn("{} failed. Attempt {}. Error: {}. Retrying in {} ms...",
+                            operationName, attempts, e.getMessage(), RETRY_DELAY_MS);
+                }
                 try {
                     TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MS);
                 } catch (InterruptedException ie) {
-                    throw new RuntimeException("Interrupted during retry delay", ie);
+                    log.info("Retry wait interrupted!", ie);
                 }
             }
         }
@@ -76,7 +86,7 @@ public class PostgresUtils {
         return tryExecuteCommand(sql, connector, isTestEnvironment);
     }
 
-    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) {
+    public static boolean tryExecutePreparedStatementsCommand(String sql, Object[] params, PostgresConnector connector) throws PostgresException {
         return tryExecutePreparedStatementsCommand(sql, params, connector, isTestEnvironment);
     }
 
@@ -102,15 +112,16 @@ public class PostgresUtils {
                 statement.close();
                 successOrExists = true;
             } catch (SQLException e) {
-                if ("42710".equals(e.getSQLState())) {
+                try {
+                    SQLExceptionHandler.handleSQLException(e);
+                } catch (ObjectAlreadyExistsException ex) {
                     log.info("Object already exists!!!");
                     successOrExists = true;
-                } else if ("42704".equals(e.getSQLState())) {
+                } catch (ObjectUndefinedException ex) {
                     log.info("Object is undefined!!!");
-                } else if ("42P07".equals(e.getSQLState())) {
-                    log.info("Table already exists!!!");
-                    successOrExists = true;
-                } else {
+                } catch (ReplicationSlotDoesNotExistException ex) {
+                    throw ex;
+                } catch (PostgresException ex) {
                     log.error("Encountered error in executing command.", e);
                 }
             }
@@ -133,15 +144,16 @@ public class PostgresUtils {
                     successOrExists = true;
                 }
             } catch (SQLException e) {
-                if ("42710".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Object already exists!");
+                try {
+                    SQLExceptionHandler.handleSQLException(e);
+                } catch (ObjectAlreadyExistsException ex) {
+                    log.info("Object already exists!!!");
                     successOrExists = true;
-                } else if ("42704".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Object is undefined!");
-                } else if ("42P07".equals(e.getSQLState())) {
-                    log.info("tryExecutePreparedStatementsCommand: Table already exists!");
-                    successOrExists = true;
-                } else {
+                } catch (ObjectUndefinedException ex) {
+                    log.info("Object is undefined!!!");
+                } catch (ReplicationSlotDoesNotExistException ex) {
+                    throw ex;
+                } catch (PostgresException ex) {
                     log.info("Encountered error in executing prepared statement command.", e);
                 }
             }
@@ -257,16 +269,16 @@ public class PostgresUtils {
         return createTableCmds;
     }
 
-    public static String createPublicationCmd(Set<String> tablesToReplicate, PostgresConnector connector) {
+    public static String createPublicationCmd(Set<String> tablesToReplicate, PostgresConnector connector, String primaryClusterId) {
         return "CREATE PUBLICATION \"" +
-                String.join("_", connector.address.split("\\.")) +
+                primaryClusterId +
                 "_pub\"" +
                 " FOR TABLE " +
                 String.join(", ", tablesToReplicate) +
                 ";";
     }
 
-    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica) {
+    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica, String primaryClusterId) {
         PostgresConnector containerToQuery = primary;
         if (isTestEnvironment) {
             if (Objects.equals(primary.address, ACTIVE_CONTAINER_VIRTUAL_HOST)) {
@@ -277,19 +289,18 @@ public class PostgresUtils {
                         String.valueOf(STANDBY_CONTAINER_PHYSICAL_PORT), TEST_PG_USER, TEST_PG_PASSWORD, TEST_PG_DATABASE);
             }
         }
-        return createSubscriptionCmd(primary, replica, containerToQuery);
+        return createSubscriptionCmd(primary, replica, primaryClusterId, containerToQuery);
     }
 
-    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica, PostgresConnector primaryToQuery) {
+    public static String createSubscriptionCmd(PostgresConnector primary, PostgresConnector replica, String primaryClusterId, PostgresConnector primaryToQuery) {
         String createSubCmd = "";
 
         if (Objects.equals(primary.address + primary.port, replica.address + replica.port)) {
             log.error("Skipping subscribing to self {}. This is an invalid state!", primary.address);
         } else {
             int max_retry = 10;
-            String primaryPrefix = String.join("_", primary.address.split("\\."));
             String replicaPrefix = String.join("_", replica.address.split("\\."));
-            String pubName = String.join("_", primaryPrefix, "pub");
+            String pubName = String.join("_", primaryClusterId, "pub");
 
             for (int i = 0; i < max_retry; i++) {
                 String pubExistsQuery = String.format("SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '%s');", pubName);
@@ -301,15 +312,15 @@ public class PostgresUtils {
                         boolean publicationExists = (boolean) queryResult.get(0).values().stream().findAny().get();
                         if (publicationExists) {
                             String subName = String.join("_", replicaPrefix, "sub");
-                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\";",
+                            createSubCmd = String.format("CREATE SUBSCRIPTION \"%s\" CONNECTION 'host=%s port=%s user=%s dbname=%s password=%s' PUBLICATION \"%s\" WITH (failover = true);",
                                     subName, primary.address, primary.port, primary.user, primary.databaseName, primary.password, pubName);
                             break;
                         } else {
-                            log.info("PUB WITH THAT NAME DOES NOT EXIST");
+                            log.info("Publication with that name does not exist, retrying after a while.");
                             TimeUnit.SECONDS.sleep(5);
                         }
                     } else {
-                        log.info("PUB DOES NOT EXIST");
+                        log.info("No publications exist yet, retrying after a while.");
                         TimeUnit.SECONDS.sleep(5);
                     }
                 } catch (InterruptedException e) {
@@ -317,8 +328,6 @@ public class PostgresUtils {
                 }
             }
         }
-
-        log.info("CREATE_SUB_CMD: {}", createSubCmd);
 
         return createSubCmd;
     }
@@ -337,22 +346,43 @@ public class PostgresUtils {
     }
 
     public static void dropSubscriptions(List<String> subscriptionsToDrop, PostgresConnector connector) {
-        // TODO (Postgres): Can also decouple from slot to guarantee drop and have service
-        //  to clean up inactive slots
-
         for (String subscription : subscriptionsToDrop) {
             String[] params = {};
-            String dropQuery = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
-            retryIndefinitely(() -> tryExecutePreparedStatementsCommand(dropQuery, params, connector),
+            String dropSql = String.format("DROP SUBSCRIPTION %s", quoteIdentifier(subscription));
+            String dropInactiveSql = String.format(
+                    "DO $$ \n" +
+                            "BEGIN \n" +
+                            "  ALTER SUBSCRIPTION %s DISABLE;\n" +
+                            "  ALTER SUBSCRIPTION %s SET (slot_name = NONE);\n" +
+                            "  DROP SUBSCRIPTION %s;\n" +
+                            "END $$;",
+                    quoteIdentifier(subscription), quoteIdentifier(subscription), quoteIdentifier(subscription)
+            );
+
+            retryOperation(() -> {
+                        try {
+                            return tryExecutePreparedStatementsCommand(dropSql, params, connector);
+                        } catch (ReplicationSlotDoesNotExistException e) {
+                            try {
+                                // If leader has changed the old sub will have no corresponding slot, so decouple before drop
+                                return tryExecutePreparedStatementsCommand(dropInactiveSql, params, connector);
+                            } catch (PostgresException ex) {
+                                log.warn("SQL error while dropping subscriptions!", ex);
+                            }
+                        } catch (PostgresException ex) {
+                            log.warn("SQL error while dropping subscriptions!", ex);
+                        }
+                        return false;
+                    },
                     String.format("Drop for subscription [%s]", subscription));
         }
     }
 
-    public static void clearTables(List<String> tablesToTruncate, PostgresConnector connector) {
+    public static void clearTables(List<String> tablesToClear, PostgresConnector connector) {
         String truncatePrefix = "DELETE FROM ";
-        for (String table : tablesToTruncate) {
-            retryIndefinitely(() -> tryExecuteCommand(truncatePrefix + table + ";", connector),
-                    String.format("Delete from table for table [%s]", table));
+        for (String table : tablesToClear) {
+            retryOperation(() -> tryExecuteCommand(truncatePrefix + table + ";", connector),
+                    String.format("Delete (Clear) on table: [%s]", table));
         }
     }
 
@@ -363,10 +393,9 @@ public class PostgresUtils {
 
         for (Map<String, Object> row : rolenamesResult) {
             String roleName = row.get("rolname").toString();
-            for (String table : readOnlyTables) {
-                retryIndefinitely(() -> tryExecuteCommand(String.format(readOnlySql, table, roleName), connector),
-                        String.format("Make table readonly for table [%s]", table));
-            }
+            String tables = String.join(", ", readOnlyTables);
+             retryOperation(() -> tryExecuteCommand(String.format(readOnlySql, tables, roleName), connector),
+                     String.format("Make table writeable for tables [%s]", tables));
         }
     }
 
@@ -377,11 +406,24 @@ public class PostgresUtils {
 
         for (Map<String, Object> row : rolenamesResult) {
             String roleName = row.get("rolname").toString();
-            for (String table : writeableTables) {
-                retryIndefinitely(() -> tryExecuteCommand(String.format(writeableSql, table, roleName), connector),
-                        String.format("Make table writeable for table [%s]", table));
-            }
+            String tables = String.join(", ", writeableTables);
+             retryOperation(() -> tryExecuteCommand(String.format(writeableSql, tables, roleName), connector),
+                     String.format("Make table writeable for tables [%s]", tables));
         }
+    }
+
+    public static boolean getPostgresInRecovery(PostgresConnector connector) {
+        String hotStandbyQuery = "SELECT pg_is_in_recovery()";
+        String pgIsInRecoveryKey = "pg_is_in_recovery";
+
+        List<Map<String, Object>> recoveryQueryResult = new ArrayList<>();
+        try {
+            recoveryQueryResult = PostgresUtils.executeQuery(hotStandbyQuery, connector);
+        } catch (Exception e) {
+            log.info("Get for standby status failed!");
+        }
+        return (boolean) recoveryQueryResult.stream().findFirst()
+                .map(m -> m.getOrDefault(pgIsInRecoveryKey, false)).orElse(false);
     }
 
     public static List<String> getAllPublications(PostgresConnector connector) {
@@ -404,7 +446,7 @@ public class PostgresUtils {
     public static void dropPublications(List<String> publicationsToDrop, PostgresConnector connector) {
         String dropPrefix = "DROP PUBLICATION ";
         for (String publication : publicationsToDrop) {
-            retryIndefinitely(() -> tryExecuteCommand(dropPrefix + "\"" +  publication + "\";", connector),
+            retryOperation(() -> tryExecuteCommand(dropPrefix + "\"" +  publication + "\";", connector),
                     String.format("Drop for publication [%s]", publication));
         }
     }

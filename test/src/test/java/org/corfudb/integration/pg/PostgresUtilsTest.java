@@ -3,6 +3,7 @@ package org.corfudb.integration.pg;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.PgUtils.PostgresConnector;
 import org.corfudb.infrastructure.logreplication.PgUtils.PostgresUtils;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.*;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,14 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class PostgresUtilsTest {
     private static final Network network = Network.newNetwork();
 
-    private final PostgreSQLContainer<?> pgActive = new PostgreSQLContainer<>("postgres:14")
+    private final PostgreSQLContainer<?> pgActive = new PostgreSQLContainer<>("postgres:17")
             .withNetwork(network)
             .withNetworkAliases(ACTIVE_CONTAINER_VIRTUAL_HOST)
             .withCopyFileToContainer(MountableFile.forClasspathResource("pg_hba.conf"), "/postgresql/conf/conf.d/pg_hba.conf")
             .withCommand("postgres -c wal_level=logical -c hba_file=/postgresql/conf/conf.d/pg_hba.conf -c listen_addresses=*");
 
 
-    private final PostgreSQLContainer<?> pgReplica = new PostgreSQLContainer<>("postgres:14")
+    private final PostgreSQLContainer<?> pgReplica = new PostgreSQLContainer<>("postgres:17")
             .withNetwork(network)
             .withNetworkAliases(STANDBY_CONTAINER_VIRTUAL_HOST)
             .withCopyFileToContainer(MountableFile.forClasspathResource("pg_hba.conf"), "/postgresql/conf/conf.d/pg_hba.conf")
@@ -48,7 +49,7 @@ public class PostgresUtilsTest {
     private PostgresConnector replicaContainer = null;
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
 
         Startables.deepStart(pgActive, pgReplica).join();
         Testcontainers.exposeHostPorts(pgActive.getFirstMappedPort(), pgReplica.getFirstMappedPort());
@@ -102,10 +103,10 @@ public class PostgresUtilsTest {
         openTables(false);
 
         // Create Publications
-        PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, primaryContainer), primary);
+        PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, primaryContainer, "c1"), primary);
 
         // Create Subscriptions
-        tryExecuteCommand(PostgresUtils.createSubscriptionCmd(primaryContainer, replicaContainer, primary), replica);
+        tryExecuteCommand(PostgresUtils.createSubscriptionCmd(primaryContainer, replicaContainer, "c1", primary), replica);
 
         // Generate data
         generateData(true);
@@ -129,10 +130,10 @@ public class PostgresUtilsTest {
         openTables(false);
 
         // Create Publications
-        PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, primaryContainer), primary);
+        PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, primaryContainer, "c1"), primary);
 
         // Create Subscriptions
-        tryExecuteCommand( PostgresUtils.createSubscriptionCmd(primaryContainer, replicaContainer, primary), replica);
+        tryExecuteCommand( PostgresUtils.createSubscriptionCmd(primaryContainer, replicaContainer, "c1", primary), replica);
 
         // Generate data
         generateData(true);
@@ -147,21 +148,33 @@ public class PostgresUtilsTest {
         Thread replicaSwitch = new Thread(() -> {
             // Replication is working, now try switchover
             // Start by stop receiving updates on the standby
-            PostgresUtils.dropAllSubscriptions(replica);
+            try {
+                PostgresUtils.dropAllSubscriptions(replica);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // Create publications on replica
-            PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, replicaContainer), replica);
+            PostgresUtils.tryExecuteCommand(PostgresUtils.createPublicationCmd(tablesToReplicate, replicaContainer, "c2"), replica);
         });
 
         Thread primarySwitch = new Thread(() -> {
             // Remove publications from primary
-            PostgresUtils.dropAllPublications(primary);
+            try {
+                PostgresUtils.dropAllPublications(primary);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // "Clear" tables on the primary
-            PostgresUtils.clearTables(new ArrayList<>(tablesToReplicate), primary);
+            try {
+                PostgresUtils.clearTables(new ArrayList<>(tablesToReplicate), primary);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
 
             // Create subscription on primary, "full sync" and start streaming from the replica
-            tryExecuteCommand(PostgresUtils.createSubscriptionCmd(replicaContainer, primaryContainer, replica), primary);
+            tryExecuteCommand(PostgresUtils.createSubscriptionCmd(replicaContainer, primaryContainer, "c2", replica), primary);
         });
 
         replicaSwitch.start();

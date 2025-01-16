@@ -39,6 +39,7 @@ public class DiscoveryServiceEvent {
         DISCOVERED_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
+        LOCK_RENEW,
         ENFORCE_SNAPSHOT_SYNC
     }
 }
