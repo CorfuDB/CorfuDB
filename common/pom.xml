@@ -24,7 +24,13 @@
         <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
-            <version>0.4.3</version>
+            <version>0.4.4</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>

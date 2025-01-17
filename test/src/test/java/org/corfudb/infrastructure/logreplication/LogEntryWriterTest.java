@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
@@ -24,6 +25,7 @@ import java.util.Map;
 
 import static org.mockito.Mockito.times;
 
+@Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
 public class LogEntryWriterTest extends AbstractViewTest {
 
@@ -218,38 +220,56 @@ public class LogEntryWriterTest extends AbstractViewTest {
     }
 
     /**
-     * This test verifies that the log entry is not applied when the timestamps of the last LogEntryMsg applied
-     * differ on the Source and Sink.  It also tests the assumption/requirement that MetadataManager returns
-     * Address.NON_ADDRESS as the init/default value of LAST_LOG_ENTRY_BATCH_PROCESSED.
+     * This test verifies the behaviour of a case where a LogEntryMsg is sent by Source, applied on the Sink and
+     * subsequently, the same batch with some more entries is resent.  The new entries must be applied on the Sink.
      *
-     * The test sets this timestamp to Address.NON_ADDRESS in the Metadata sent by the Source.  Metadata manager on
-     * the Sink has set this value to 0.
+     * In a real setup, this can happen with the following sequence of events:
+     * 1. Batch with timestamps 0-n is sent and applied on the Sink
+     * 2. Replication FSM stops due to leadership loss or network blip (ACK from data sent in step 1 has not been
+     * received)
+     * 3. New data gets written to replicated streams (n+1, n+2, n+3)
+     * 4. Replication starts and continues with LogEntry sync.  ACK from the first message had not arrived so same
+     * batch is constructed, but with timestamps (0, n+3).
+     *
+     * Expected behavior is that entries n+1, n+2 and n+3 must be applied by the Sink.
      */
     @Test
-    public void testApplyWithPrevTsMismatch() {
+    public void testApplyWithEntriesAddedToSameBatch() {
+        // Send numOpaqueEntries in the first batch and verify that they get applied on the Sink
+        testLogEntryApplyWithExpectedTx();
 
-        int startTs = 1;
-        LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(startTs, numOpaqueEntries, Address.NON_ADDRESS,
+        // Send the same batch with new entries added
+        LogReplicationEntryMsg lrEntryMsg = utils.generateLogEntryMsg(1, numOpaqueEntries + 3, Address.NON_ADDRESS,
             topologyConfigId, Address.NON_ADDRESS);
 
-        // Construct metadata where the sequence number of the last log entry applied does not match the incoming
-        // message
-        int lastTsInMetadataTable = 0;
-        Map<LogReplicationMetadataType, Long> metadataMap = constructMetadataMgrMap(topologyConfigId, lastTsInMetadataTable,
-            lastTsInMetadataTable, Address.NON_ADDRESS);
-        updateMetadataManagerMap(metadataMap, false);
+        Map<LogReplicationMetadataType, Long> metadataMap = constructMetadataMgrMap(topologyConfigId, numOpaqueEntries,
+            numOpaqueEntries, Address.NON_ADDRESS);
+        updateMetadataManagerMap(metadataMap, true);
 
-        // Verify that the data was not applied due to mismatch in the last log entry batch processed timestamps
-        Assert.assertFalse(logEntryWriter.apply(lrEntryMsg));
-
-        // The number of times commit() is invoked should be 0 as validation failed
-        verifyNumberOfTx(0);
+        // Verify that the new updates were applied
+        Assert.assertTrue(logEntryWriter.apply(lrEntryMsg));
+        verifyNumberOfTx(3);
 
         List<TxnContext> txnContexts = new ArrayList<>();
         List<LogReplicationMetadataType> metadataTypes = new ArrayList<>();
         List<Long> timestamps = new ArrayList<>();
 
-        verifyMetadataAppliedAndOrder(0, txnContexts, metadataTypes, timestamps);
+        for(int i = 0; i <= 3; i++) {
+            txnContexts.add(txnContext);
+        }
+
+        for(int i = numOpaqueEntries + 1; i <= numOpaqueEntries + 3 ; i++) {
+            // LAST_LOG_ENTRY_APPLIED will be updated in all updates
+            metadataTypes.add(LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
+            timestamps.add((long)i);
+
+            // LAST_LOG_ENTRY_BATCH_PROCESSED will be updated with the last opaque entry
+            if (i == numOpaqueEntries + 3) {
+                metadataTypes.add(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED);
+                timestamps.add((long)i);
+            }
+        }
+        verifyMetadataAppliedAndOrder(4, txnContexts, metadataTypes, timestamps);
     }
 
     /**

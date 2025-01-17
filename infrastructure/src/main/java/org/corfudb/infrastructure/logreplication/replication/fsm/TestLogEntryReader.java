@@ -28,11 +28,6 @@ public class TestLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public boolean hasMessageExceededSize() {
-        return false;
-    }
-
-    @Override
     public StreamsLogEntryReader.StreamIteratorMetadata getCurrentProcessedEntryMetadata() {
         return new StreamsLogEntryReader.StreamIteratorMetadata(Address.NON_ADDRESS, false);
     }

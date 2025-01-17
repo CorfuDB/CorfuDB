@@ -10,7 +10,7 @@ concurrency:
 jobs:
   compatibility_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
@@ -68,7 +68,7 @@ jobs:
         run: ./gradlew clean test -Dtags=version-compatibility
 
       - name: Upload compatibility test logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: compatibility-test-logs
           retention-days: 3

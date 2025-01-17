@@ -10,7 +10,7 @@ concurrency:
 jobs:
   injection_framework_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
@@ -72,7 +72,7 @@ jobs:
         run: ./gradlew clean test -Dtags=longevity-docker
 
       - name: upload longevity logs artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: injection-framework-logs
           retention-days: 3
