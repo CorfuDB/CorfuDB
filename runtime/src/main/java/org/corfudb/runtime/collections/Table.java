@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -36,6 +37,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -60,12 +62,38 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
 
-    protected static final ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() / 2, 1),
+    private static final String FJP_METRICS_POOL_SIZE = "table.fjp.pool_size";
+    private static final String FJP_METRICS_RUNNING_THREAD_COUNT = "table.fjp.running_thread_count";
+    private static final String FJP_METRICS_ACTIVE_THREAD_COUNT = "table.fjp.active_thread_count";
+    private static final String FJP_METRICS_QUEUED_TASK_COUNT = "table.fjp.queued_task_count";
+
+    private static final int FJP_PARALLELISM = Math.max(Runtime.getRuntime().availableProcessors() / 2, 1);
+
+    protected static final ForkJoinPool pool = new ForkJoinPool(
+            FJP_PARALLELISM,
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 worker.setName("Table-Forkjoin-pool-" + worker.getPoolIndex());
                 return worker;
-            }, null, true);
+            },
+            null,
+            true,
+            2 * FJP_PARALLELISM, // corePoolSize == 2 * parallelism to avoid bug JDK-8330017
+            Integer.MAX_VALUE, // default to FJP.MAX_CAP
+            1,
+            null,
+            60,
+            TimeUnit.SECONDS
+            );
+
+    static {
+        if (MeterRegistryProvider.getInstance().isPresent()) {
+            MicroMeterUtils.gauge(FJP_METRICS_POOL_SIZE, pool, ForkJoinPool::getPoolSize);
+            MicroMeterUtils.gauge(FJP_METRICS_RUNNING_THREAD_COUNT, pool, ForkJoinPool::getRunningThreadCount);
+            MicroMeterUtils.gauge(FJP_METRICS_ACTIVE_THREAD_COUNT, pool, ForkJoinPool::getActiveThreadCount);
+            MicroMeterUtils.gauge(FJP_METRICS_QUEUED_TASK_COUNT, pool, ForkJoinPool::getQueuedTaskCount);
+        }
+    }
 
     private ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
