@@ -10,6 +10,7 @@ public enum AbortCause {
     //TODO(Maithem): these types are redundant and should be removed,
     // we should just expose the throwable
     CONFLICT,
+    DEADLOCK,
     OVERWRITE, /** Aborted because of slow writer, i.e., continuously gets overwritten (hole filled by faster reader) */
     NEW_SEQUENCER,
     SIZE_EXCEEDED,
