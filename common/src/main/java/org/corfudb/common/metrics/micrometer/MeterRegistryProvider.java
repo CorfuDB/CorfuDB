@@ -40,6 +40,14 @@ public class MeterRegistryProvider {
     private static Optional<RegistryProvider> provider = Optional.empty();
     private static final Map<String, Supplier<String>> externalMetricsSuppliers
             = new ConcurrentHashMap<>();
+    public static final Set<String> systemHealthMetrics = ImmutableSet.of(
+            "address_space.write.latency",
+            "transaction.duration",
+            "logunit.fsync.timer",
+            "logunit.read.timer",
+            "failure-detector.ping-latency",
+            "overall.status"
+    );
 
     private MeterRegistryProvider() {
 
@@ -50,14 +58,7 @@ public class MeterRegistryProvider {
         CLIENT
     }
 
-    public static final Set<String> systemHealthMetrics = ImmutableSet.of(
-            "address_space.write.latency",
-            "transaction.duration",
-            "logunit.fsync.timer",
-            "logunit.read.timer",
-            "failure-detector.ping-latency",
-            "overall.status"
-    );
+
 
     /**
      * Class that initializes the Meter Registry.
