@@ -365,6 +365,8 @@
                         <arg>-XDignore.symbol.file</arg>
                         <arg>--add-exports</arg>
                         <arg>java.management/sun.management=ALL-UNNAMED</arg>
+                        <arg>--add-opens</arg>
+                        <arg>java.base/java.net=ALL-UNNAMED</arg>
                     </compilerArgs>
                     <fork>true</fork>
                 </configuration>
@@ -448,7 +450,10 @@
                 <version>3.2.2</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
-                    <argLine>${unit.jacoco.args}</argLine>
+                    <argLine>
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                        ${unit.jacoco.args}
+                    </argLine>
                     <forkCount>1C</forkCount>
                     <reuseForks>false</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
