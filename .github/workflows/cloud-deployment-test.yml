@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        jdk_base_image_version: ['openjdk:11-jdk-bullseye', 'openjdk:17-jdk-bullseye']
+        jdk_base_image_version: ['openjdk:17-jdk-bullseye']
 
     steps:
       - uses: actions/checkout@v4
