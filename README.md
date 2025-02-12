@@ -40,7 +40,7 @@ For more details on the inner workings of Corfu, see the [Corfu wiki](https://gi
 ## Ok, great - get me started running Corfu!
 
 ### Building Corfu From Source
-To build Corfu, you will need the Java JDK 11 as well as Apache Maven
+To build Corfu, you will need the Java JDK 17 as well as Apache Maven
 3.3 or later to invoke the build system.
 
 Your major release number of Debian/Ubuntu will determine whether the
