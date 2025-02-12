@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.protobuf.TextFormat;
+import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
@@ -74,11 +75,12 @@ public class LogEntryWriter extends SinkWriter {
         // value cannot be used here as its value needs to be changed in the lambda function below.
         AtomicBoolean registryTableUpdated = new AtomicBoolean(false);
         List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(txMessage);
-
+        log.warn("Number of opaqueEntries in the logEntry batch is {}", opaqueEntryList.size());
         for (OpaqueEntry opaqueEntry : opaqueEntryList) {
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+
 
                         // NOTE: The topology config id should be queried and validated for every opaque entry because the
                         // Sink could have received concurrent topology config id changes.  Here we are leveraging a
@@ -108,6 +110,11 @@ public class LogEntryWriter extends SinkWriter {
                         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
                         long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
+                        log.warn("persistedTopologyConfigId {}, persistedSnapshotStart {}, persistedSnapshotDone {}, " +
+                                "persistedBatchTs {}, persistedOpaqueEntryTs {}, topologyConfigId {}, baseSnapshotTs {}, " +
+                                "prevTs {}, opaqueEntry.version() {} ", persistedTopologyConfigId, persistedSnapshotStart,
+                                persistedSnapshotDone, persistedBatchTs, persistedOpaqueEntryTs, topologyConfigId, baseSnapshotTs,
+                                prevTs, opaqueEntry.getVersion());
                         // Validate the message metadata with the local metadata table
                         if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
                             baseSnapshotTs != persistedSnapshotDone || prevTs > persistedBatchTs) {
@@ -120,7 +127,7 @@ public class LogEntryWriter extends SinkWriter {
 
                         // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
                         if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
-                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
+                            log.warn("Skipping entry {} as it is less than the last applied opaque entry {}",
                                 opaqueEntry.getVersion(), persistedOpaqueEntryTs);
                             return null;
                         }
@@ -139,10 +146,13 @@ public class LogEntryWriter extends SinkWriter {
 
                         // If this is the last OpaqueEntry in the message/batch, update LAST_LOG_ENTRY_BATCH_PROCESSED
                         // with its timestamp
+                        // print
+                        log.warn("Comparing the opaque.version {} and txMessage ts {}", opaqueEntry.getVersion(), txMessage.getMetadata().getTimestamp());
                         if (opaqueEntry.getVersion() == txMessage.getMetadata().getTimestamp()) {
                             logReplicationMetadataManager.appendUpdate(txnContext,
                                 LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
                                 txMessage.getMetadata().getTimestamp());
+                            log.warn("updated  LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
                         }
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
@@ -169,7 +179,7 @@ public class LogEntryWriter extends SinkWriter {
                                 txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
                             }
                         }
-                        txnContext.commit();
+                        log.warn("txn commited. the log entry was applied {}", txnContext.commit());
                         // Sync with registry table if registry table entries are handled in last transaction, in order
                         // to update the config with those new entries.
                         if (registryTableUpdated.get()) {
@@ -185,6 +195,9 @@ public class LogEntryWriter extends SinkWriter {
                     } catch (TransactionAbortedException tae) {
                         log.error("Caught exception while trying to apply the logEntryMsg.", tae);
                         throw new RetryNeededException();
+                    } catch (Exception e) {
+                        log.error("Inside retry Caught exception while trying to apply the logEntryMsg.", e);
+                        throw e;
                     }
                     return null;
                 }).run();
@@ -193,6 +206,9 @@ public class LogEntryWriter extends SinkWriter {
                 return false;
             } catch (InterruptedException e) {
                 log.error("Could not apply entry with sequence " + opaqueEntry.getVersion());
+                return false;
+            } catch (Exception e) {
+                log.error("Caught exception while trying to apply the logEntryMsg.", e);
                 return false;
             }
         }

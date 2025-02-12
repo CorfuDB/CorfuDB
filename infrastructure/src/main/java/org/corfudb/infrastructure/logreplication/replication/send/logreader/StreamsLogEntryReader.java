@@ -245,6 +245,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
                 currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
+            if (opaqueEntryList.size() > 0) {
+                log.warn("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
+                        currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
+                log.warn("The first entry in the batch {} and the last entry {}", opaqueEntryList.get(0).getVersion(),
+                        opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion());
+            }
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
@@ -367,7 +373,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 return null;
 
             OpaqueEntry opaqueEntry = (OpaqueEntry) iterator.next();
-            log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
+            log.warn("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
             return opaqueEntry;
         }
 
