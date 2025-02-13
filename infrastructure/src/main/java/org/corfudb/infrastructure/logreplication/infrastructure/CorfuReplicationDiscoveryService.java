@@ -711,13 +711,47 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (isValid) {
             if (clusterRoleChanged(discoveredTopology)) {
                 onClusterRoleChange(discoveredTopology);
-            } else {
+            } else if(isStandbyChange(discoveredTopology) || isActiveChange(discoveredTopology)){
                 onStandbyClusterAddRemove(discoveredTopology);
             }
         } else {
             // Stop Log Replication in case this node was previously ACTIVE but no longer belongs to the Topology
             stopLogReplication();
         }
+    }
+
+    /**
+     * Determine if any standby cluster has been added or removed from the topology
+     *
+     * @param discoveredTopology new discovered topology
+     * @return true, standby has been added or removed
+     * false, otherwise
+     */
+    private boolean isStandbyChange(TopologyDescriptor discoveredTopology) {
+        return topologyDescriptor.getStandbyClusters().keySet() != discoveredTopology.getStandbyClusters().keySet() ||
+                isNodeAddedOrRemoved(discoveredTopology.getStandbyClusters(), topologyDescriptor.getStandbyClusters());
+    }
+
+    /**
+     * Determine if any active cluster has been added or removed from the topology
+     *
+     * @param discoveredTopology new discovered topology
+     * @return true, standby has been added or removed
+     * false, otherwise
+     */
+    private boolean isActiveChange(TopologyDescriptor discoveredTopology) {
+        return topologyDescriptor.getActiveClusters().keySet() != discoveredTopology.getActiveClusters().keySet() ||
+                isNodeAddedOrRemoved(discoveredTopology.getActiveClusters(), topologyDescriptor.getActiveClusters());
+    }
+
+    private boolean isNodeAddedOrRemoved(Map<String, ClusterDescriptor> newClusterIdToDescriptor,
+                                         Map<String, ClusterDescriptor> oldClusterIdToDescriptor) {
+        final AtomicBoolean isNewNodeAdded = new AtomicBoolean(false);
+        newClusterIdToDescriptor.forEach((key, newClusterDescriptor) -> {
+            ClusterDescriptor oldClusterDescriptor = oldClusterIdToDescriptor.get(key);
+            isNewNodeAdded.set(isNewNodeAdded.get() || !newClusterDescriptor.nodesDescriptors.equals(oldClusterDescriptor.nodesDescriptors));
+        });
+        return isNewNodeAdded.get();
     }
 
     /**

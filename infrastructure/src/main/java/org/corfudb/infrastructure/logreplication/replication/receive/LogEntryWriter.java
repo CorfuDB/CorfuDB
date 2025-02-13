@@ -110,18 +110,13 @@ public class LogEntryWriter extends SinkWriter {
                         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
                         long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
-                        log.warn("persistedTopologyConfigId {}, persistedSnapshotStart {}, persistedSnapshotDone {}, " +
-                                "persistedBatchTs {}, persistedOpaqueEntryTs {}, topologyConfigId {}, baseSnapshotTs {}, " +
-                                "prevTs {}, opaqueEntry.version() {} ", persistedTopologyConfigId, persistedSnapshotStart,
-                                persistedSnapshotDone, persistedBatchTs, persistedOpaqueEntryTs, topologyConfigId, baseSnapshotTs,
-                                prevTs, opaqueEntry.getVersion());
                         // Validate the message metadata with the local metadata table
                         if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
                             baseSnapshotTs != persistedSnapshotDone || prevTs > persistedBatchTs) {
                             log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
-                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
+                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}. opaqueEntry.Version={}",
                                 txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
-                                persistedSnapshotDone, persistedBatchTs);
+                                persistedSnapshotDone, persistedBatchTs, opaqueEntry.getVersion());
                             throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
                         }
 
@@ -146,13 +141,11 @@ public class LogEntryWriter extends SinkWriter {
 
                         // If this is the last OpaqueEntry in the message/batch, update LAST_LOG_ENTRY_BATCH_PROCESSED
                         // with its timestamp
-                        // print
-                        log.warn("Comparing the opaque.version {} and txMessage ts {}", opaqueEntry.getVersion(), txMessage.getMetadata().getTimestamp());
                         if (opaqueEntry.getVersion() == txMessage.getMetadata().getTimestamp()) {
                             logReplicationMetadataManager.appendUpdate(txnContext,
                                 LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
                                 txMessage.getMetadata().getTimestamp());
-                            log.warn("updated  LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
+                            log.debug("updated LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
                         }
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
@@ -179,7 +172,7 @@ public class LogEntryWriter extends SinkWriter {
                                 txnContext.logUpdate(streamId, smrEntry, config.getDataStreamToTagsMap().get(streamId));
                             }
                         }
-                        log.warn("txn commited. the log entry was applied {}", txnContext.commit());
+                        txnContext.commit();
                         // Sync with registry table if registry table entries are handled in last transaction, in order
                         // to update the config with those new entries.
                         if (registryTableUpdated.get()) {
@@ -193,10 +186,12 @@ public class LogEntryWriter extends SinkWriter {
                             registryTableUpdated.set(false);
                         }
                     } catch (TransactionAbortedException tae) {
-                        log.error("Caught exception while trying to apply the logEntryMsg.", tae);
+                        log.error("Caught exception while trying to apply the logEntryMsg.. " +
+                                "batch ts {}, current log entry ts {}, ",  txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), tae);
                         throw new RetryNeededException();
                     } catch (Exception e) {
-                        log.error("Inside retry Caught exception while trying to apply the logEntryMsg.", e);
+                        log.error("Inside retry Caught exception while trying to apply the logEntryMsg..." +
+                                "batch ts {}, current log entry ts {}, ", txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), e);
                         throw e;
                     }
                     return null;
