@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.protobuf.TextFormat;
-import com.google.protobuf.Timestamp;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
@@ -75,7 +74,7 @@ public class LogEntryWriter extends SinkWriter {
         // value cannot be used here as its value needs to be changed in the lambda function below.
         AtomicBoolean registryTableUpdated = new AtomicBoolean(false);
         List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(txMessage);
-        log.warn("Number of opaqueEntries in the logEntry batch is {}", opaqueEntryList.size());
+        log.debug("Total opaqueEntries count={}", opaqueEntryList.size());
         for (OpaqueEntry opaqueEntry : opaqueEntryList) {
             try {
                 IRetry.build(IntervalRetry.class, () -> {
@@ -114,7 +113,7 @@ public class LogEntryWriter extends SinkWriter {
                         if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
                             baseSnapshotTs != persistedSnapshotDone || prevTs > persistedBatchTs) {
                             log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
-                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}. opaqueEntry.Version={}",
+                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}, opaqueEntry.Version={}",
                                 txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
                                 persistedSnapshotDone, persistedBatchTs, opaqueEntry.getVersion());
                             throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
@@ -145,7 +144,7 @@ public class LogEntryWriter extends SinkWriter {
                             logReplicationMetadataManager.appendUpdate(txnContext,
                                 LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
                                 txMessage.getMetadata().getTimestamp());
-                            log.debug("updated LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
+                            log.debug("Updated LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
                         }
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
@@ -190,7 +189,7 @@ public class LogEntryWriter extends SinkWriter {
                                 "batch ts {}, current log entry ts {}, ",  txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), tae);
                         throw new RetryNeededException();
                     } catch (Exception e) {
-                        log.error("Inside retry Caught exception while trying to apply the logEntryMsg..." +
+                        log.error("Inside retry - caught exception while trying to apply the logEntryMsg..." +
                                 "batch ts {}, current log entry ts {}, ", txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), e);
                         throw e;
                     }
