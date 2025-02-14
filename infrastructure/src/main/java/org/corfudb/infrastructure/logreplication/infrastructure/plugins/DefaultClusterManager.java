@@ -345,7 +345,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         newActiveClusters.get(0).getNodesDescriptors().add(backupNode);
         List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getStandbyClusters().values());
 
-        return new TopologyDescriptor(++configId, newActiveClusters, standbyClusters);
+        return new TopologyDescriptor(configId, newActiveClusters, standbyClusters);
     }
 
     /**
