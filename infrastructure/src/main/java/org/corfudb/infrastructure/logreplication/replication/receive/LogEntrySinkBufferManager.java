@@ -84,6 +84,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
             LogReplicationEntryMetadataMsg metadata = entry.getMetadata();
             if (metadata.getTimestamp() <= lastProcessedSeq) {
                 buffer.remove(metadata.getPreviousTimestamp());
+                log.warn("Remove entry without processing, ts={}, lastProcessed={}", metadata.getTimestamp(), lastProcessedSeq);
             } else if (metadata.getPreviousTimestamp() <= lastProcessedSeq && sinkManager.processMessage(entry)) {
                 ackCnt++;
                 buffer.remove(lastProcessedSeq);
