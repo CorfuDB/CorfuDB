@@ -439,6 +439,7 @@ public class LogReplicationMetadataManager {
             appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
             appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
             appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, ts);
+            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED, ts);
 
             // Set 'isDataConsistent' flag on replication status table atomically with snapshot sync completed
             // information, to prevent any inconsistency between flag and state of snapshot sync completion in
