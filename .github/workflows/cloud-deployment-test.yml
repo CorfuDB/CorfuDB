@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
-          ref: set-corfu-0.9.0.0-version
+          ref: corfu-0.9.0.0
 
       - name: install helm package manager
         working-directory: ./cloud/corfu
