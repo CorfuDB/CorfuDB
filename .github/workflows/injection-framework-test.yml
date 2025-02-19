@@ -54,10 +54,10 @@ jobs:
       - name: Set corfu server version env variable
         run: echo "CORFU_SERVER_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
-          ref: master
+          ref: corfu-0.9.0.0
 
       - name: Build universe-core
         working-directory: ./universe
