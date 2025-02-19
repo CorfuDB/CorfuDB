@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-  pull_request:
 
 # Cancel Previous Runs
 concurrency:
@@ -15,7 +14,7 @@ jobs:
   publish_corfu_db_artifacts:
 
     runs-on: ubuntu-22.04
-    #if: github.event_name == 'push'
+    if: github.event_name == 'push'
 
     env:
       PKG_USERNAME: ${{ secrets.pkg_username }}
