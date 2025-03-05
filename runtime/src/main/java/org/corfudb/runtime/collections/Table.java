@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -84,6 +85,15 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
             60,
             TimeUnit.SECONDS
             );
+
+    static {
+        if (MeterRegistryProvider.getInstance().isPresent()) {
+            MicroMeterUtils.gauge(FJP_METRICS_POOL_SIZE, pool, ForkJoinPool::getPoolSize);
+            MicroMeterUtils.gauge(FJP_METRICS_RUNNING_THREAD_COUNT, pool, ForkJoinPool::getRunningThreadCount);
+            MicroMeterUtils.gauge(FJP_METRICS_ACTIVE_THREAD_COUNT, pool, ForkJoinPool::getActiveThreadCount);
+            MicroMeterUtils.gauge(FJP_METRICS_QUEUED_TASK_COUNT, pool, ForkJoinPool::getQueuedTaskCount);
+        }
+    }
 
     private ICorfuTable<K, CorfuRecord<V, M>> corfuTable;
 
@@ -183,11 +193,6 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
         } else {
             this.guidGenerator = null;
         }
-
-        MicroMeterUtils.gauge(FJP_METRICS_POOL_SIZE, pool, ForkJoinPool::getPoolSize);
-        MicroMeterUtils.gauge(FJP_METRICS_RUNNING_THREAD_COUNT, pool, ForkJoinPool::getRunningThreadCount);
-        MicroMeterUtils.gauge(FJP_METRICS_ACTIVE_THREAD_COUNT, pool, ForkJoinPool::getActiveThreadCount);
-        MicroMeterUtils.gauge(FJP_METRICS_QUEUED_TASK_COUNT, pool, ForkJoinPool::getQueuedTaskCount);
     }
 
     /**
