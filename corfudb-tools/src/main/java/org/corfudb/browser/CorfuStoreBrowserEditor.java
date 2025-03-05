@@ -182,7 +182,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                     .append(JsonFormat.printer().print(entry.getKey().getKey()));
             System.out.println(builder.toString());
         } catch (Exception e) {
-            log.info("invalid key: ", e);
+            log.info("invalid key: {}", entry.getKey().getKey(), e);
         }
     }
 
@@ -198,7 +198,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                     .append(JsonFormat.printer().print(entry.getValue().getPayload()));
             System.out.println(builder.toString());
         } catch (Exception e) {
-            log.info("invalid payload: ", e);
+            log.info("invalid payload: {}", entry.getValue().getPayload(), e);
         }
     }
 
@@ -249,7 +249,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                     .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
             System.out.println(builder.toString());
         } catch (Exception e) {
-            log.info("invalid metadata: ", e);
+            log.info("invalid metadata: {}", entry.getValue().getMetadata(), e);
         }
     }
 
