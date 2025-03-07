@@ -133,7 +133,7 @@ public class LivenessValidator {
                 .getStreamAddressSpace(new StreamAddressRange(cpStreamId, Address.MAX, Address.NON_ADDRESS)).getTail();
     }
 
-    private int getIdleCount() {
+    public int getIdleCount() {
         int idleCount = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             Set<TableName> checkpointTableNames = txn.keySet(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
