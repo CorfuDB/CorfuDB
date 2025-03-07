@@ -82,9 +82,8 @@ public class LivenessValidatorUnitTest {
     @Test
     public void shouldChangeManagerStatusTest() {
         List<CorfuStoreEntry<? extends Message, ? extends Message, ? extends Message>> mockList = mock(List.class);
-        when(txn.executeQuery(anyString(), any(Predicate.class))).thenReturn(mockList);
+        doReturn(1).when(livenessValidatorSpy).getIdleCount();
 
-        when(mockList.size()).thenReturn(1);
         Assert.assertEquals(LivenessValidator.Status.NONE,
                 livenessValidatorSpy.shouldChangeManagerStatus(Duration.ofSeconds(0)));
 
