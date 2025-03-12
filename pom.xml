@@ -37,14 +37,14 @@
         <revision>0.9.1.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <logback.classic.version>1.5.12</logback.classic.version>
+        <logback.classic.version>1.5.17</logback.classic.version>
 
         <!-- Dependency versions -->
         <slf4j.version>2.0.16</slf4j.version>
         <netty.version>4.1.111.Final</netty.version>
         <netty.tcnative.version>2.0.61.Final</netty.tcnative.version>
         <protobuf.version>3.21.12</protobuf.version>
-        <commons.io.version>2.11.0</commons.io.version>
+        <commons.io.version>2.18.0</commons.io.version>
         <lombok.version>1.18.30</lombok.version>
         <guava.version>32.1.2-jre</guava.version>
         <junit.jupiter.version>5.10.1</junit.jupiter.version>
@@ -245,7 +245,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.5</version>
+            <version>4.5.14</version>
         </dependency>
     </dependencies>
 
