@@ -293,14 +293,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
 
         // Define a namespace for the table.
-        final String nsxManager = "nsx-manager";
+        final String someNamespace = "some-ns";
         // Define table name.
         final String tableName = "EventInfo";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
         Table<SampleSchema.Uuid, SampleSchema.EventInfo, ManagedResources> table = shimStore.openTable(
-                nsxManager,
+                someNamespace,
                 tableName,
                 SampleSchema.Uuid.class,
                 SampleSchema.EventInfo.class,
@@ -316,12 +316,12 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         ManagedResources user_2 = ManagedResources.newBuilder().setCreateUser("user_2").build();
         long expectedVersion = 0L;
 
-        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("abc").build(), user_1);
             txn.commit();
         }
 
-        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_1")
                         .setCreateTimestamp(0L)
@@ -329,7 +329,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         .setVersion(expectedVersion).build());
 
         // Set the version field to the correct value 1 and expect that no exception is thrown
-        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             // Enforce version number
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("bcd").build(),
                     ManagedResources.newBuilder().setCreateUser("user_2").setVersion(0L).build());
@@ -337,7 +337,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Honor enforced version number
-        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
@@ -345,32 +345,32 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         .setVersion(0L).build());
 
         // Now do an update without setting the version field, and it should not get validated!
-        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("cde").build(),
                     user_2);
             txn.commit();
         }
 
-        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion).build());
 
-        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.delete(table, key1);
             txn.commit();
         }
-        assertThat(shimStore.getTable(nsxManager, tableName).get(key1)).isNull();
+        assertThat(shimStore.getTable(someNamespace, tableName).get(key1)).isNull();
         expectedVersion = 0L;
 
-        try (ManagedTxnContext txn = shimStore.tx(nsxManager)) {
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(table, key1, SampleSchema.EventInfo.newBuilder().setName("def").build(), user_2);
             txn.commit();
         }
 
-        assertThat(shimStore.getTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder(user_2)
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
@@ -399,19 +399,40 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     public void checkOpenRetriesTXN() throws Exception {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
-        final String nsxManager = "nsx-manager"; // namespace for the table
+        final String someNamespace = "some-ns"; // namespace for the table
         final String tableName = "EventInfo"; // table name
         final int numThreads = 5;
         scheduleConcurrently(numThreads, t -> {
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 // Create & Register the table.
                 // This is required to initialize the table for the current corfu client.
-                shimStore.openTable(nsxManager, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
+                shimStore.openTable(someNamespace, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
                         TableOptions.builder().build());
             }
 
         });
         executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+    }
+
+    /**
+     * Demonstrates that opening same table with same parameters returns the same opened instance
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkTableReopen() throws Exception {
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+        final String someNamespace = "some-ns"; // namespace for the table
+        final String tableName = "EventInfo"; // table name
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table1 = shimStore.openTable(
+                someNamespace, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
+                TableOptions.builder().build());
+
+        Table<SampleSchema.Uuid, SampleSchema.EventInfo, Message> table2 = shimStore.openTable(
+                someNamespace, tableName, SampleSchema.Uuid.class, SampleSchema.EventInfo.class, null,
+                TableOptions.builder().build());
+        assertThat(table1).isEqualTo(table2);
     }
 
     /**
