@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import javax.annotation.Nonnull;
+import lombok.NonNull;
+
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -33,7 +34,7 @@ public interface ICorfuTable<K, V> {
      * @param indexKey  The index key used to query the secondary index
      * @return An Iterable of Map.Entry<K, V>
      */
-    <I> Iterable<Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey);
+    <I> Iterable<Entry<K, V>> getByIndex(@NonNull final Index.Name indexName, I indexKey);
 
     V get(Object key);
 
