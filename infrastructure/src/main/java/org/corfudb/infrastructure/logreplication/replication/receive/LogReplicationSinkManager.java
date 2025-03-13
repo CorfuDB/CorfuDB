@@ -126,6 +126,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
+        log.info("Runtime created from Sink Manager {}", runtime);
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
         waitMsBeforeSnapshotApply = context.getSnapshotApplyWaitTime();

@@ -381,6 +381,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .maxWriteSize(serverContext.getMaxWriteSize())
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
+            log.info("Runtime Created From Discovery Service: {}", runtime);
         }
 
         return runtime;
