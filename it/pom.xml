@@ -86,6 +86,9 @@
                     <trimStackTrace>false</trimStackTrace>
                     <!-- Option to generate a file test report or just output the test report to the console. -->
                     <useFile>false</useFile>
+                    <argLine>
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                    </argLine>
                 </configuration>
             </plugin>
         </plugins>
@@ -134,7 +137,10 @@
                         </executions>
                         <configuration>
                             <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
-                            <argLine>${universe.jacoco.args}</argLine>
+                            <argLine>
+                                --add-opens java.base/java.net=ALL-UNNAMED
+                                ${universe.jacoco.args}
+                            </argLine>
                             <skipITs>false</skipITs>
                             <reuseForks>false</reuseForks>
                             <trimStackTrace>false</trimStackTrace>

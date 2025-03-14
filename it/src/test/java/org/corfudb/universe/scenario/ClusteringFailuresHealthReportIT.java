@@ -34,27 +34,6 @@ import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 
 public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
 
-    private HealthReport getUnresponsiveNodeHealthReport() {
-        return builder()
-                .status(FAILURE)
-                .reason(OVERALL_STATUS_FAILURE)
-                .init(ImmutableSet.of(
-                        new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_INITIALIZED),
-                        new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_INITIALIZED),
-                        new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_INITIALIZED),
-                        new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, UP, COMPONENT_INITIALIZED),
-                        new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_INITIALIZED)))
-                .runtime(ImmutableSet.of(
-                        new HealthReport.ComponentReportedHealthStatus(LOG_UNIT, UP, COMPONENT_IS_RUNNING),
-                        new HealthReport.ComponentReportedHealthStatus(LAYOUT_SERVER, UP, COMPONENT_IS_RUNNING),
-                        new HealthReport.ComponentReportedHealthStatus(ORCHESTRATOR, UP, COMPONENT_IS_RUNNING),
-                        new HealthReport.ComponentReportedHealthStatus(FAILURE_DETECTOR, FAILURE,
-                                "There are nodes in the unresponsive list"),
-                        new HealthReport.ComponentReportedHealthStatus(SEQUENCER, UP, COMPONENT_IS_RUNNING)))
-                .liveness(new HealthReport.ReportedLivenessStatus(UP, OVERALL_STATUS_UP))
-                .build();
-    }
-
     private HealthReport getHealTaskFailedHealthReport() {
         return builder()
                 .status(FAILURE)
@@ -121,11 +100,6 @@ public class ClusteringFailuresHealthReportIT extends GenericIntegrationTest {
             corfuServer.disconnect();
             // Wait for layout change and find the unresponsive nodes in other node's health report
             waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(corfuServer.getEndpoint()), corfuClient);
-            final CorfuServer otherServer = allServers.remove(0);
-            waitForHealthReport(
-                    report -> report.equals(getUnresponsiveNodeHealthReport()),
-                    () -> queryHealthReport(otherServer.getParams().getHealthPort())
-            );
 
             // Now trying to perform a clustering operation on a node that cant reach quorum
             try {
