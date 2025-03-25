@@ -101,10 +101,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private static final int STATE_CHANGE_CHECKS = 20;
     private static final int WAIT_STATE_CHANGE = 300;
 
+    private int maxMsgSize = LogReplicationConfig.DEFAULT_MAX_MSG_BATCH_SIZE;
+
     // Number of messages per batch
     private static final int BATCH_SIZE = 4;
-
-    private static final int SMALL_MSG_SIZE = 12000;
 
     private TestConfig testConfig;
 
@@ -329,7 +329,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             expectedAckTimestamp.set(Math.max(tail, expectedAckTimestamp.get()));
         }
     }
-
 
     private void verifyTables(Map<String, Table<StringKey, IntValue, Metadata>> tables0,
                               Map<String, Table<StringKey, IntValue, Metadata>> tables1) {
@@ -1092,6 +1091,12 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         Set<WAIT> waitCondition = new HashSet<>();
         waitCondition.add(WAIT.NONE);
+
+        // Note: This test uses dropAckLevel = 2 which relies on atleast 2 messages being sent.  Ack for the 2nd
+        // message is dropped.  Following this, it tests state transition to INITIALIZED state by stopping
+        // replication.  So there should be at least 2 messages sent from source.  To ensure this, keep a custom max
+        // msg size.
+        maxMsgSize = 12000;
         startLogEntrySync(waitCondition, true, this::changeState);
 
         blockUntilFSMTransition.await();
@@ -1258,7 +1263,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationConfigManager tableManagerPlugin = new LogReplicationConfigManager(srcTestRuntime);
         LogReplicationConfig config = new LogReplicationConfig(tableManagerPlugin, BATCH_SIZE,
-                SMALL_MSG_SIZE, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+                maxMsgSize, MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,
@@ -1443,7 +1448,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         /**
          * 0 : No ACKs dropped
          * 1 : Arbitrarily ACKs are dropped
-         * 2 : An ACK dropped and further messages dropped at Source.
+         * 2 : ACK for 2nd message dropped and further messages dropped at Source by sending a REPLICATION_STOP event
          * */
         private int dropAckLevel = 0;
         private int delayedApplyCycles = 0; // Represents the number of cycles for which snapshot sync apply queries
