@@ -14,6 +14,10 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ExecutorService;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -24,6 +28,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class FileWatcher implements Closeable {
 
     private final File file;
+
+    private long fileLastModifiedTime;
 
     private final Runnable onChange;
 
@@ -91,8 +97,16 @@ public class FileWatcher implements Closeable {
                         kind == StandardWatchEventKinds.ENTRY_CREATE ||
                         kind == StandardWatchEventKinds.ENTRY_DELETE)
                         && filename.toString().equals(file.getName())) {
-                    log.info("FileWatcher: file {} changed. Invoking handler...", filename);
-                    onChange.run();
+                    if (file.lastModified() != this.fileLastModifiedTime) {
+                        this.fileLastModifiedTime = file.lastModified();
+                        log.info("FileWatcher: file {} changed at {}. Invoking handler...",
+                                filename, getLastModifiedTimeHumanReadable());
+                        onChange.run();
+                    } else {
+                        log.info("FileWatcher: file {} NOT modified. Last modified time is {}. " +
+                                "Event was triggered might as a result of file metadata changes. Skipping handler...",
+                                filename, getLastModifiedTimeHumanReadable());
+                    }
                 }
             }
             // reset key for continuous watching
@@ -110,6 +124,17 @@ public class FileWatcher implements Closeable {
         }
     }
 
+    /**
+     * Get the last modified time of the watched file in human-readable format.
+     * @return human-readable time in UTC
+     */
+    private String getLastModifiedTimeHumanReadable() {
+        Instant instant = Instant.ofEpochMilli(fileLastModifiedTime);
+        ZonedDateTime utcTime = instant.atZone(ZoneOffset.UTC);
+
+        return utcTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
     private void reloadNewWatchService() {
         isRegistered.set(false);
         if (isStopped.get()) {
@@ -123,10 +148,12 @@ public class FileWatcher implements Closeable {
             }
             watchService = FileSystems.getDefault().newWatchService();
             Path path = file.toPath().getParent();
+            fileLastModifiedTime = file.lastModified();
             path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
             isRegistered.set(true);
-            log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
+            log.info("FileWatcher: parent dir {} for file {} registered. File last modified time: {}",
+                    path, file.getAbsoluteFile(), getLastModifiedTimeHumanReadable());
         } catch (IOException ioe) {
             throw new IllegalStateException("Failed to start a new watch service!", ioe);
         }
