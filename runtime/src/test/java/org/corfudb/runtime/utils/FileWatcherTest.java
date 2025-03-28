@@ -99,6 +99,7 @@ public class FileWatcherTest {
         Files.write(filePath.toAbsolutePath(), randomBytes,
                 StandardOpenOption.WRITE, StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+        log.info("Done writing to the file!");
 
         // Verify that the file watch callback has been invoked
         TimeUnit.SECONDS.sleep(1);
@@ -106,6 +107,7 @@ public class FileWatcherTest {
 
         Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxrwx---");
         Files.setPosixFilePermissions(filePath.toAbsolutePath(), permissions);
+        log.info("Done updating file permission!");
 
         // Verify that the file watch callback has NOT been invoked
         TimeUnit.SECONDS.sleep(1);
