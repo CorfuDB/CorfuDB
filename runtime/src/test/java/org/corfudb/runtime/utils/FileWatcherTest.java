@@ -58,7 +58,9 @@ public class FileWatcherTest {
     public void cleanup() throws IOException {
         FileUtils.deleteDirectory(new File(PATH));
         fileWatcher.close();
-        executorService.shutdownNow();
+        if (executorService != null) {
+            executorService.shutdownNow();
+        }
     }
 
     /**
@@ -75,19 +77,21 @@ public class FileWatcherTest {
         verify(executorService, times(1)).shutdownNow();
     }
 
+    /**
+     * Test that the file watcher callback is invoked correctly when the file content is modified,
+     * and not invoked when the file permissions are changed.
+     */
     @Test
     public void testFileWatcherLastModified() throws IOException, InterruptedException {
         // NIO WatchService does not work properly on macOS
+        // To run this IT on macOS, one can configure in IntelliJ Idea to run remotely on docker containers
         Assume.assumeTrue(System.getProperty("os.name").contains("Linux"));
 
-        ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat("FileWatcher")
-                .build();
-        executorService = Executors.newSingleThreadExecutor(threadFactory);
-
         AtomicInteger onChangeCounter = new AtomicInteger(0);
-        fileWatcher = new FileWatcher(filePath.toFile().getAbsolutePath(), onChangeCounter::incrementAndGet, executorService);
+        fileWatcher = new FileWatcher(filePath.toFile().getAbsolutePath(), onChangeCounter::incrementAndGet);
+
+        // FileWatcher 'executorService.submit(this::start);' is async
+        TimeUnit.SECONDS.sleep(1);
 
         byte[] randomBytes = new byte[100];
         Random random = new Random();

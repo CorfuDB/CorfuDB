@@ -8,16 +8,17 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -29,7 +30,7 @@ public class FileWatcher implements Closeable {
 
     private final File file;
 
-    private long fileLastModifiedTime;
+    private String lastFileHash;
 
     private final Runnable onChange;
 
@@ -97,15 +98,14 @@ public class FileWatcher implements Closeable {
                         kind == StandardWatchEventKinds.ENTRY_CREATE ||
                         kind == StandardWatchEventKinds.ENTRY_DELETE)
                         && filename.toString().equals(file.getName())) {
-                    if (file.lastModified() != this.fileLastModifiedTime) {
-                        this.fileLastModifiedTime = file.lastModified();
-                        log.info("FileWatcher: file {} changed at {}. Invoking handler...",
-                                filename, getLastModifiedTimeHumanReadable());
+
+                    String curFileHash = getFileHash();
+                    if (!Objects.equals(curFileHash, this.lastFileHash)) {
+                        this.lastFileHash = curFileHash;
+                        log.info("FileWatcher: hashcode of file {} changed. Invoking handler...", filename);
                         onChange.run();
                     } else {
-                        log.info("FileWatcher: file {} NOT modified. Last modified time is {}. " +
-                                "Event was triggered might as a result of file metadata changes. Skipping handler...",
-                                filename, getLastModifiedTimeHumanReadable());
+                        log.info("FileWatcher: hashcode of file {} has NOT changed. Skipping handler...", filename);
                     }
                 }
             }
@@ -124,15 +124,16 @@ public class FileWatcher implements Closeable {
         }
     }
 
-    /**
-     * Get the last modified time of the watched file in human-readable format.
-     * @return human-readable time in UTC
-     */
-    private String getLastModifiedTimeHumanReadable() {
-        Instant instant = Instant.ofEpochMilli(fileLastModifiedTime);
-        ZonedDateTime utcTime = instant.atZone(ZoneOffset.UTC);
-
-        return utcTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    private String getFileHash() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] fileBytes = Files.readAllBytes(this.file.toPath());
+            byte[] hashBytes = digest.digest(fileBytes);
+            return Base64.getEncoder().encodeToString(hashBytes); // Base64 for compact storage
+        } catch (IOException | NoSuchAlgorithmException e) {
+            log.warn("Failed to compute file hash: {}", this.file.toPath(), e);
+            return "";
+        }
     }
 
     private void reloadNewWatchService() {
@@ -148,12 +149,11 @@ public class FileWatcher implements Closeable {
             }
             watchService = FileSystems.getDefault().newWatchService();
             Path path = file.toPath().getParent();
-            fileLastModifiedTime = file.lastModified();
+            this.lastFileHash = getFileHash();
             path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
             isRegistered.set(true);
-            log.info("FileWatcher: parent dir {} for file {} registered. File last modified time: {}",
-                    path, file.getAbsoluteFile(), getLastModifiedTimeHumanReadable());
+            log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
         } catch (IOException ioe) {
             throw new IllegalStateException("Failed to start a new watch service!", ioe);
         }
