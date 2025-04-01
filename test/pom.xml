@@ -109,6 +109,10 @@
                             <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
                             <argLine>
                                 --add-opens java.base/java.net=ALL-UNNAMED
+                                --add-opens java.base/java.lang=ALL-UNNAMED
+                                --add-opens java.base/java.util=ALL-UNNAMED
+                                <!--                        -XX:+EnableDynamicAgentLoading-->
+                                -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar
                                 ${it.jacoco.args}
                             </argLine>
                             <forkCount>1</forkCount>
