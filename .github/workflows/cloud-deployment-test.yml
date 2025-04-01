@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        jdk_base_image_version: ['openjdk:17-jdk-bullseye']
+        jdk_base_image_version: ['openjdk:21-jdk-bullseye']
 
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '17'
+          java-version: '21'
           check-latest: true
           cache-dependency-path: '**/pom.xml'
 
