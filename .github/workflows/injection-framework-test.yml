@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '17'
+          java-version: '21'
           check-latest: true
           cache-dependency-path: '**/pom.xml'
 
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
-          ref: master
+          ref: jdk-21
 
       - name: Build universe-core
         working-directory: ./universe
