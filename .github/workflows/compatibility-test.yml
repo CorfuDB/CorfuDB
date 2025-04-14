@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
-          ref: jdk-21
+          ref: master
 
       - name: Build universe-core
         working-directory: ./universe
