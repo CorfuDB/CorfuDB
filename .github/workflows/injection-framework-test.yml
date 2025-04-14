@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 11
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '11'
+          java-version: '17'
           check-latest: true
           cache-dependency-path: '**/pom.xml'
 
@@ -54,7 +54,7 @@ jobs:
       - name: Set corfu server version env variable
         run: echo "CORFU_SERVER_VERSION=$(./mvnw -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)" >> $GITHUB_ENV
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           repository: 'CorfuDB/corfudb-cloud'
           ref: master

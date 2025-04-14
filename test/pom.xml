@@ -107,7 +107,10 @@
                         <version>3.2.2</version>
                         <configuration>
                             <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
-                            <argLine>${it.jacoco.args}</argLine>
+                            <argLine>
+                                --add-opens java.base/java.net=ALL-UNNAMED
+                                ${it.jacoco.args}
+                            </argLine>
                             <forkCount>1</forkCount>
                             <shutdown>exit</shutdown>
                             <reuseForks>false</reuseForks>

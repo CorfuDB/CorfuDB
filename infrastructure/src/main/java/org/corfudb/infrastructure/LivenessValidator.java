@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
@@ -132,11 +133,16 @@ public class LivenessValidator {
                 .getStreamAddressSpace(new StreamAddressRange(cpStreamId, Address.MAX, Address.NON_ADDRESS)).getTail();
     }
 
-    private int getIdleCount() {
+    public int getIdleCount() {
         int idleCount = 0;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
-            idleCount = txn.executeQuery(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, entry -> (
-                    (CheckpointingStatus) entry.getPayload()).getStatus() == StatusType.IDLE).size();
+            Set<TableName> checkpointTableNames = txn.keySet(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME);
+            for (TableName tableName : checkpointTableNames) {
+                CheckpointingStatus status = (CheckpointingStatus) txn.getRecord(CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, tableName).getPayload();
+                if (status != null && status.getStatus() == StatusType.IDLE) {
+                    idleCount++;
+                }
+            }
             log.trace("Number of idle tables: {}", idleCount);
             txn.commit();
         }

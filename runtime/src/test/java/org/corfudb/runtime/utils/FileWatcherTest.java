@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.util.FileWatcher;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -15,7 +16,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -54,7 +58,9 @@ public class FileWatcherTest {
     public void cleanup() throws IOException {
         FileUtils.deleteDirectory(new File(PATH));
         fileWatcher.close();
-        executorService.shutdownNow();
+        if (executorService != null) {
+            executorService.shutdownNow();
+        }
     }
 
     /**
@@ -69,6 +75,43 @@ public class FileWatcherTest {
         fileWatcher.close();
         verify(fileWatcher, times(1)).close();
         verify(executorService, times(1)).shutdownNow();
+    }
+
+    /**
+     * Test that the file watcher callback is invoked correctly when the file content is modified,
+     * and not invoked when the file permissions are changed.
+     */
+    @Test
+    public void testFileWatcherLastModified() throws IOException, InterruptedException {
+        // NIO WatchService does not work properly on macOS
+        // To run this IT on macOS, one can configure in IntelliJ Idea to run remotely on docker containers
+        Assume.assumeTrue(System.getProperty("os.name").contains("Linux"));
+
+        AtomicInteger onChangeCounter = new AtomicInteger(0);
+        fileWatcher = new FileWatcher(filePath.toFile().getAbsolutePath(), onChangeCounter::incrementAndGet);
+
+        // FileWatcher 'executorService.submit(this::start);' is async
+        TimeUnit.SECONDS.sleep(1);
+
+        byte[] randomBytes = new byte[100];
+        Random random = new Random();
+        random.nextBytes(randomBytes);
+        Files.write(filePath.toAbsolutePath(), randomBytes,
+                StandardOpenOption.WRITE, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+        log.info("Done writing to the file!");
+
+        // Verify that the file watch callback has been invoked
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(onChangeCounter.get()).isEqualTo(1);
+
+        Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxrwx---");
+        Files.setPosixFilePermissions(filePath.toAbsolutePath(), permissions);
+        log.info("Done updating file permission!");
+
+        // Verify that the file watch callback has NOT been invoked
+        TimeUnit.SECONDS.sleep(1);
+        assertThat(onChangeCounter.get()).isEqualTo(1);
     }
 
     /**

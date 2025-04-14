@@ -34,17 +34,17 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <revision>0.4.2.1-SNAPSHOT</revision>
+        <revision>0.9.1.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <logback.classic.version>1.5.12</logback.classic.version>
+        <logback.classic.version>1.5.17</logback.classic.version>
 
         <!-- Dependency versions -->
         <slf4j.version>2.0.16</slf4j.version>
-        <netty.version>4.1.111.Final</netty.version>
+        <netty.version>4.1.119.Final</netty.version>
         <netty.tcnative.version>2.0.61.Final</netty.tcnative.version>
         <protobuf.version>3.21.12</protobuf.version>
-        <commons.io.version>2.11.0</commons.io.version>
+        <commons.io.version>2.18.0</commons.io.version>
         <lombok.version>1.18.30</lombok.version>
         <guava.version>32.1.2-jre</guava.version>
         <junit.jupiter.version>5.10.1</junit.jupiter.version>
@@ -245,7 +245,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.5</version>
+            <version>4.5.14</version>
         </dependency>
     </dependencies>
 
@@ -355,18 +355,29 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
+                    <source>17</source>
+                    <target>17</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <showDeprecation>false</showDeprecation>
                     <compilerArgs>
                         <arg>-XDignore.symbol.file</arg>
+
                         <arg>--add-exports</arg>
                         <arg>java.management/sun.management=ALL-UNNAMED</arg>
+
+                        <arg>--add-opens</arg>
+                        <arg>java.base/java.net=ALL-UNNAMED</arg>
                     </compilerArgs>
                     <fork>true</fork>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -390,23 +401,6 @@
                     <header>LICENSE.txt</header>
                     <strictCheck>true</strictCheck>
                 </configuration>
-            </plugin>
-            <!-- https://projectlombok.org/features/delombok
-            Lombok cannot plug into javadoc which runs on java sources.
-            Delombok still allows you to use lombok with these tools by preprocessing
-            your java code into java code with all of lombok's transformations already applied. -->
-            <plugin>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok-maven-plugin</artifactId>
-                <version>1.18.20.0</version>
-                <executions>
-                    <execution>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>delombok</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -448,7 +442,10 @@
                 <version>3.2.2</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
-                    <argLine>${unit.jacoco.args}</argLine>
+                    <argLine>
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                        ${unit.jacoco.args}
+                    </argLine>
                     <forkCount>1C</forkCount>
                     <reuseForks>false</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
