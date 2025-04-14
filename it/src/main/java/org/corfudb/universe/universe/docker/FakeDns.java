@@ -80,7 +80,7 @@ public class FakeDns {
 
         @Override
         public String lookupByAddress(byte[] addr) throws UnknownHostException {
-            throw new IllegalStateException("Should not be called");
+            return defaultResolver.lookupByAddress(addr);
         }
     }
 
