@@ -70,8 +70,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final ClusterUuidMsg OP_ALL_STANDBY = ClusterUuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
     public static final ClusterUuidMsg OP_INVALID = ClusterUuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
     public static final ClusterUuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = ClusterUuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
-    public static final ClusterUuidMsg OP_BACKUP_WITH_INC_ID = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
-    public static final ClusterUuidMsg OP_BACKUP_WITHOUT_INC_ID = ClusterUuidMsg.newBuilder().setLsb(7L).setMsb(7L).build();
+    public static final ClusterUuidMsg OP_BACKUP = ClusterUuidMsg.newBuilder().setLsb(6L).setMsb(6L).build();
 
     @Getter
     private long configId;
@@ -327,11 +326,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     /**
      * Create a new topology config, which replaces the active cluster with a backup cluster.
-     *
-     * Since it has been observed that the configID is not guaranteed to be incremented on every topology update,
-     * there are 2 flavours - increment the configId or have the same configId.
      **/
-    public TopologyDescriptor generateConfigWithBackup(boolean incrTopologyId) {
+    public TopologyDescriptor generateConfigWithBackup() {
         TopologyDescriptor currentConfig = new TopologyDescriptor(topologyConfig);
         ClusterDescriptor currentActive = currentConfig.getActiveClusters().values().iterator().next();
 
@@ -349,7 +345,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         newActiveClusters.get(0).getNodesDescriptors().add(backupNode);
         List<ClusterDescriptor> standbyClusters = new ArrayList<>(currentConfig.getStandbyClusters().values());
 
-        return new TopologyDescriptor(incrTopologyId ? ++configId : configId, newActiveClusters, standbyClusters);
+        return new TopologyDescriptor(++configId, newActiveClusters, standbyClusters);
     }
 
     /**
@@ -432,14 +428,10 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                             Thread.interrupted();
                         }
                     }
-                } else if (entry.getKey().equals(OP_BACKUP_WITH_INC_ID)) {
+                } else if (entry.getKey().equals(OP_BACKUP)) {
                     clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.generateConfigWithBackup(true));
-                } else if (entry.getKey().equals(OP_BACKUP_WITHOUT_INC_ID)) {
-                    clusterManager.getClusterManagerCallback()
-                            .applyNewTopologyConfig(clusterManager.generateConfigWithBackup(false));
+                            .applyNewTopologyConfig(clusterManager.generateConfigWithBackup());
                 }
-
             } else {
                 log.info("onNext :: operation={}, key={}, payload={}, metadata={}", entry.getOperation().name(),
                         entry.getKey(), entry.getPayload(), entry.getMetadata());

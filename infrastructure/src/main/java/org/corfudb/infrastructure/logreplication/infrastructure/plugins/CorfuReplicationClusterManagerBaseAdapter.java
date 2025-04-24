@@ -39,7 +39,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
      * @param newTopologyConfigMsg
      */
     public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
-        if (newTopologyConfigMsg.getTopologyConfigID() >= topologyConfig.getTopologyConfigID()) {
+        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
             topologyConfig = newTopologyConfigMsg;
             corfuReplicationDiscoveryService.updateTopology(topologyConfig);
         }

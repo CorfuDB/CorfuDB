@@ -74,12 +74,11 @@ public class LogEntryWriter extends SinkWriter {
         // value cannot be used here as its value needs to be changed in the lambda function below.
         AtomicBoolean registryTableUpdated = new AtomicBoolean(false);
         List<OpaqueEntry> opaqueEntryList = CorfuProtocolLogReplication.extractOpaqueEntries(txMessage);
-        log.debug("Total opaqueEntries count={}", opaqueEntryList.size());
+
         for (OpaqueEntry opaqueEntry : opaqueEntryList) {
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-
 
                         // NOTE: The topology config id should be queried and validated for every opaque entry because the
                         // Sink could have received concurrent topology config id changes.  Here we are leveraging a
@@ -113,15 +112,15 @@ public class LogEntryWriter extends SinkWriter {
                         if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
                             baseSnapshotTs != persistedSnapshotDone || prevTs > persistedBatchTs) {
                             log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}," +
-                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}, opaqueEntry.Version={}",
+                                    "persistedSnapshotStart={}, persistedSnapshotDone={}, persistedBatchTs={}",
                                 txMessage.getMetadata(), persistedTopologyConfigId, persistedSnapshotStart,
-                                persistedSnapshotDone, persistedBatchTs, opaqueEntry.getVersion());
+                                persistedSnapshotDone, persistedBatchTs);
                             throw new IllegalArgumentException("Cannot apply log entry message due to metadata mismatch");
                         }
 
                         // Skip Opaque entries with timestamp that are not larger than persistedOpaqueEntryTs
                         if (opaqueEntry.getVersion() <= persistedOpaqueEntryTs) {
-                            log.warn("Skipping entry {} as it is less than the last applied opaque entry {}",
+                            log.trace("Skipping entry {} as it is less than the last applied opaque entry {}",
                                 opaqueEntry.getVersion(), persistedOpaqueEntryTs);
                             return null;
                         }
@@ -144,7 +143,6 @@ public class LogEntryWriter extends SinkWriter {
                             logReplicationMetadataManager.appendUpdate(txnContext,
                                 LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
                                 txMessage.getMetadata().getTimestamp());
-                            log.debug("Updated LAST_LOG_ENTRY_BATCH_PROCESSED with {}",txMessage.getMetadata().getTimestamp());
                         }
 
                         for (UUID streamId : opaqueEntry.getEntries().keySet()) {
@@ -185,13 +183,8 @@ public class LogEntryWriter extends SinkWriter {
                             registryTableUpdated.set(false);
                         }
                     } catch (TransactionAbortedException tae) {
-                        log.error("Caught exception while trying to apply the logEntryMsg.. " +
-                                "batch ts {}, current log entry ts {}, ",  txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), tae);
+                        log.error("Caught exception while trying to apply the logEntryMsg.", tae);
                         throw new RetryNeededException();
-                    } catch (Exception e) {
-                        log.error("Inside retry - caught exception while trying to apply the logEntryMsg..." +
-                                "batch ts {}, current log entry ts {}, ", txMessage.getMetadata().getTimestamp(),opaqueEntry.getVersion(), e);
-                        throw e;
                     }
                     return null;
                 }).run();
@@ -200,9 +193,6 @@ public class LogEntryWriter extends SinkWriter {
                 return false;
             } catch (InterruptedException e) {
                 log.error("Could not apply entry with sequence " + opaqueEntry.getVersion());
-                return false;
-            } catch (Exception e) {
-                log.error("Caught exception while trying to apply the logEntryMsg.", e);
                 return false;
             }
         }
