@@ -1603,28 +1603,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verifies the backup/restore workflow, and verifies LR behaviour when the topology update, pushed for
-     * simulating restore, has incremented the topologyConfigId
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testBackupRestoreWithIncrTopologyId() throws Exception {
-        backupRestoreWorkFlow(true);
-    }
-
-    /**
-     * This test verifies the backup/restore workflow, and verifies LR behaviour when the topology update, pushed for
-     * simulating restore, has the same topologyConfigId as the previous (initial) topology
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testBackupRestoreWorkflowWithOutIncrTopologyId() throws Exception {
-        backupRestoreWorkFlow(false);
-    }
-
-    /**
      * This test verifies log entry works after a force snapshot sync
      * in the backup/restore workflow.
      * <p>
@@ -1640,7 +1618,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 8. Verify the force snapshot sync is completed
      * 9. Write 5 entries to backup map, to verify Log Entry Sync
      */
-    private void backupRestoreWorkFlow(boolean incrTopologyConfigId) throws Exception{
+    @Test
+    public void testBackupRestoreWorkflow() throws Exception {
         Process backupCorfu = runServer(backupClusterCorfuPort, true);
         Process backupReplicationServer = runReplicationServer(backupReplicationServerPort, nettyPluginPath);
 
@@ -1718,11 +1697,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
 
         // Change the topology - brings up the backup cluster
-        if (incrTopologyConfigId) {
-            updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP_WITH_INC_ID);
-        } else {
-            updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP_WITHOUT_INC_ID);
-        }
+        updateTopology(activeCorfuStore, DefaultClusterManager.OP_BACKUP);
         log.info("Change the topology!!!");
 
         TimeUnit.SECONDS.sleep(shortInterval);
