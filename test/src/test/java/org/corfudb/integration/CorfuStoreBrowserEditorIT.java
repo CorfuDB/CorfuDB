@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 import com.google.protobuf.UnknownFieldSet;
@@ -24,6 +25,7 @@ import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
 import org.corfudb.test.SampleSchema.SampleTableDMsg;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -738,6 +740,60 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             newValString));
         // Try to delete a deleted key and verify it is a no-op
         assertThat(browser.deleteRecords(NAMESPACE, TABLE_NAME, Arrays.asList(keyString), batchSize)).isZero();
+        runtime.shutdown();
+    }
+
+    /**
+     * Just validating if DynamicProtobufSerializer can return constructed descriptors
+     * @throws Exception
+     */
+    @Test
+    public void simpleDynamicProtobufDescriptorTest() throws Exception {
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table1 = store.openTable(
+                NAMESPACE,
+                TABLE_NAME,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class,
+                SampleSchema.Uuid.class,
+                TableOptions.fromProtoSchema(SampleSchema.Uuid.class));
+
+        final long keyUuid = 1L;
+        final long metadataUuid = 5L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                .setMsb(keyUuid)
+                .setLsb(keyUuid)
+                .build();
+        SampleSchema.FirewallRule value = SampleSchema.FirewallRule.newBuilder()
+                .setRuleName("testRule")
+                .build();
+        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
+                .setMsb(metadataUuid)
+                .setLsb(metadataUuid)
+                .build();
+        try (TxnContext tx = store.txn(NAMESPACE)) {
+            tx.putRecord(table1, uuidKey, value, metadata);
+            tx.commit();
+        }
+        runtime.shutdown();
+
+        Descriptors.FileDescriptor schemaDescriptor = SampleSchema.getDescriptor();
+        String schemaFileName = schemaDescriptor.getName();
+        // Validate that the dynamicProtobufSerializer was able to index the file descriptor correctly
+        runtime = createRuntime(singleNodeEndpoint);
+        DynamicProtobufSerializer dynamicSerializer = new DynamicProtobufSerializer(runtime);
+        assertThat(dynamicSerializer.getDescriptor(schemaFileName).getName()).isEqualTo(schemaDescriptor.getName());
+        Any valueAny = Any.pack(value);
+        DynamicMessage dynamicMessage = dynamicSerializer.createDynamicMessage(valueAny);
+        assertThat(dynamicMessage.getDescriptorForType().findFieldByName("rule_name").getName())
+                .isEqualTo(value.getDescriptorForType().findFieldByName("rule_name").getName());
         runtime.shutdown();
     }
 
