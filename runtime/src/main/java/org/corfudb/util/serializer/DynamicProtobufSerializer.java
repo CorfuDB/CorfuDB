@@ -257,7 +257,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @return FileDescriptor.
      * @throws DescriptorValidationException If FileDescriptor construction fails.
      */
-    protected FileDescriptor getDescriptor(String name) throws DescriptorValidationException {
+    public FileDescriptor getDescriptor(String name) throws DescriptorValidationException {
 
         if (fileDescriptorMap.containsKey(name)) {
             return fileDescriptorMap.get(name);
@@ -308,7 +308,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @param message Any message.
      * @return Full name of the message.
      */
-    protected String getFullMessageName(Any message) {
+    public String getFullMessageName(Any message) {
         String typeUrl = message.getTypeUrl();
         return typeUrl.substring(typeUrl.lastIndexOf('/') + 1);
     }
@@ -342,6 +342,13 @@ public class DynamicProtobufSerializer implements ISerializer {
             return null;
         }
         return builder.build();
+    }
+
+    public DynamicMessage createDynamicMessage(Any message) throws DescriptorValidationException, InvalidProtocolBufferException {
+        String fullMessageName = getFullMessageName(message);
+        FileDescriptor valueFileDescriptor = getDescriptor(messagesFdProtoNameMap.get(fullMessageName));
+        Descriptors.Descriptor valueDescriptor = valueFileDescriptor.findMessageTypeByName(getMessageName(message));
+        return DynamicMessage.parseFrom(valueDescriptor, message.getValue());
     }
 
     /**
