@@ -88,6 +88,10 @@
                     <useFile>false</useFile>
                     <argLine>
                         --add-opens java.base/java.net=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+<!--                        -XX:+EnableDynamicAgentLoading-->
+                        -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar
                     </argLine>
                 </configuration>
             </plugin>
@@ -139,6 +143,10 @@
                             <!--suppress UnresolvedMavenProperty (resolved at runtime) -->
                             <argLine>
                                 --add-opens java.base/java.net=ALL-UNNAMED
+                                --add-opens java.base/java.lang=ALL-UNNAMED
+                                --add-opens java.base/java.util=ALL-UNNAMED
+                                <!--                        -XX:+EnableDynamicAgentLoading-->
+                                -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar
                                 ${universe.jacoco.args}
                             </argLine>
                             <skipITs>false</skipITs>
