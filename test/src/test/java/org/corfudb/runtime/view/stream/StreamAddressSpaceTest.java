@@ -8,9 +8,11 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -377,5 +379,24 @@ public class StreamAddressSpaceTest {
         assertThat(sas.toString()).isEqualTo("[4, 4]@-1 size 1");
         sas.trim(4L);
         assertThat(sas.toString()).isEqualTo("[-6, -6]@4 size 0");
+    }
+
+    @Test
+    public void testNoArgConstructor() {
+        StreamAddressSpace sas = new StreamAddressSpace();
+        assertThat(getDoCacheCardinalities(sas.getBitmap())).isFalse();
+
+        sas = new StreamAddressSpace(true);
+        assertThat(getDoCacheCardinalities(sas.getBitmap())).isTrue();
+    }
+
+    private boolean getDoCacheCardinalities(Roaring64NavigableMap map) {
+        try {
+            Field field = Roaring64NavigableMap.class.getDeclaredField("doCacheCardinalities");
+            field.setAccessible(true);
+            return field.getBoolean(map);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to access doCacheCardinalities", e);
+        }
     }
 }
