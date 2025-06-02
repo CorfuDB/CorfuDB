@@ -30,6 +30,7 @@ public class CorfuStoreBrowserEditorMain {
         loadTable,
         infoTable,
         showTable,
+        showTables,
         listenOnTable,
         clearTable,
         listAllProtos,
@@ -57,13 +58,15 @@ public class CorfuStoreBrowserEditorMain {
         "[--itemSize=<sizeOfEachRecordValue>] "
         + "[--keyToEdit=<keyToEdit>] [--newRecord=<newRecord>] [--tag=<tag>]"
         + "[--keyToDelete=<keyToDelete>]"
+        + "[--tablesToDumpInputFile=<tablesToDumpInputFile>]"
+        + "[--tablesToDumpOutputDir=<tablesToDumpOutputDir>]"
         + "[--keysToDeleteFilePath=<keysToDeleteFilePath>]"
         + "[--keyToAdd=<keyToAdd>] [--valueToAdd=<valueToAdd>] [--metadataToAdd=<metadataToAdd>]"
         + "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|clearTable"
+        + "--operation=<listTables|infoTable|showTable|showTables|clearTable"
         + "|editTable|deleteRecord|loadTable|listenOnTable|listTags|listTagsMap"
         + "|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
@@ -78,6 +81,8 @@ public class CorfuStoreBrowserEditorMain {
         + "--address=<address> Log global address\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
+        + "--tablesToDumpInputFile=<tablesToDumpInputFile> Path to input file with namespace$tableName rows\n"
+        + "--tablesToDumpOutputDir=<tablesToDumpOutputDir> Path to dir (with write permissions) for table dumps\n"
         + "--keyToEdit=<keyToEdit> Key of the record to edit\n"
         + "--keyToDelete=<keyToDelete> Key of the record to be deleted\n"
         + "--keysToDeleteFilePath=<keysToDeleteFilePath> Path to file having all keys in one json array\n"
@@ -238,6 +243,24 @@ public class CorfuStoreBrowserEditorMain {
                 Preconditions.checkArgument(isValid(tableName),
                         "Table name is null or empty.");
                 return browser.printTable(namespace, tableName);
+            case showTables:
+                String inputFile = "--tablesToDumpInputFile";
+                String outputDir = "--tablesToDumpOutputDir";
+                Preconditions.checkArgument(isValid(inputFile),
+                        "--tablesToDumpInputFile is null or empty.");
+                Preconditions.checkArgument(isValid(outputDir),
+                        "tablesToDumpOutputDir is null or empty.");
+                if (opts.get(inputFile) != null) {
+                    inputFile = String.valueOf(opts.get(inputFile));
+                    Preconditions.checkNotNull(inputFile,
+                            "--tablesToDumpInputFile is Null.");
+                }
+                if (opts.get(outputDir) != null) {
+                    outputDir = String.valueOf(opts.get(outputDir));
+                    Preconditions.checkNotNull(outputDir,
+                            "--tablesToDumpOutputDir is Null.");
+                }
+                return browser.printTables(inputFile, outputDir);
             case editTable:
                 String keyToEdit = null;
                 String newRecord = null;

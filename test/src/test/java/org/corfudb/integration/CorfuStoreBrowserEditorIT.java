@@ -30,6 +30,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -507,6 +508,64 @@ public class CorfuStoreBrowserEditorIT extends AbstractIT {
             Assert.assertEquals(tableData.get(key).getPayload().toString(), firewallRuleVal.toString());
             Assert.assertEquals(tableData.get(key).getMetadata().toString(), uuidMeta.toString());
         }
+    }
+
+    /**
+     * Test ability to dump muitple tables
+     * to read the system TableRegistry contents accurately.
+     * @throws Exception error
+     */
+    @Test
+    public void multiTableDumpTest() throws Exception{
+        runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+        String[] tableNames = {"table1", "table2", "table3"};
+
+        File tempDir = com.google.common.io.Files.createTempDir();
+        File inputFile = new File(tempDir, "inputFile.lst");
+        for (String tableName : tableNames) {
+            Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.ManagedResourceOptionsMsg> table =
+                    store.openTable(
+                    NAMESPACE,
+                    tableName,
+                    SampleSchema.Uuid.class,
+                    SampleSchema.FirewallRule.class,
+                    SampleSchema.ManagedResourceOptionsMsg.class,
+                    TableOptions.fromProtoSchema(SampleSchema.FirewallRule.class));
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(inputFile, true))) {
+                writer.write(NAMESPACE+"$"+tableName+"\n");
+            }
+            try (TxnContext tx = store.txn(NAMESPACE)) {
+                for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+                    SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+                            .setMsb(i)
+                            .setLsb(0)
+                            .build();
+                    SampleSchema.FirewallRule rule = SampleSchema.FirewallRule.newBuilder()
+                            .setRuleName(tableName)
+                            .setRuleId(i).build();
+                    SampleSchema.ManagedResourceOptionsMsg metadata = SampleSchema.ManagedResourceOptionsMsg
+                            .newBuilder().build();
+                    tx.putRecord(table, uuidKey, rule, metadata);
+                }
+                tx.commit();
+            }
+        }
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(inputFile, true))) {
+            writer.write(TableRegistry.CORFU_SYSTEM_NAMESPACE+"$"+TableRegistry.REGISTRY_TABLE_NAME+"\n");
+        }
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowserEditor browser = new CorfuStoreBrowserEditor(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(tableNames.length+1,
+                browser.printTables(inputFile.getAbsolutePath(), tempDir.getAbsolutePath()));
     }
 
     /**
