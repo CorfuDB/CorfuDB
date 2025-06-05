@@ -35,6 +35,11 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 
 import javax.annotation.Nonnull;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -66,6 +71,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
+    private boolean startedPrintingRows = false;
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -147,46 +153,136 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
      * @param tablename - table name without the namespace
      * @return - number of entries in the table
      */
-    @Override
-    public int printTable(String namespace, String tablename) {
+    public int printTable(String namespace, String tablename,
+                          BufferedWriter writer) {
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
                 && tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
             // TableDescriptors are an internal type that use Any protobuf.
             // JsonFormat has a known bug where it fails to print Any protobuf payloads
             // So to work around this bug, avoid dumping the TableDescriptor table directly.
-            return printTableRegistry(dynamicProtobufSerializer);
+            return printTableRegistry(dynamicProtobufSerializer, writer);
         }
 
         ICorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
             getTable(namespace, tablename);
         int size = table.size();
         final int batchSize = 50;
+        boolean startedJson = false;
         Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
         final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
                 Iterables.partition(entryStream::iterator, batchSize);
+        printJsonStr("[\n", writer);
         for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
             for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                printKey(entry);
-                printPayload(entry);
-                printMetadata(entry);
+                if (!startedJson) {
+                    printJsonStr("[", writer);
+                    startedJson = true;
+                }
+                else {
+                    printJsonStr(",\n[", writer);
+                }
+                printKey(entry, writer);
+                printPayload(entry, writer);
+                printMetadata(entry, writer);
+                printJsonStr("]\n", writer);
             }
         }
+        printJsonStr("\n]", writer);
         System.out.println("Table size="+size);
+        table.close();
         return size;
     }
 
-    public static void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
-        StringBuilder builder;
-        try {
-            builder = new StringBuilder("\nKey:\n")
-                    .append(JsonFormat.printer().print(entry.getKey().getKey()));
-            System.out.println(builder.toString());
-        } catch (Exception e) {
-            log.info("invalid key: {}", entry.getKey().getKey(), e);
-        }
+    @Override
+    public int printTable(String namespace, String tablename) {
+        return printTable(namespace, tablename, null);
     }
 
-    public static void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    /**
+     * Dump multiple tables at once
+     * @param inputFile - file with list of namespace$tableName rows
+     * @param outputDirectory - directory path where the dumps of the tables will go to
+     * @return - number of tables successfully dumped.
+     */
+    @Override
+    public int printTables(String inputFile, String outputDirectory) {
+        int tablesPrinted = 0;
+        System.out.println("\n======================\n");
+        System.out.println("\nReading all namespace$TableName rows from "+inputFile+"\n");
+
+        try {
+            // Ensure output directory exists
+            Files.createDirectories(Paths.get(outputDirectory));
+
+            // Read all lines from input file
+            BufferedReader reader = new BufferedReader(new FileReader(inputFile));
+            String tableNameRow;
+
+            while ((tableNameRow = reader.readLine()) != null) {
+                tableNameRow = tableNameRow.trim();
+                if (!tableNameRow.contains("$")) {
+                    System.err.println("Input row not in format namespace$tableName: "+tableNameRow);
+                    continue;
+                }
+                String[] parts = tableNameRow.split("\\$", 2);
+                if (parts.length != 2) {
+                    System.err.println("Incorrect input row format namespace$tableName: "+tableNameRow);
+                    continue;
+                }
+
+                String namespace = parts[0];
+                String tableName = parts[1];
+                File namespaceDir = new File(outputDirectory, namespace);
+                if (!namespaceDir.exists() && !namespaceDir.mkdirs()) {
+                    System.err.println("Failed to create directory:"+ namespaceDir.getAbsolutePath());
+                    continue;
+                }
+                // Create file path for the table dump
+                File outputFile = new File(namespaceDir, tableName+".json");
+                int recordsInTable = 0;
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
+                    // split the row with the namespace$tableName
+                    recordsInTable = printTable(namespace, tableName, writer);
+                }
+                System.out.println("Successfully dumped "+recordsInTable+" records to:"+outputFile.getAbsolutePath());
+                tablesPrinted++;
+            }
+
+            reader.close();
+            System.out.println("Successfully dumped tables:"+tablesPrinted);
+        } catch (IOException e) {
+            System.err.println("An error occurred while processing files: " + e.getMessage());
+        }
+        return tablesPrinted;
+    }
+
+    public static void printJsonStr(String str, BufferedWriter writer) {
+        if (writer == null) {
+            System.out.println(str);
+            return;
+        }
+        try {
+            writer.write(str);
+        } catch (IOException e) {
+            log.error("Error while writing json start", e);
+        }
+    }
+    public static void printKey(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry,
+                                BufferedWriter writer) {
+        StringBuilder builder;
+        try {
+            builder = new StringBuilder("\n{\"Key\":\n")
+                    .append(JsonFormat.printer().print(entry.getKey().getKey()))
+                    .append("}");
+        } catch (Exception e) {
+            log.info("invalid key: {}", entry.getKey().getKey(), e);
+            return;
+        }
+        printJsonStr(builder.toString(), writer);
+    }
+
+    public static void printPayload(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry,
+                                    BufferedWriter writer) {
         StringBuilder builder;
         if (entry.getValue().getPayload() == null) {
             log.info("payload is NULL");
@@ -194,63 +290,86 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         }
 
         try {
-            builder = new StringBuilder("\nPayload:\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getPayload()));
-            System.out.println(builder.toString());
+            builder = new StringBuilder("\n,{\"Payload\":\n")
+                    .append(JsonFormat.printer().print(entry.getValue().getPayload()))
+                    .append("}");
         } catch (Exception e) {
             log.info("invalid payload: {}", entry.getValue().getPayload(), e);
+            return;
         }
+        printJsonStr(builder.toString(), writer);
     }
-
-    public static int printTableRegistry(DynamicProtobufSerializer dynamicProtobufSerializer) {
-        for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
-                dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
-            try {
-                StringBuilder builder = new StringBuilder("\nKey:\n")
-                        .append(JsonFormat.printer().print(entry.getKey()));
-                System.out.println(builder.toString());
-            } catch (Exception e) {
-                log.info("Unable to print tableName of this registry table key {}", entry.getKey());
-            }
-            try {
-                StringBuilder builder = new StringBuilder();
-                String separator = "\"";
-                builder.append("\nkeyType = \"" + entry.getValue().getPayload().getKey().getTypeUrl() + separator);
-                builder.append("\npayloadType = \"" + entry.getValue().getPayload().getValue().getTypeUrl() + separator);
-                builder.append("\nmetadataType = \"" + entry.getValue().getPayload().getMetadata().getTypeUrl() + separator);
-                builder.append("\nProtobuf Source Files: \"" +
-                        entry.getValue().getPayload().getFileDescriptorsMap().keySet()
-                );
-                System.out.println(builder.toString());
-            } catch (Exception e) {
-                log.info("Unable to extract payload fields from registry table key {}", entry.getKey());
-            }
-
-            try {
-                StringBuilder builder = new StringBuilder("\nMetadata:\n")
-                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-                System.out.println(builder.toString());
-            } catch (Exception e) {
-                log.info("Unable to print metadata section of registry table");
-            }
-        }
-
-        return dynamicProtobufSerializer.getCachedRegistryTable().size();
-    }
-
-    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry) {
+    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry,
+                                     BufferedWriter writer) {
         StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
             log.warn("metadata is NULL");
             return;
         }
         try {
-            builder = new StringBuilder("\nMetadata:\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getMetadata()));
-            System.out.println(builder.toString());
+            builder = new StringBuilder("\n,{\"Metadata\":\n")
+                    .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                    .append("}");
         } catch (Exception e) {
             log.info("invalid metadata: {}", entry.getValue().getMetadata(), e);
+            return;
         }
+        printJsonStr(builder.toString(), writer);
+    }
+
+    public static int printTableRegistry(DynamicProtobufSerializer dynamicProtobufSerializer,
+                                         BufferedWriter writer) {
+        boolean startedJsonArray = false;
+        final String jsEnd = "}";
+        for (Map.Entry<TableName, CorfuRecord<TableDescriptors, TableMetadata>> entry :
+                dynamicProtobufSerializer.getCachedRegistryTable().entrySet()) {
+            try {
+                StringBuilder builder = new StringBuilder("\n");
+                if (!startedJsonArray) {
+                    builder.append("[\n[");
+                    startedJsonArray = true;
+                } else {
+                    builder.append(",[");
+                }
+                builder.append("{\"Key\":\n")
+                        .append(JsonFormat.printer().print(entry.getKey()))
+                        .append(jsEnd);
+                printJsonStr(builder.toString(), writer);
+            } catch (Exception e) {
+                log.info("Unable to print tableName of this registry table key {}", entry.getKey());
+            }
+            final String jsStart = ",\n{";
+            final String jsStrEnd = "\"}";
+            try {
+                StringBuilder builder = new StringBuilder();
+
+                builder.append(jsStart+"\"keyType\" : \""+
+                        entry.getValue().getPayload().getKey().getTypeUrl() + jsStrEnd);
+                builder.append(jsStart+"\"payloadType\" : \"" +
+                        entry.getValue().getPayload().getValue().getTypeUrl() + jsStrEnd);
+                builder.append(jsStart+"\"metadataType\" : \"" +
+                        entry.getValue().getPayload().getMetadata().getTypeUrl() + jsStrEnd);
+                builder.append(jsStart+"\"ProtobufSourceFiles\": \"" +
+                        entry.getValue().getPayload().getFileDescriptorsMap().keySet()+jsStrEnd
+                );
+                printJsonStr(builder.toString(), writer);
+            } catch (Exception e) {
+                log.info("Unable to extract payload fields from registry table key {}", entry.getKey());
+            }
+
+            try {
+                StringBuilder builder = new StringBuilder(jsStart+"\"Metadata\":\n")
+                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                        .append(jsEnd);
+                builder.append("]");
+                printJsonStr(builder.toString(), writer);
+            } catch (Exception e) {
+                log.info("Unable to print metadata section of registry table");
+            }
+        }
+
+        printJsonStr("\n]", writer);
+        return dynamicProtobufSerializer.getCachedRegistryTable().size();
     }
 
     /**
