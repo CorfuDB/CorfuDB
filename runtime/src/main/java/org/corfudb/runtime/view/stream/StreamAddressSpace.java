@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Longs;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
@@ -54,7 +55,7 @@ final public class StreamAddressSpace {
 
     public StreamAddressSpace() {
         // Note: caching of internal bitmap structures is disabled by default here.
-        this(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(), false);
+        this(false);
     }
 
     public StreamAddressSpace(boolean enableCaching) {
@@ -353,6 +354,11 @@ final public class StreamAddressSpace {
      */
     public long[] toArray() {
         return bitmap.toArray();
+    }
+
+    @VisibleForTesting
+    Roaring64NavigableMap getBitmap() {
+        return bitmap;
     }
 
     @Override
