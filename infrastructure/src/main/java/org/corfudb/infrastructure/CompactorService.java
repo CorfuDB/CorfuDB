@@ -52,7 +52,7 @@ public class CompactorService implements ManagementService {
     private final Logger log;
 
     @Setter
-    private Duration LivenessTimeout = Duration.ofMinutes(5);
+    private Duration LivenessTimeout = Duration.ofMinutes(60);
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     public CompactorService(@NonNull ServerContext serverContext,
