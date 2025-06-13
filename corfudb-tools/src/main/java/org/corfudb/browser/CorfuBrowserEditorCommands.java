@@ -41,6 +41,15 @@ public interface CorfuBrowserEditorCommands {
     int printTable(String namespace, String tablename);
 
     /**
+     * Prints the key, payload and metadata for all tables in inputFile
+     *
+     * @param inputFile - file with list of namespace$tableName rows
+     * @param outputDirectory - directory path where the dumps of the tables will go to
+     * @return - number of tables dumped
+     */
+    int printTables(String inputFile, String outputDirectory);
+
+    /**
      * List all tables in CorfuStore
      *
      * @param namespace - the namespace where the table belongs
