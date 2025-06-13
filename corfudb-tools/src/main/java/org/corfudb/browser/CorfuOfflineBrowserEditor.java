@@ -223,7 +223,7 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
                 && tableName.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
             getTableData(namespace, tableName);
-            return printTableRegistry(dynamicProtobufSerializer);
+            return printTableRegistry(dynamicProtobufSerializer, null);
         }
 
         if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE)
@@ -236,11 +236,22 @@ public class CorfuOfflineBrowserEditor implements CorfuBrowserEditorCommands {
         Set<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entries = cachedTable.entrySet();
 
         for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : entries) {
-            printKey(entry);
-            printPayload(entry);
-            printMetadata(entry);
+            printKey(entry, null);
+            printPayload(entry, null);
+            printMetadata(entry, null);
         }
         return cachedTable.size();
+    }
+
+    /**
+     * Prints the payload and metadata in the given table
+     * @param inputFile - input file with namespace$TableName rows
+     * @param outputDirectory - directory where the output files should be placed.
+     * @return - number of tables dumped.
+     */
+    @Override
+    public int printTables(String inputFile, String outputDirectory) {
+        return 0;
     }
 
     /**
