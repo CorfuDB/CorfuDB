@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
@@ -1490,6 +1491,76 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         long oldShadowTs = shadowStreamTs;
         // If the force snapshot sync was processed again, the CurrentCycleMinShadowStreamTs would be updated. Verify this hasn't happened.
         assertThat(oldShadowTs).isEqualTo(Long.parseLong(metadata.getVal()));
+    }
+
+    @Test
+    public void testSnapshotApplyInterrupted() throws Exception {
+        // Write first batch of entries to active map
+        for (int i = 0; i < firstBatch; i++) {
+            try (TxnContext txn = activeCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(firstBatch);
+        assertThat(mapStandby.count()).isZero();
+
+
+        int waitInSnapshotApplyMs = 10000;
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, waitInSnapshotApplyMs);
+        log.info("Replication servers started...");
+
+
+        // Verify Sync Status
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+
+        // Wait until sync is ongoing before restarting active
+        while (true) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            if (replicationStatusVal != null && replicationStatusVal.hasSnapshotSyncInfo()
+                    && replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(SyncStatus.ONGOING)) {
+                break;
+            } else {
+                TimeUnit.MILLISECONDS.sleep(500);
+            }
+        }
+
+        log.info("Restart active to simulate blip...");
+        shutdownCorfuServer(activeReplicationServer);
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
+
+        // Wait for apply to complete on the sink
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+        assertThat(mapStandby.count()).isEqualTo(firstBatch);
+
+
+        // Status should be updated on active to reflect the last snapshot sync was completed
+        while (true) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            if (replicationStatusVal != null && replicationStatusVal.hasSnapshotSyncInfo()
+                    && replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
+                break;
+            } else {
+                TimeUnit.MILLISECONDS.sleep(500);
+            }
+        }
     }
 
 
