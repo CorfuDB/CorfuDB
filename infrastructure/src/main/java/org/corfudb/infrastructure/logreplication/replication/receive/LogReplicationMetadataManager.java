@@ -594,6 +594,8 @@ public class LogReplicationMetadataManager {
                 log.info("Previous sync already marked complete, skipping update of previous sync info.");
                 return;
             }
+            log.info("Replication status snapshot sync info for baseSnapshot {} is being updated from {} to {}",
+                    baseSnapshot, previousSyncInfo.getStatus(), SyncStatus.COMPLETED);
 
             Instant time = Instant.now();
             Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
@@ -607,8 +609,13 @@ public class LogReplicationMetadataManager {
             snapshotSyncTimerSample
                     .flatMap(sample -> MeterRegistryProvider.getInstance()
                             .map(registry -> {
-                                Timer timer = registry.timer("logreplication.snapshot.duration");
-                                return sample.stop(timer);
+                                try {
+                                    Timer timer = registry.timer("logreplication.snapshot.duration");
+                                    return sample.stop(timer);
+                                } catch (Exception e) {
+                                    log.warn("Caught exception while trying to stop logreplication.snapshot.duration timer.", e);
+                                    return -1L;
+                                }
                             }));
 
             updatedStatusVal = previousStatusVal.toBuilder()

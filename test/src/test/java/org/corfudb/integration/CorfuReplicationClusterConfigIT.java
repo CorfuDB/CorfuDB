@@ -1506,12 +1506,10 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapActive.count()).isEqualTo(firstBatch);
         assertThat(mapStandby.count()).isZero();
 
-
         int waitInSnapshotApplyMs = 10000;
         activeReplicationServer = runReplicationServer(activeReplicationServerPort);
         standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, waitInSnapshotApplyMs);
         log.info("Replication servers started...");
-
 
         // Verify Sync Status
         Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
@@ -1538,14 +1536,15 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             }
         }
 
-        log.info("Restart active to simulate blip...");
+        // Shutdown active while sync is ongoing
         shutdownCorfuServer(activeReplicationServer);
-        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
 
         // Wait for apply to complete on the sink
         waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
         assertThat(mapStandby.count()).isEqualTo(firstBatch);
 
+        // Restart active after apply on sink
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
 
         // Status should be updated on active to reflect the last snapshot sync was completed
         while (true) {
