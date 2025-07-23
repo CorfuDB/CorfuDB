@@ -411,14 +411,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public Process runReplicationServer(int port, int waitInSnapshotApplyMs) throws IOException {
-        return new CorfuReplicationServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(port)
-                .setWaitSnapshotApplyMs(waitInSnapshotApplyMs)
-                .runServer();
-    }
-
     public Process runReplicationServerWaitInSnapshotApply(int port, String pluginConfigFilePath,
                                                            int lockLeaseDuration, int waitInSnapshotApplyMs)
                                                         throws IOException {

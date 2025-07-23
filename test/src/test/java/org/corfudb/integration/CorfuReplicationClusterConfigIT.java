@@ -59,6 +59,7 @@ import static org.corfudb.infrastructure.logreplication.replication.receive.LogR
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 /**
@@ -1507,12 +1508,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.count()).isZero();
 
         int waitInSnapshotApplyMs = 10000;
+        int lockLeaseDurationSeconds = 10;
         activeReplicationServer = runReplicationServer(activeReplicationServerPort);
-        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, waitInSnapshotApplyMs);
+        standbyReplicationServer = runReplicationServerWaitInSnapshotApply(standbyReplicationServerPort, nettyPluginPath,
+                lockLeaseDurationSeconds, waitInSnapshotApplyMs);
         log.info("Replication servers started...");
 
-        // Verify Sync Status
-        Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
         LogReplicationMetadata.ReplicationStatusKey key =
                 LogReplicationMetadata.ReplicationStatusKey
                         .newBuilder()
@@ -1536,12 +1537,24 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             }
         }
 
+        // Give it a few seconds to let the data transfer to the sink
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
+
         // Shutdown active while sync is ongoing
         shutdownCorfuServer(activeReplicationServer);
 
         // Wait for apply to complete on the sink
         waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
         assertThat(mapStandby.count()).isEqualTo(firstBatch);
+        assertTrue(() -> {
+            boolean isDataConsistent;
+            try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                ReplicationStatusVal val = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                isDataConsistent = val.getDataConsistent();
+                txn.commit();
+            }
+            return isDataConsistent;
+        }, "Data consistent not set to true on standby!");
 
         // Restart active after apply on sink
         activeReplicationServer = runReplicationServer(activeReplicationServerPort);

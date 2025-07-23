@@ -281,7 +281,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
             /*
              * In the event during the last snapshot sync, apply had processed on the sink, but active had
-             * been interrupted before updating the replication metadata then we should update the prior sync's info.
+             * been interrupted (e.g. leadership change, network partition, active leader restart) before
+             * updating the replication metadata then we should update the prior sync's info.
              */
             fsm.getSourceManager().getAckReader().setBaseSnapshot(negotiationResponse.getSnapshotApplied());
             fsm.getSourceManager().getAckReader().markPriorSnapshotInfoCompleted();
