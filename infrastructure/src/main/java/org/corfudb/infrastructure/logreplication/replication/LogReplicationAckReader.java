@@ -380,6 +380,32 @@ public class LogReplicationAckReader {
         }
     }
 
+    /**
+     * Update replication status table's prior sync info as COMPLETED.
+     *
+     */
+    public void markPriorSnapshotInfoCompleted() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.setPriorSnapshotInfoComplete(remoteClusterId,
+                            baseSnapshotTimestamp);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting setPriorSnapshotInfoComplete for remote cluster {}.", remoteClusterId,
+                            tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markPriorSnapshotInfoCompleted.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
     public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
