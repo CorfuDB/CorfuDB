@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultC
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValueTag;
@@ -58,6 +59,7 @@ import static org.corfudb.infrastructure.logreplication.replication.receive.LogR
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME;
 import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.REPLICATION_EVENT_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 /**
@@ -1490,6 +1492,87 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         long oldShadowTs = shadowStreamTs;
         // If the force snapshot sync was processed again, the CurrentCycleMinShadowStreamTs would be updated. Verify this hasn't happened.
         assertThat(oldShadowTs).isEqualTo(Long.parseLong(metadata.getVal()));
+    }
+
+    @Test
+    public void testSnapshotApplyInterrupted() throws Exception {
+        // Write first batch of entries to active map
+        for (int i = 0; i < firstBatch; i++) {
+            try (TxnContext txn = activeCorfuStore.txn(NAMESPACE)) {
+                txn.putRecord(mapActive, StringKey.newBuilder().setKey(String.valueOf(i)).build(),
+                        IntValue.newBuilder().setValue(i).build(), null);
+                txn.commit();
+            }
+        }
+        assertThat(mapActive.count()).isEqualTo(firstBatch);
+        assertThat(mapStandby.count()).isZero();
+
+        int waitInSnapshotApplyMs = 10000;
+        int lockLeaseDurationSeconds = 10;
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
+        standbyReplicationServer = runReplicationServerWaitInSnapshotApply(standbyReplicationServerPort, nettyPluginPath,
+                lockLeaseDurationSeconds, waitInSnapshotApplyMs);
+        log.info("Replication servers started...");
+
+        LogReplicationMetadata.ReplicationStatusKey key =
+                LogReplicationMetadata.ReplicationStatusKey
+                        .newBuilder()
+                        .setClusterId(DefaultClusterConfig.getStandbyClusterId())
+                        .build();
+
+        LogReplicationMetadata.ReplicationStatusVal replicationStatusVal;
+
+        // Wait until sync is ongoing before restarting active
+        while (true) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            if (replicationStatusVal != null && replicationStatusVal.hasSnapshotSyncInfo()
+                    && replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(SyncStatus.ONGOING)) {
+                break;
+            } else {
+                TimeUnit.MILLISECONDS.sleep(500);
+            }
+        }
+
+        // Give it a few seconds to let the data transfer to the sink
+        Sleep.sleepUninterruptibly(Duration.ofSeconds(3));
+
+        // Shutdown active while sync is ongoing
+        shutdownCorfuServer(activeReplicationServer);
+
+        // Wait for apply to complete on the sink
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+        assertThat(mapStandby.count()).isEqualTo(firstBatch);
+        assertTrue(() -> {
+            boolean isDataConsistent;
+            try (TxnContext txn = standbyCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                ReplicationStatusVal val = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                isDataConsistent = val.getDataConsistent();
+                txn.commit();
+            }
+            return isDataConsistent;
+        }, "Data consistent not set to true on standby!");
+
+        // Restart active after apply on sink
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort);
+
+        // Status should be updated on active to reflect the last snapshot sync was completed
+        while (true) {
+            try (TxnContext txn = activeCorfuStore.txn(LogReplicationMetadataManager.NAMESPACE)) {
+                replicationStatusVal = (ReplicationStatusVal)txn.getRecord(REPLICATION_STATUS_TABLE, key).getPayload();
+                txn.commit();
+            }
+
+            if (replicationStatusVal != null && replicationStatusVal.hasSnapshotSyncInfo()
+                    && replicationStatusVal.getSnapshotSyncInfo().getStatus().equals(SyncStatus.COMPLETED)) {
+                break;
+            } else {
+                TimeUnit.MILLISECONDS.sleep(500);
+            }
+        }
     }
 
 
