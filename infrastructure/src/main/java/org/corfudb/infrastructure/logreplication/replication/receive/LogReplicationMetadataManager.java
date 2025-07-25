@@ -568,6 +568,66 @@ public class LogReplicationMetadataManager {
     }
 
     /**
+     * Update replication status table's prior sync info as COMPLETED.
+     *
+     * @param clusterId standby cluster id
+     * @param baseSnapshot Corfu log timestamp at which the last snapshot was based
+     */
+    public void setPriorSnapshotInfoComplete(String clusterId, long baseSnapshot) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        ReplicationStatusVal updatedStatusVal;
+
+        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+
+            CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, Message> record = txn.getRecord(replicationStatusTable, key);
+
+            if (record.getPayload() == null) {
+                log.error("Remote Cluster {} not found in Replication Status Table.", clusterId);
+                return;
+            }
+
+            ReplicationStatusVal previousStatusVal = record.getPayload();
+            SnapshotSyncInfo previousSyncInfo = previousStatusVal.getSnapshotSyncInfo();
+            SnapshotSyncInfo updatedSyncInfo;
+
+            if (previousSyncInfo.getStatus().equals(SyncStatus.COMPLETED)) {
+                log.info("Previous sync already marked complete, skipping update of previous sync info.");
+                return;
+            }
+            log.info("Replication status snapshot sync info for baseSnapshot {} is being updated from {} to {}",
+                    baseSnapshot, previousSyncInfo.getStatus(), SyncStatus.COMPLETED);
+
+            Instant time = Instant.now();
+            Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
+                    .setNanos(time.getNano()).build();
+            updatedSyncInfo = previousSyncInfo.toBuilder()
+                    .setStatus(SyncStatus.COMPLETED)
+                    .setBaseSnapshot(baseSnapshot)
+                    .setCompletedTime(timestamp)
+                    .build();
+
+            snapshotSyncTimerSample
+                    .flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                try {
+                                    Timer timer = registry.timer("logreplication.snapshot.duration");
+                                    return sample.stop(timer);
+                                } catch (Exception e) {
+                                    log.warn("Caught exception while trying to stop logreplication.snapshot.duration timer.", e);
+                                    return -1L;
+                                }
+                            }));
+
+            updatedStatusVal = previousStatusVal.toBuilder()
+                    .setSnapshotSyncInfo(updatedSyncInfo)
+                    .build();
+
+            txn.putRecord(replicationStatusTable, key, updatedStatusVal, null);
+            txn.commit();
+        }
+    }
+
+    /**
      * Update replication status table's sync status
      *
      * Note: TransactionAbortedException has been handled by upper level.
