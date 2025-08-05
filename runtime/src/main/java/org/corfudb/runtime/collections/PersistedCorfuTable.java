@@ -117,4 +117,8 @@ public class PersistedCorfuTable<K, V> implements
     public Map<String, ICorfuSMRUpcallTarget<DiskBackedCorfuTable<K, V>>> getSMRUpcallMap() {
         return upcallTargetMap;
     }
+
+    public void publishStats(Consumer<String> consumer) {
+        consumer.accept(proxy.getUnderlyingMVO().getCurrentObject().getStatistics().toString());
+    }
 }
