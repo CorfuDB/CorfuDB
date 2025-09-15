@@ -2,6 +2,7 @@
 
 """
 USAGE:
+Execute this script only as corfu user - sudo -su corfu <cmd>
 1. To trigger compactor instantly without trimming at the end of the cycle
 /usr/share/corfu/scripts/compactor_runner.py --port <port> --compactorConfig /usr/share/corfu/conf/corfu-compactor-config.yml --instantTriggerCompaction=True
 2. To trigger compactor instantly with trimming at the end of the cycle
@@ -18,6 +19,7 @@ USAGE:
 
 from __future__ import absolute_import, print_function
 from argparse import ArgumentParser
+import getpass
 import glob
 import logging
 import netifaces
@@ -182,6 +184,13 @@ class CompactorRunner(object):
         """
         Run compactor.
         """
+        try:
+            if getpass.getuser() != 'corfu':
+                self._print_and_log("ERROR: compactor_runner should only be invoked by user corfu. Current user: " + getpass.getuser())
+                return
+        except Exception as ex:
+            self._print_and_log("Exception occured while validating user, exception: " + str(ex))
+            return
         self._print_and_log("Invoked compactor_runner...")
         if self._config.freezeCompaction and self._config.unfreezeCompaction:
             self._print_and_log("ERROR: Both freeze and unfreeze compaction parameters cannot be passed together")
