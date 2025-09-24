@@ -49,7 +49,7 @@ public class CompactorService implements ManagementService {
     private volatile Optional<CorfuRuntime> corfuRuntimeOptional = Optional.empty();
     private volatile ScheduledFuture<?> scheduledFuture;
     private final Logger log;
-    private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(1);
+    private static final Duration LIVENESS_TIMEOUT = Duration.ofMinutes(60);
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     public CompactorService(@NonNull ServerContext serverContext,
