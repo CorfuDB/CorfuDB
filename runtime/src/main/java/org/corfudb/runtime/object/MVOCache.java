@@ -66,6 +66,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
 
         this.objectCache = CacheBuilder.newBuilder()
                 .maximumSize(maxCacheSize)
+                .expireAfterWrite(Duration.ofMinutes(3))
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
