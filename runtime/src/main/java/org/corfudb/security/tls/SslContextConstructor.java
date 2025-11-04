@@ -34,21 +34,24 @@ public class SslContextConstructor {
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStoreConfig);
 
         SslProvider provider = getSslProvider();
-
+        SslContext sslContext;
         if (isServer) {
-            return SslContextBuilder
+            sslContext = SslContextBuilder
                     .forServer(kmf)
                     .sslProvider(provider)
                     .trustManager(tmf)
                     .build();
         } else {
-            return SslContextBuilder
+            sslContext = SslContextBuilder
                     .forClient()
                     .sslProvider(provider)
                     .keyManager(kmf)
                     .trustManager(tmf)
                     .build();
         }
+        log.debug("Created ssl context {}. isServer {}, type is {}",
+                sslContext, isServer, sslContext.getClass().getName());
+        return sslContext;
     }
 
     private static SslProvider getSslProvider() {
@@ -56,8 +59,13 @@ public class SslContextConstructor {
 
         if (OpenSsl.isAvailable()) {
             provider = SslProvider.OPENSSL;
+            log.info("Using OpenSSL provider (native): version={}", OpenSsl.versionString());
         } else {
-            log.warn("constructSslContext: couldn't load native openssl library, using JdkSslEngine instead!");
+            log.warn("OpenSSL is NOT available, falling back to JDK SSL. Reason: {}",
+                    OpenSsl.unavailabilityCause() != null ? OpenSsl.unavailabilityCause().getMessage() : "unknown");
+            if (OpenSsl.unavailabilityCause() != null) {
+                log.debug("OpenSSL unavailable - full stack trace:", OpenSsl.unavailabilityCause());
+            }
         }
         return provider;
     }
