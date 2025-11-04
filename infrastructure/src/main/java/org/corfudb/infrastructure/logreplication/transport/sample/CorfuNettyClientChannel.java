@@ -168,7 +168,10 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<Respons
         if (channel != null && channel.isOpen()) {
             channel.close();
         }
-
+        if (sslContext instanceof io.netty.util.ReferenceCounted) {
+            ((io.netty.util.ReferenceCounted) sslContext).release();
+            log.debug("close: Released SslContext {} for node {}", sslContext, node);
+        }
         this.eventLoopGroup.shutdownGracefully();
     }
 

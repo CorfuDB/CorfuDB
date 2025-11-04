@@ -417,6 +417,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         if (channel != null && channel.isOpen()) {
             channel.close().syncUninterruptibly();
         }
+        if (sslContext instanceof io.netty.util.ReferenceCounted) {
+            ((io.netty.util.ReferenceCounted) sslContext).release();
+            log.debug("stop: Released SslContext {} for node {}", sslContext, node);
+        }
     }
 
     /**
