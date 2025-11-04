@@ -228,6 +228,15 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                         engine.setNeedClientAuth(true);
                     }
                     ch.pipeline().addLast("ssl", new SslHandler(engine));
+
+                    // Register a close listener to release the SslContext when this channel closes
+                    // This prevents memory leak
+                    ch.closeFuture().addListener(future -> {
+                        if (sslContext instanceof io.netty.util.ReferenceCounted) {
+                            ((io.netty.util.ReferenceCounted) sslContext).release();
+                            log.debug("Released SslContext {} for closed channel", sslContext);
+                        }
+                    });
                 }
                 // Add/parse a length field
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
