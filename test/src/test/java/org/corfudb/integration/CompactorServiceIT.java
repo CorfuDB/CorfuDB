@@ -1,13 +1,17 @@
 package org.corfudb.integration;
 
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.CompactorService;
 import org.corfudb.infrastructure.DynamicTriggerPolicy;
 import org.corfudb.infrastructure.InvokeCheckpointing;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.PersistedCorfuTableTest;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -17,6 +21,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.MockedStatic;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -46,6 +52,7 @@ public class CompactorServiceIT extends AbstractIT {
     private CompactorService compactorServiceSpy;
     private Process corfuServer;
     private CorfuRuntime runtime2;
+
     private final InvokeCheckpointing invokeCheckpointing = mock(InvokeCheckpointing.class);
 
     private static final Duration SCHEDULER_INTERVAL = Duration.ofSeconds(1);
@@ -205,5 +212,13 @@ public class CompactorServiceIT extends AbstractIT {
              // Validate that shutdown was called exactly once.
              verify(rt, times(1)).shutdown();
         }
+    }
+
+    // The detection result can be seen in the log
+    @Test
+    public void detectLatencyAnomalyTest() throws Exception {
+        createCompactorService();
+        compactorServiceSpy.start(Duration.ofSeconds(19));
+        verify(compactorServiceSpy, timeout(VERIFY_TIMEOUT.toMillis()).times(1)).getNewCorfuRuntime();
     }
 }
