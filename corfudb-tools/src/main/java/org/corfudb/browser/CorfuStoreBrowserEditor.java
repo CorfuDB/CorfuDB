@@ -303,7 +303,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         }
         printJsonStr(builder.toString(), writer);
     }
-    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorqfuDynamicRecord> entry,
+    public static void printMetadata(Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry,
                                      BufferedWriter writer) {
         StringBuilder builder;
         if (entry.getValue().getMetadata() == null) {
