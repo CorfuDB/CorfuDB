@@ -472,8 +472,9 @@ public class SMRMapTest extends AbstractViewTest {
             final int putKey = r.nextInt(numKeys);
             final int getKey = r.nextInt(numKeys);
 
+            String value = testTables[task_num%numThreads].get(Integer.toString(getKey));
             testTables[task_num%numThreads].insert(Integer.toString(putKey),
-                    testTables[task_num%numThreads].get(Integer.toString(getKey)));
+                    value == null ? Integer.toString(1) : value);
 
             testTables[task_num%numThreads].get(Integer.toString(putKey)); // Generate conflict information since insert has no upcall
         });

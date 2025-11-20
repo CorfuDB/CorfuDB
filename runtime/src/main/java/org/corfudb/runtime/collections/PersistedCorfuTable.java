@@ -49,13 +49,13 @@ public class PersistedCorfuTable<K, V> implements
     }
 
     @Override
-    public void delete(@Nonnull K key) {
+    public void delete(@NonNull K key) {
         Object[] conflictField = new Object[]{key};
         proxy.logUpdate("remove", conflictField, key);
     }
 
     @Override
-    public void insert(@Nonnull K key, @Nonnull V value) {
+    public void insert(@NonNull K key, @NonNull V value) {
         Object[] conflictField = new Object[]{key};
         proxy.logUpdate("put", conflictField, key, value);
     }
@@ -76,7 +76,7 @@ public class PersistedCorfuTable<K, V> implements
     }
 
     @Override
-    public V get(@Nonnull Object key) {
+    public V get(@NonNull Object key) {
         Object[] conflictField = new Object[]{key};
         return proxy.access(corfuSmr -> corfuSmr.get(key), conflictField);
     }
@@ -94,7 +94,7 @@ public class PersistedCorfuTable<K, V> implements
     }
 
     @Override
-    public boolean containsKey(@Nonnull Object key) {
+    public boolean containsKey(@NonNull Object key) {
         Object[] conflictField = new Object[]{key};
         return proxy.access(corfuSmr -> corfuSmr.containsKey(key), conflictField);
     }
