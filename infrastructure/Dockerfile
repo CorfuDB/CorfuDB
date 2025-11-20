@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=openjdk:17-jdk-bullseye
+ARG BASE_IMAGE=eclipse-temurin:11-jdk-noble
 FROM $BASE_IMAGE
 
 ARG CORFU_JAR
