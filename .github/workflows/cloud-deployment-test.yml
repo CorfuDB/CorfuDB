@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        jdk_base_image_version: ['openjdk:21-jdk-bullseye']
+        jdk_base_image_version: ['eclipse-temurin:21-jdk-noble']
 
     steps:
       - uses: actions/checkout@v4
