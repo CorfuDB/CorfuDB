@@ -15,12 +15,12 @@ jobs:
 
     strategy:
       matrix:
-        jdk_base_image_version: ['openjdk:11-jdk-bullseye', 'openjdk:17-jdk-bullseye']
+        jdk_base_image_version: ['eclipse-temurin:11-jdk-noble']
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 11
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
@@ -47,7 +47,7 @@ jobs:
           /usr/bin/docker info
 
       - name: build docker image
-        run: .ci/infrastructure-docker-build.sh docker ${{ matrix.jdk_base_image }}
+        run: .ci/infrastructure-docker-build.sh docker ${{ matrix.jdk_base_image_version }}
 
       - uses: actions/checkout@v4
         with:

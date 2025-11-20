@@ -1,4 +1,4 @@
-FROM openjdk:17-jdk-bullseye
+FROM eclipse-temurin:11-jdk-noble
 
 WORKDIR /app
 
