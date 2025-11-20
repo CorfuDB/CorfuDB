@@ -42,15 +42,19 @@ import org.corfudb.utils.lock.states.LockState;
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -82,6 +86,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Fraction of Lease Duration for Lease Monitoring
      */
     private static final int MONITOR_LEASE_FRACTION = 10;
+
+    private static final int CONFIG_RETRIES = 10;
+
+    private static final int CONFIG_RETRY_DURATION_SECONDS = 30;
 
     /**
      * Bookkeeping the topologyConfigId, version number and other log replication state information.
@@ -286,9 +294,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * (streams to replicate) required by an active and standby site before starting
      * log replication.
      */
-    private void startDiscovery() {
+    private void startDiscovery() throws InterruptedException {
         log.info("Start Log Replication Discovery Service");
-        setupLocalNodeId();
+        setupLocalNodeIdWithRetries();
         connectToClusterManager();
         fetchTopologyFromClusterManager();
         processDiscoveredTopology(topologyDescriptor, true);
@@ -402,11 +410,34 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             if (update) {
                 localClusterDescriptor = tmpClusterDescriptor;
                 localNodeDescriptor = tmpNodeDescriptor;
-                localCorfuEndpoint = getCorfuEndpoint(getLocalHost(), localClusterDescriptor.getCorfuPort());
+                localCorfuEndpoint = getCorfuSaaSEndpoint()
+                        .orElseGet(() ->
+                                getCorfuEndpoint(getLocalHost(), localClusterDescriptor.getCorfuPort()));
             }
         }
 
         return tmpClusterDescriptor != null && tmpNodeDescriptor != null;
+    }
+
+    private Optional<String> getCorfuSaaSEndpoint() {
+        final String pluginConfigFilePath = serverContext.getPluginConfigFilePath();
+        if (pluginConfigFilePath != null) {
+            return extractEndpoint(pluginConfigFilePath);
+        }
+        log.warn("No plugin path found");
+        return Optional.empty();
+    }
+
+    private Optional<String> extractEndpoint(String path) {
+        try (InputStream input = new FileInputStream(path)) {
+            Properties prop = new Properties();
+            prop.load(input);
+            String endpoint = prop.getProperty("saas_endpoint");
+            return Optional.of(endpoint);
+        } catch (IOException e) {
+            log.warn("Error extracting saas endpoint");
+            return Optional.empty();
+        }
     }
 
     /**
@@ -941,6 +972,20 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         for (ClusterDescriptor clusterDescriptor : topologyDescriptor.getStandbyClusters().values()) {
             logReplicationMetadataManager.initializeReplicationStatusTable(clusterDescriptor.clusterId);
         }
+    }
+
+    private void setupLocalNodeIdWithRetries() throws InterruptedException {
+        for (int i = 0; i < CONFIG_RETRIES; i++) {
+            try {
+                setupLocalNodeId();
+            }
+            catch (IllegalStateException ise) {
+                TimeUnit.SECONDS.sleep(CONFIG_RETRY_DURATION_SECONDS);
+                continue;
+            }
+            return;
+        }
+        throw new RetryExhaustedException("Failed to fetch local node id within provided period");
     }
 
     private void setupLocalNodeId() {
