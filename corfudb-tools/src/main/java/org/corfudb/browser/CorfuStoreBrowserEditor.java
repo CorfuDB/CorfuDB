@@ -4,7 +4,10 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.JsonFormat;
+import com.google.protobuf.util.JsonFormat.Printer;
+import com.google.protobuf.WrappersProto;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -71,7 +74,8 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
     private final CorfuRuntime runtime;
     private final String diskPath;
     private final DynamicProtobufSerializer dynamicProtobufSerializer;
-    private boolean startedPrintingRows = false;
+
+    private static final JsonFormat.TypeRegistry protobufTypeRegistry = getTypeRegistryWithCommonTypes();
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -272,7 +276,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         StringBuilder builder;
         try {
             builder = new StringBuilder("\n{\"Key\":\n")
-                    .append(JsonFormat.printer().print(entry.getKey().getKey()))
+                    .append(getJsonPrinter().print(entry.getKey().getKey()))
                     .append("}");
         } catch (Exception e) {
             log.info("invalid key: {}", entry.getKey().getKey(), e);
@@ -291,11 +295,11 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
 
         try {
             builder = new StringBuilder("\n,{\"Payload\":\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getPayload()))
+                    .append(getJsonPrinter().print(entry.getValue().getPayload()))
                     .append("}");
         } catch (Exception e) {
             log.info("invalid payload: {}", entry.getValue().getPayload(), e);
-            return;
+            builder = new StringBuilder("\n,{\"Payload\":\"ERROR: JSON serialization failed. See logs for details.\"}");
         }
         printJsonStr(builder.toString(), writer);
     }
@@ -308,7 +312,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         }
         try {
             builder = new StringBuilder("\n,{\"Metadata\":\n")
-                    .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                    .append(getJsonPrinter().print(entry.getValue().getMetadata()))
                     .append("}");
         } catch (Exception e) {
             log.info("invalid metadata: {}", entry.getValue().getMetadata(), e);
@@ -332,7 +336,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                     builder.append(",[");
                 }
                 builder.append("{\"Key\":\n")
-                        .append(JsonFormat.printer().print(entry.getKey()))
+                        .append(getJsonPrinter().print(entry.getKey()))
                         .append(jsEnd);
                 printJsonStr(builder.toString(), writer);
             } catch (Exception e) {
@@ -359,7 +363,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
 
             try {
                 StringBuilder builder = new StringBuilder(jsStart+"\"Metadata\":\n")
-                        .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                        .append(getJsonPrinter().print(entry.getValue().getMetadata()))
                         .append(jsEnd);
                 builder.append("]");
                 printJsonStr(builder.toString(), writer);
@@ -428,7 +432,7 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         for (ProtobufFileName protoFileName :
             dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet()) {
             try {
-                System.out.println(JsonFormat.printer().print(protoFileName));
+                System.out.println(getJsonPrinter().print(protoFileName));
             } catch (InvalidProtocolBufferException e) {
                 log.info("Unable to print protobuf for key {}", protoFileName, e);
             }
@@ -438,8 +442,8 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         for (ProtobufFileName protoFileName :
             dynamicProtobufSerializer.getCachedProtobufDescriptorTable().keySet()) {
             try {
-                System.out.println(JsonFormat.printer().print(protoFileName));
-                System.out.println(JsonFormat.printer().print(
+                System.out.println(getJsonPrinter().print(protoFileName));
+                System.out.println(getJsonPrinter().print(
                     dynamicProtobufSerializer.getCachedProtobufDescriptorTable()
                         .get(protoFileName).getPayload())
                 );
@@ -577,16 +581,16 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                                  CorfuDynamicKey key, CorfuDynamicRecord oldRecord, CorfuDynamicRecord newRecord) {
         log.warn("{} on {}${}", operation, namespace, tableName);
         try {
-            log.warn("KEY: type={}, key={}", key.getKeyTypeUrl(), JsonFormat.printer().print(key.getKey()));
+            log.warn("KEY: type={}, key={}", key.getKeyTypeUrl(), getJsonPrinter().print(key.getKey()));
         } catch (Exception e) {
             log.info("invalid key: ", e);
         }
         if (oldRecord != null) {
             try {
                 log.warn("OLD RECORD: type={}", oldRecord.getPayloadTypeUrl());
-                log.warn("OLD VALUE:{}", JsonFormat.printer().print(oldRecord.getPayload()));
+                log.warn("OLD VALUE:{}", getJsonPrinter().print(oldRecord.getPayload()));
                 if (oldRecord.getMetadata() != null) {
-                    log.warn("OLD METADATA:{}", JsonFormat.printer().print(oldRecord.getMetadata()));
+                    log.warn("OLD METADATA:{}", getJsonPrinter().print(oldRecord.getMetadata()));
                 }
             } catch (Exception e) {
                 log.info("invalid old record: ", e);
@@ -595,9 +599,9 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         if (newRecord != null) {
             try {
                 log.warn("NEW RECORD: type={}", newRecord.getPayloadTypeUrl());
-                log.warn("NEW VALUE:{}", JsonFormat.printer().print(newRecord.getPayload()));
+                log.warn("NEW VALUE:{}", getJsonPrinter().print(newRecord.getPayload()));
                 if (newRecord.getMetadata() != null) {
-                    log.warn("NEW METADATA:{}", JsonFormat.printer().print(newRecord.getMetadata()));
+                    log.warn("NEW METADATA:{}", getJsonPrinter().print(newRecord.getMetadata()));
                 }
             } catch (Exception e) {
                 log.info("invalid new record: ", e);
@@ -882,13 +886,13 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
                     entries.forEach(entry -> {
                         try {
                             String builder = "\nKey:\n" +
-                                    JsonFormat.printer().print(entry.getKey()) +
+                                    getJsonPrinter().print(entry.getKey()) +
                                     "\nPayload:\n" +
                                     (entry.getPayload() != null ?
-                                            JsonFormat.printer().print(entry.getPayload()) : "") +
+                                            getJsonPrinter().print(entry.getPayload()) : "") +
                                     "\nMetadata:\n" +
                                     (entry.getMetadata() != null ?
-                                            JsonFormat.printer().print(entry.getMetadata()) : "") +
+                                            getJsonPrinter().print(entry.getMetadata()) : "") +
                                     "\nOperation:\n" +
                                     entry.getOperation().toString() +
                                     "\n====================\n"+
@@ -1042,5 +1046,21 @@ public class CorfuStoreBrowserEditor implements CorfuBrowserEditorCommands {
         formatMapping = formatMapping.substring(0, formatMapping.length() - 2);
         System.out.println("Tag: " + tag + " --- Total Tables: " + tables.size()
             + " TableNames: " + formatMapping);
+    }
+
+    /**
+     * Protobuf messages containing Any-type fields MUST register their real message types.
+     * Reading or writing unregistered messages to an Any field will result in InvalidProtocolBufferException.
+     * Reference: <a href="https://protobuf.dev/reference/java/api-docs/com/google/protobuf/TypeRegistry.html">
+     * Protobuf - Class TypeRegistry</a>
+     */
+    private static JsonFormat.TypeRegistry getTypeRegistryWithCommonTypes() {
+        return JsonFormat.TypeRegistry.newBuilder()
+            .add(WrappersProto.getDescriptor().getMessageTypes())
+            .build();
+    }
+
+    private static Printer getJsonPrinter() {
+        return JsonFormat.printer().usingTypeRegistry(protobufTypeRegistry);
     }
 }
