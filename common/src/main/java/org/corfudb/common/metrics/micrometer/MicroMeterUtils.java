@@ -66,7 +66,7 @@ public class MicroMeterUtils {
 
 
     private MicroMeterUtils() {
-
+        // protection from creating new instances
     }
 
     private static Optional<Set<String>> getMetricsBlockList() {
