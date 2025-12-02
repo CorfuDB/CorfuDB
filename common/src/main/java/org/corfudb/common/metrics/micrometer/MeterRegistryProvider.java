@@ -1,9 +1,11 @@
 package org.corfudb.common.metrics.micrometer;
 
+import com.google.common.collect.ImmutableSet;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -37,6 +40,14 @@ public class MeterRegistryProvider {
     private static Optional<RegistryProvider> provider = Optional.empty();
     private static final Map<String, Supplier<String>> externalMetricsSuppliers
             = new ConcurrentHashMap<>();
+    public static final Set<String> systemHealthMetrics = ImmutableSet.of(
+            "address_space.write.latency",
+            "transaction.duration",
+            "logunit.fsync.timer",
+            "logunit.read.timer",
+            "failure-detector.ping-latency",
+            "overall.status"
+    );
 
     private MeterRegistryProvider() {
 
@@ -46,6 +57,8 @@ public class MeterRegistryProvider {
         SERVER,
         CLIENT
     }
+
+
 
     /**
      * Class that initializes the Meter Registry.
@@ -147,6 +160,11 @@ public class MeterRegistryProvider {
                         if (registry.isPresent()) {
                             MeterRegistry providedRegistry = registry.get();
                             id.ifPresent(s -> providedRegistry.config().commonTags("id", s));
+                            // Apply a MeterFilter to allow only allowed metrics
+                            providedRegistry.config().meterFilter(MeterFilter.denyUnless(id ->
+                                    systemHealthMetrics.contains(id.getName())
+                            ));
+
                             addToCompositeRegistry(() -> registry);
                         }
                         else {
