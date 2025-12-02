@@ -6,7 +6,6 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.NonNull;
@@ -52,10 +51,9 @@ public class LogUnitServerCache {
                 .cacheLoader(this::handleRetrieval)
                 .build()
                 .dataCache();
-
         MeterRegistryProvider
                 .getInstance()
-                .ifPresent(registry -> CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
+                .ifPresent(registry -> CacheGauges.register(dataCache, "logunit.read_cache"));
         MicroMeterUtils.gauge(hitRatioName, dataCache, cache -> cache.stats().hitRate());
         MicroMeterUtils.gauge(loadTimeName, dataCache, cache -> cache.stats().totalLoadTime());
         MicroMeterUtils.gauge(weightName, dataCache, cache -> cache.stats().evictionWeight());
