@@ -7,6 +7,8 @@ import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
+import org.corfudb.runtime.CorfuCompactorManagement.CompactionCycleHistory;
+import org.corfudb.runtime.CorfuCompactorManagement.CompactionCycleKey;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCheckpointer;
@@ -44,6 +46,12 @@ public class CompactorLeaderServices {
     private final CompactorMetadataTables compactorMetadataTables;
 
     public static final int MAX_RETRIES = 5;
+    
+    // Number of cycle histories to retain (covers ~25 hours at 15-min intervals)
+    private static final int HISTORY_RETENTION_COUNT = 100;
+    
+    // Track cycle start time for history recording
+    private volatile long cycleStartTime = 0;
 
     /**
      * This enum contains the leader's initCompactionCycle status
@@ -76,6 +84,9 @@ public class CompactorLeaderServices {
     public LeaderInitStatus initCompactionCycle() {
         long minAddressBeforeCycleStarts;
         log.info("=============Initiating Distributed Compaction============");
+        
+        // Capture start time for history recording
+        cycleStartTime = System.currentTimeMillis();
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
@@ -219,6 +230,7 @@ public class CompactorLeaderServices {
 
             List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
             finalStatus = StatusType.COMPLETED;
+            
             for (TableName table : tableNames) {
                 CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
                         CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
@@ -227,10 +239,26 @@ public class CompactorLeaderServices {
                 log.info("{}", str);
                 if (tableStatus.getStatus() != StatusType.COMPLETED) {
                     finalStatus = StatusType.FAILED;
-                    break;
                 }
             }
-            long totalTimeElapsed = System.currentTimeMillis() - managerStatus.getTimeTaken();
+            
+            long currentTime = System.currentTimeMillis();
+            long totalTimeElapsed = currentTime - managerStatus.getTimeTaken();
+            
+            // Record lightweight cycle history - only essential fields
+            CompactionCycleHistory history = CompactionCycleHistory.newBuilder()
+                    .setCycleCount(managerStatus.getCycleCount())
+                    .setStatus(finalStatus)
+                    .setStartTimeMs(cycleStartTime)
+                    .setEndTimeMs(currentTime)
+                    .build();
+            
+            CompactionCycleKey historyKey = CompactionCycleKey.newBuilder()
+                    .setCycleCount(managerStatus.getCycleCount())
+                    .build();
+            
+            txn.putRecord(compactorMetadataTables.getCompactionCycleHistoryTable(), historyKey, history, null);
+            
             txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed, managerStatus.getCycleCount()),
                     null);
@@ -256,6 +284,9 @@ public class CompactorLeaderServices {
                 HealthMonitor.reportIssue(compactionCycleIssue);
             }
             deleteInstantKeyIfPresent();
+            
+            // Automatically prune old cycle histories to prevent unbounded growth
+            pruneOldCycleHistories();
         }
     }
 
@@ -319,5 +350,73 @@ public class CompactorLeaderServices {
                 .append(status.getTimeTaken())
                 .append("ms");
         return str.toString();
+    }
+
+    /**
+     * Asynchronously prune old cycle histories to keep only the most recent 100 cycles.
+     * This is called automatically after each cycle completes to prevent unbounded growth.
+     * Errors are logged but don't affect cycle completion.
+     */
+    private void pruneOldCycleHistories() {
+        try {
+            int deleted = pruneOldCycleHistories(HISTORY_RETENTION_COUNT);
+            if (deleted > 0) {
+                log.info("Auto-pruned {} old cycle history records", deleted);
+            }
+        } catch (Exception e) {
+            // Log but don't fail the cycle - pruning is best effort
+            log.warn("Failed to auto-prune old cycle histories: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Delete old cycle history records, keeping only the most recent N cycles.
+     *
+     * @param keepCount number of recent cycles to keep
+     * @return number of history records deleted
+     */
+    private int pruneOldCycleHistories(int keepCount) {
+        int deletedCount = 0;
+        for (int retry = 0; retry < MAX_RETRIES; retry++) {
+            try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+                // Get current cycle count
+                CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                        CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                
+                if (managerStatus == null) {
+                    txn.commit();
+                    return 0;
+                }
+                
+                long currentCycle = managerStatus.getCycleCount();
+                long oldestToKeep = currentCycle - keepCount;
+                
+                // Get all keys and delete old ones
+                List<CompactionCycleKey> keys = new ArrayList<>(txn.keySet(compactorMetadataTables.getCompactionCycleHistoryTable()));
+                
+                for (CompactionCycleKey key : keys) {
+                    if (key.getCycleCount() < oldestToKeep) {
+                        txn.delete(CompactorMetadataTables.COMPACTION_CYCLE_HISTORY_TABLE_NAME, key);
+                        deletedCount++;
+                    }
+                }
+                
+                txn.commit();
+                log.info("Pruned {} old cycle history records, keeping last {} cycles", deletedCount, keepCount);
+                return deletedCount;
+            } catch (TransactionAbortedException e) {
+                if (e.getAbortCause() == AbortCause.CONFLICT) {
+                    log.warn("Conflict while pruning cycle histories, retry {}/{}", retry + 1, MAX_RETRIES);
+                } else {
+                    log.warn("Transaction aborted while pruning cycle histories: {}", e.getMessage());
+                    break;
+                }
+            } catch (Exception e) {
+                log.warn("Unable to prune old cycle histories: {}", e.getMessage());
+                break;
+            }
+        }
+        return deletedCount;
     }
 }
