@@ -62,7 +62,7 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
             // Do not allocate memory when cache is disabled.
             maxCacheSize = 0;
         }
-        log.info("MVO cache size is set to {}", maxCacheSize);
+        log.info("Runtime = {}.  MVO cache size is set to {}", corfuRuntime, maxCacheSize);
 
         this.objectCache = CacheBuilder.newBuilder()
                 .maximumSize(maxCacheSize)
