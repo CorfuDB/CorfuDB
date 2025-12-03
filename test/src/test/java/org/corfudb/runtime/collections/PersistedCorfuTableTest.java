@@ -711,7 +711,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Property(tries = NUM_OF_TRIES)
     void snapshotExpiredCrud(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
-        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiryDiskBacked(Duration.ofNanos(0)).build());
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
             executeTx(() -> {
                 intended.forEach(entry -> table.insert(entry, entry));
@@ -741,7 +741,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
 
     @Property(tries = NUM_OF_TRIES)
     void snapshotExpiredIterator(@ForAll @Size(SAMPLE_SIZE) Set<String> intended) {
-        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiryDiskBacked(Duration.ofNanos(0)).build());
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
 
             executeTx(() -> {
@@ -791,7 +791,7 @@ public class PersistedCorfuTableTest extends AbstractViewTest implements AutoClo
      */
     @Property(tries = NUM_OF_TRIES)
     void concurrentEntryStream(@ForAll @Size(SAMPLE_SIZE_TWO) Set<String> intended) throws InterruptedException {
-        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiry(Duration.ofNanos(0)).build());
+        resetTests(CorfuRuntimeParameters.builder().mvoCacheExpiryDiskBacked(Duration.ofNanos(0)).build());
         try (final PersistedCorfuTable<String, String> table = setupTable()) {
 
             executeTx(() -> {

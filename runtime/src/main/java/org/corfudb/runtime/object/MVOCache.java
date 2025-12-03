@@ -62,13 +62,19 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
             // Do not allocate memory when cache is disabled.
             maxCacheSize = 0;
         }
-        log.info("MVO cache size is set to {}", maxCacheSize);
 
-        this.objectCache = CacheBuilder.newBuilder()
+        CacheBuilder<VersionedObjectIdentifier, SMRSnapshot<S>> mvoCacheBuilder = CacheBuilder.newBuilder()
                 .maximumSize(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .recordStats()
-                .build();
+                .recordStats();
+
+        Duration expireAfterWrite = corfuRuntime.getParameters().getMvoCacheExpiryInMemory();
+        if (expireAfterWrite.toMillis() > 0) {
+            mvoCacheBuilder.expireAfterWrite(expireAfterWrite);
+        }
+
+        log.info("MVO cache parameters: size={} expireAfterWriteSeconds={}", maxCacheSize, expireAfterWrite);
+        this.objectCache = mvoCacheBuilder.build();
 
         MeterRegistryProvider.getInstance()
                 .map(registry -> GuavaCacheMetrics.monitor(registry, objectCache, "mvo_cache"));
