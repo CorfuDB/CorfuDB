@@ -70,10 +70,13 @@ public class MVOCache<S extends SnapshotGenerator<S>> {
 
         Duration expireAfterWrite = corfuRuntime.getParameters().getMvoCacheExpiryInMemory();
         if (expireAfterWrite.toMillis() > 0) {
+            // IMPORTANT: When this CorfuRuntime parameter is set to 0 -> no time-based eviction.
+            // But we can't call mvoCacheBuilder.expireAfterWrite(0), because that has different effect:
+            // From Guava Cache doc: When duration is zero, this method hands off to maximumSize(0)
             mvoCacheBuilder.expireAfterWrite(expireAfterWrite);
         }
 
-        log.info("MVO cache parameters: size={} expireAfterWriteSeconds={}", maxCacheSize, expireAfterWrite);
+        log.info("MVO cache parameters: size={} expireAfterWrite={}", maxCacheSize, expireAfterWrite);
         this.objectCache = mvoCacheBuilder.build();
 
         MeterRegistryProvider.getInstance()

@@ -241,7 +241,7 @@ public class CorfuRuntime {
         /*
          * Cache expiry duration for the MVOCache of in-memory tables.
          */
-        Duration mvoCacheExpiryInMemory = Duration.ofSeconds(0);
+        Duration mvoCacheExpiryInMemory = Duration.ofMinutes(5);
 
         /*
         * cache metrics are to be enabled only for the tuning exercise.
@@ -459,7 +459,7 @@ public class CorfuRuntime {
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
             private Duration mvoCacheExpiryDiskBacked = Duration.ofMinutes(10);
-            private Duration mvoCacheExpiryInMemory = Duration.ofSeconds(0);
+            private Duration mvoCacheExpiryInMemory = Duration.ofMinutes(5);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
             private long maxCacheEntries = 2500;
