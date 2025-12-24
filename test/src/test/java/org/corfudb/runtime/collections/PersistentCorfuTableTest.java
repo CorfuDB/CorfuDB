@@ -1411,6 +1411,155 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
     }
 
     /**
+     * Test that the default in-memory cache expiry is set to 5 minutes and that
+     * cache entries are evicted after the expiry time.
+     */
+    @Test
+    public void testInMemoryCacheExpiryDefault() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        
+        // Test 1: Verify default expiry is 5 minutes
+        CorfuRuntime rt1 = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        
+        assertThat(rt1.getParameters().getMvoCacheExpiryInMemory())
+                .isEqualTo(java.time.Duration.ofMinutes(5));
+        rt1.shutdown();
+        
+        // Test 2: Verify cache entries expire after configured time
+        final int cacheExpirySeconds = 2;
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .mvoCacheExpiryInMemory(java.time.Duration.ofSeconds(cacheExpirySeconds))
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        
+        setupSerializer();
+        openTable();
+        
+        // Insert some data
+        final int numKeys = 10;
+        rt.getObjectsView().TXBegin();
+        for (int i = 0; i < numKeys; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value = new CorfuRecord(payload, metadata);
+            corfuTable.insert(key, value);
+        }
+        rt.getObjectsView().TXEnd();
+        
+        // Access the table to populate the cache
+        rt.getObjectsView().TXBegin();
+        assertThat(corfuTable.size()).isEqualTo(numKeys);
+        rt.getObjectsView().TXEnd();
+        
+        // Verify cache has entries
+        Set<VersionedObjectIdentifier> cachedVersionsBefore = rt.getObjectsView().getMvoCache().keySet();
+        assertThat(cachedVersionsBefore).isNotEmpty();
+        
+        // Wait for cache entries to expire (wait longer than expiry time)
+        Thread.sleep((cacheExpirySeconds + 1) * 1000);
+
+        // Note: Guava cache cleanup is not guaranteed to happen after expiration time.
+        // Force trigger Guava Cache cleanUp()
+        rt.getObjectsView().getMvoCache().getObjectCache().cleanUp();
+
+        // Verify that the MVO cache is empty
+        Set<VersionedObjectIdentifier> cachedVersionsAfter = rt.getObjectsView().getMvoCache().keySet();
+        assertThat(cachedVersionsAfter).isEmpty();
+
+        // Verify data integrity after cache expiry
+        rt.getObjectsView().TXBegin();
+        assertThat(corfuTable.size()).isEqualTo(numKeys);
+        for (int i = 0; i < numKeys; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            assertThat(corfuTable.get(key)).isNotNull();
+            assertThat(corfuTable.get(key).getPayload().getLsb()).isEqualTo(i);
+        }
+        rt.getObjectsView().TXEnd();
+    }
+    
+    /**
+     * Test that in-memory cache expiry can be disabled by setting it to 0.
+     */
+    @Test
+    public void testInMemoryCacheExpiryDisabled() throws Exception {
+        addSingleServer(SERVERS.PORT_0);
+        
+        // Set cache expiry to 0 (disabled)
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .mvoCacheExpiryInMemory(java.time.Duration.ofSeconds(0))
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        
+        setupSerializer();
+        openTable();
+        
+        // Insert some data
+        final int numKeys = 5;
+        rt.getObjectsView().TXBegin();
+        for (int i = 0; i < numKeys; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid payload = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            TestSchema.Uuid metadata = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            CorfuRecord value = new CorfuRecord(payload, metadata);
+            corfuTable.insert(key, value);
+        }
+        rt.getObjectsView().TXEnd();
+        
+        // Access the table to populate the cache
+        rt.getObjectsView().TXBegin();
+        assertThat(corfuTable.size()).isEqualTo(numKeys);
+        rt.getObjectsView().TXEnd();
+        
+        // Verify cache has entries
+        Set<VersionedObjectIdentifier> cachedVersions = rt.getObjectsView().getMvoCache().keySet();
+        assertThat(cachedVersions).isNotEmpty();
+        
+        // Wait some time (cache should NOT expire since time-based eviction is disabled)
+        Thread.sleep(2000);
+        
+        // Verify data is still accessible and correct
+        for (int i = 0; i < numKeys; i++) {
+            TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(i).setMsb(i).build();
+            assertThat(corfuTable.get(key)).isNotNull();
+            assertThat(corfuTable.get(key).getPayload().getLsb()).isEqualTo(i);
+        }
+    }
+    
+    /**
+     * Test that disk-backed and in-memory cache expiry parameters are independent.
+     */
+    @Test
+    public void testSeparateCacheExpiryParameters() {
+        addSingleServer(SERVERS.PORT_0);
+        
+        final java.time.Duration diskBackedExpiry = java.time.Duration.ofMinutes(10);
+        final java.time.Duration inMemoryExpiry = java.time.Duration.ofMinutes(5);
+        
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .mvoCacheExpiryDiskBacked(diskBackedExpiry)
+                .mvoCacheExpiryInMemory(inMemoryExpiry)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        
+        // Verify both parameters are set correctly and independently
+        assertThat(rt.getParameters().getMvoCacheExpiryDiskBacked()).isEqualTo(diskBackedExpiry);
+        assertThat(rt.getParameters().getMvoCacheExpiryInMemory()).isEqualTo(inMemoryExpiry);
+        assertThat(rt.getParameters().getMvoCacheExpiryDiskBacked())
+                .isNotEqualTo(rt.getParameters().getMvoCacheExpiryInMemory());
+    }
+
+    /**
      * Validate that the state of the underlying object is reset when an exception occurs
      * during the sync process. Subsequent reads operations should succeed and not see
      * incomplete or stale data.
