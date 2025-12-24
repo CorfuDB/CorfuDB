@@ -775,10 +775,10 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void persistedCorfuTableCheckpointTrimTest() {
         final String path = PARAMETERS.TEST_TEMP_DIR;
-        final int mvoCacheExpirySeconds = 1;
+        final int mvoCacheExpiryDiskBackedSeconds = 1;
 
         CorfuRuntime rt = getDefaultRuntime();
-        rt.getParameters().setMvoCacheExpiry(Duration.ofSeconds(mvoCacheExpirySeconds));
+        rt.getParameters().setMvoCacheExpiryDiskBacked(Duration.ofSeconds(mvoCacheExpiryDiskBackedSeconds));
 
         final UUID tableId = UUID.randomUUID();
         final PersistenceOptionsBuilder persistenceOptions = PersistenceOptions.builder()
@@ -825,7 +825,7 @@ public class CheckpointTest extends AbstractObjectTest {
             cpRt.shutdown();
 
             // Allow enough time so that existing snapshots in the MVOCache become EXPIRED.
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(2*mvoCacheExpirySeconds));
+            Sleep.sleepUninterruptibly(Duration.ofSeconds(2*mvoCacheExpiryDiskBackedSeconds));
 
             // Validate that table operations can still be performed correctly without crashing/exceptions.
             assertThat(tableRef.size()).isEqualTo(numKeys);

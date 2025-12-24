@@ -15,7 +15,6 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.util.FileWatcher;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -38,6 +37,7 @@ import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.FileWatcher;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
@@ -68,7 +68,6 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static org.corfudb.common.metrics.micrometer.JVMMetrics.subscribeSafepointMetrics;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 
 /**
@@ -234,7 +233,15 @@ public class CorfuRuntime {
          */
         Duration holeFillTimeout = Duration.ofSeconds(10);
 
-        Duration mvoCacheExpiry = Duration.ofMinutes(10);
+        /*
+         * Cache expiry duration for the MVOCache of disk-backed tables.
+         */
+        Duration mvoCacheExpiryDiskBacked = Duration.ofMinutes(10);
+
+        /*
+         * Cache expiry duration for the MVOCache of in-memory tables.
+         */
+        Duration mvoCacheExpiryInMemory = Duration.ofMinutes(5);
 
         /*
         * cache metrics are to be enabled only for the tuning exercise.
@@ -451,7 +458,8 @@ public class CorfuRuntime {
             private int holeFillRetry = 10;
             private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
             private Duration holeFillTimeout = Duration.ofSeconds(10);
-            private Duration mvoCacheExpiry = Duration.ofMinutes(10);
+            private Duration mvoCacheExpiryDiskBacked = Duration.ofMinutes(10);
+            private Duration mvoCacheExpiryInMemory = Duration.ofMinutes(5);
             private boolean cacheEntryMetricsDisabled = true;
             private boolean cacheDisabled = false;
             private long maxCacheEntries = 2500;
@@ -657,8 +665,13 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpiry(Duration mvoCacheExpiry) {
-                this.mvoCacheExpiry = mvoCacheExpiry;
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpiryDiskBacked(Duration mvoCacheExpiryDiskBacked) {
+                this.mvoCacheExpiryDiskBacked = mvoCacheExpiryDiskBacked;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder mvoCacheExpiryInMemory(Duration mvoCacheExpiryInMemory) {
+                this.mvoCacheExpiryInMemory = mvoCacheExpiryInMemory;
                 return this;
             }
 
@@ -840,7 +853,8 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
                 corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
                 corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
-                corfuRuntimeParameters.setMvoCacheExpiry(mvoCacheExpiry);
+                corfuRuntimeParameters.setMvoCacheExpiryDiskBacked(mvoCacheExpiryDiskBacked);
+                corfuRuntimeParameters.setMvoCacheExpiryInMemory(mvoCacheExpiryInMemory);
                 corfuRuntimeParameters.setCacheEntryMetricsDisabled(cacheEntryMetricsDisabled);
                 corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
                 corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);

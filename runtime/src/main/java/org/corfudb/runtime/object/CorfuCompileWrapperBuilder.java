@@ -74,7 +74,7 @@ public class CorfuCompileWrapperBuilder {
             // store the underlying Snapshot references and not the data itself. Since
             // there is no contention for the underlying resource (memory), there is no
             // good reason to enforce a global cache.
-            MVOCache<S> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiry());
+            MVOCache<S> mvoCache = new MVOCache<>(rt.getParameters().getMvoCacheExpiryDiskBacked());
             wrapperObject.setCorfuSMRProxy(new MVOCorfuCompileProxy<>(rt, streamID,
                     coreClass, wrapperClass, args, serializer, streamTags, wrapperObject, objectOpenOption,
                     mvoCache));
