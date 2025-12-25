@@ -35,7 +35,6 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
 
                 String compactorScriptPath = serverContext.getCompactorScriptPath().get();
                 String compactorConfigPath = serverContext.getCompactorConfig().get();
-                boolean runCompactorAsRoot = serverContext.getRunCompactorAsRoot();
 
                 String hostName = serverContext.getNodeLocator().getHost();
                 String port = Integer.toString(serverContext.getNodeLocator().getPort());
@@ -45,14 +44,8 @@ public class InvokeCheckpointingJvm implements InvokeCheckpointing {
                     shutdown();
                 }
 
-                List<String> compactorCmd = new ArrayList<>();
-                if (runCompactorAsRoot) {
-                    compactorCmd.add("sudo");
-                }
-                compactorCmd.addAll(Arrays.asList(compactorScriptPath, "--hostname", hostName, "--port",
-                        port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true"));
-
-                ProcessBuilder pb = new ProcessBuilder(compactorCmd);
+                ProcessBuilder pb = new ProcessBuilder(compactorScriptPath, "--hostname", hostName, "--port",
+                        port, "--compactorConfig", compactorConfigPath, "--startCheckpointing=true");
                 pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
                 pb.redirectError(ProcessBuilder.Redirect.PIPE);
                 this.checkpointerProcess = pb.start();
