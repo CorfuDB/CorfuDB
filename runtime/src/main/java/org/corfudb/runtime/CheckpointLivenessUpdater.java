@@ -28,7 +28,7 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
 
     private volatile Optional<TableName> currentTable = Optional.empty();
 
-    private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(15);
+    private static final Duration UPDATE_INTERVAL = Duration.ofSeconds(8);
 
     private final Table<TableName, ActiveCPStreamMsg, Message> activeCheckpointsTable;
 
@@ -91,12 +91,12 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
     }
 
     @Override
-    public void updateLiveness(TableName tableName) {
+    public void setCurrentTable(TableName tableName) {
         this.currentTable = Optional.of(tableName);
     }
 
     @Override
-    public void notifyOnSyncComplete() {
+    public void unsetCurrentTable() {
         currentTable = Optional.empty();
     }
 

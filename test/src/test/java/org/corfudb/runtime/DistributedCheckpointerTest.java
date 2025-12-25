@@ -552,7 +552,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
                     ActiveCPStreamMsg.getDefaultInstance(),
                     null);
             txn.commit();
-            mockLivenessUpdater.updateLiveness(table);
+            mockLivenessUpdater.setCurrentTable(table);
         }
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -568,7 +568,7 @@ public class DistributedCheckpointerTest extends AbstractViewTest {
 
         try {
             TimeUnit.MILLISECONDS.sleep(WAIT_IN_SYNC_STATE);
-            mockLivenessUpdater.notifyOnSyncComplete();
+            mockLivenessUpdater.unsetCurrentTable();
 
             distributedCheckpointer.checkpointTables();
             while (!pollForFinishCheckpointing()) {
