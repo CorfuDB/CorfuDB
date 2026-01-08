@@ -39,7 +39,6 @@ echo "DEBUG: Building with Maven..."
 ./mvnw -pl cmdlets,corfudb-tools,infrastructure --also-make \
   -DskipTests \
   -Dmaven.javadoc.skip=true \
-  -T 1C \
   -X \
   -e \
   package 2>&1 | tee /tmp/maven-build-debug.log
