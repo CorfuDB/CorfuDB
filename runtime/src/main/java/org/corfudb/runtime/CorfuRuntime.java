@@ -985,6 +985,8 @@ public class CorfuRuntime {
 
         log.info("Corfu runtime version {} initialized.",
                 Long.toHexString(GitRepositoryState.getCorfuSourceCodeVersion()));
+
+        log.info("Address Space View Cache Size is {}", parameters.getMaxCacheEntries());
     }
 
     /**

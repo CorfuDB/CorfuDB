@@ -118,7 +118,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .keyStore((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE))
                 .ksPasswordFile((String) context.getServerConfig().get(ConfigParamNames.KEY_STORE_PASS_FILE))
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
-                .maxCacheEntries(config.getMaxCacheSize())
+                .maxCacheEntries(0)
                 .maxWriteSize(context.getMaxWriteSize())
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
@@ -137,7 +137,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                .maxCacheEntries(config.getMaxCacheSize())
+                .maxCacheEntries(0)
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
@@ -493,7 +493,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
         // set data_consistent as false
         setDataConsistentWithRetry(false);
-        
+
         // Sync with registry after transfer phase to capture local updates, as transfer phase could
         // take a relatively long time.
         config.syncWithRegistry();
