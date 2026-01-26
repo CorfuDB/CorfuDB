@@ -136,6 +136,8 @@ class CommandBuilder(object):
         cmd.append("-Xmx" + str(xmx) + "m")
         cmd.append("-Djdk.nio.maxCachedBufferSize=1048576")
         cmd.append("-Dio.netty.recycler.maxCapacityPerThread=0")
+        cmd.append("--add-opens=java.management/sun.management=ALL-UNNAMED")
+        cmd.append("--add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED")
         cmd.append(self.append_compactor_config(compactor_config))
         cmd.append(class_to_invoke)
         cmd.append("--hostname=" + self._config.hostname)
