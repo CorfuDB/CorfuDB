@@ -14,6 +14,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.config.ConfigParamNames;
+import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
@@ -166,7 +167,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                 Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
                         "--enable-tls-mutual-auth");
                 if (tlsEnabled) {
-                    // Get the TLS cipher suites to enable
+                    // Get the TLS cipher suites to enable (use secure defaults if not specified)
                     String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
                     if (ciphs != null) {
                         enabledTlsCipherSuites = Pattern.compile(",")
@@ -174,10 +175,13 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                                 .map(String::trim)
                                 .toArray(String[]::new);
                     } else {
-                        enabledTlsCipherSuites = new String[]{};
+                        enabledTlsCipherSuites = Pattern.compile(",")
+                                .splitAsStream(ConfigParamsHelper.getTlsCiphersCSV())
+                                .map(String::trim)
+                                .toArray(String[]::new);
                     }
 
-                    // Get the TLS protocols to enable
+                    // Get the TLS protocols to enable (use secure defaults if not specified)
                     String protos = context.getServerConfig(String.class, "--tls-protocols");
                     if (protos != null) {
                         enabledTlsProtocols = Pattern.compile(",")
@@ -185,7 +189,10 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                                 .map(String::trim)
                                 .toArray(String[]::new);
                     } else {
-                        enabledTlsProtocols = new String[]{};
+                        enabledTlsProtocols = Pattern.compile(",")
+                                .splitAsStream(ConfigParamsHelper.DEFAULT_TLS_PROTOCOLS_CSV)
+                                .map(String::trim)
+                                .toArray(String[]::new);
                     }
 
                     try {
