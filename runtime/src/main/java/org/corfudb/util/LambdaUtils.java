@@ -25,4 +25,8 @@ public class LambdaUtils {
             log.error("runSansThrow: Suppressing exception while executing runnable: ", e);
         }
     }
+
+    public interface ThrowableConsumer<T> {
+        void accept(T t) throws Exception;
+    }
 }
