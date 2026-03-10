@@ -52,6 +52,6 @@ fi
 # default heap for corfudb
 
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
-export JVMFLAGS="-XX:+UseG1GC -Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
+export JVMFLAGS="-XX:+UseG1GC -XX:+UnlockDiagnosticVMOptions -XX:GCLockerRetryAllocationCount=100 -Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 $JAVA -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.CorfuServer $*
