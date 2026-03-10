@@ -38,6 +38,8 @@ ENV JAVA_OPTS -verbose:gc \
     -XX:+HeapDumpOnOutOfMemoryError \
     -XX:HeapDumpPath=/var/log/corfu/corfu_oom.hprof \
     -XX:+HeapDumpOnOutOfMemoryError \
+    -XX:+UnlockDiagnosticVMOptions \
+    -XX:GCLockerRetryAllocationCount=100 \
     -Djdk.nio.maxCachedBufferSize=1048576 \
     -Dio.netty.recycler.maxCapacityPerThread=0 \
     -Djava.io.tmpdir=/image/corfu-server/temp
