@@ -13,6 +13,9 @@ jobs:
   cloud_deployment_test:
     runs-on: ubuntu-22.04
 
+    env:
+      DOCKER_API_VERSION: "1.43"
+
     strategy:
       matrix:
         jdk_base_image_version: ['eclipse-temurin:21-jdk-noble']
