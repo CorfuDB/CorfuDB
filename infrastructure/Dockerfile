@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=eclipse-temurin:21-jdk-noble
+ARG BASE_IMAGE=eclipse-temurin:25-jdk-noble
 FROM $BASE_IMAGE
 
 ARG CORFU_JAR
@@ -40,7 +40,14 @@ ENV JAVA_OPTS -verbose:gc \
     -XX:+HeapDumpOnOutOfMemoryError \
     -Djdk.nio.maxCachedBufferSize=1048576 \
     -Dio.netty.recycler.maxCapacityPerThread=0 \
-    -Djava.io.tmpdir=/image/corfu-server/temp
+    -Djava.io.tmpdir=/image/corfu-server/temp \
+    --add-opens=java.base/java.net=ALL-UNNAMED \
+    --add-opens=java.base/java.lang=ALL-UNNAMED \
+    --add-opens=java.base/java.util=ALL-UNNAMED \
+    --add-opens=java.base/java.lang.reflect=ALL-UNNAMED \
+    --add-opens=java.base/java.io=ALL-UNNAMED \
+    --add-opens=java.management/sun.management=ALL-UNNAMED \
+    --add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED
 
 CMD java -cp *.jar \
     ${JAVA_OPTS} \

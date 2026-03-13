@@ -12,6 +12,9 @@ jobs:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     runs-on: ubuntu-22.04
 
+    env:
+      DOCKER_API_VERSION: "1.43"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +22,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '25'
           check-latest: true
           cache-dependency-path: '**/pom.xml'
 

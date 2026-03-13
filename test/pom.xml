@@ -111,7 +111,10 @@
                                 --add-opens java.base/java.net=ALL-UNNAMED
                                 --add-opens java.base/java.lang=ALL-UNNAMED
                                 --add-opens java.base/java.util=ALL-UNNAMED
-                                <!--                        -XX:+EnableDynamicAgentLoading-->
+                                --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                                --add-opens java.base/java.io=ALL-UNNAMED
+                                --add-opens java.management/sun.management=ALL-UNNAMED
+                                --add-opens jdk.attach/sun.tools.attach=ALL-UNNAMED
                                 -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar
                                 ${it.jacoco.args}
                             </argLine>
