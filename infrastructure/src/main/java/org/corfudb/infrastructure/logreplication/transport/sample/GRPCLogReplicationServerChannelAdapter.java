@@ -43,7 +43,11 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         // requests and their acks cannot be guaranteed. By default, grpc utilizes thread-pool, so we need to provide
         // a single-threaded executor here.
         this.server = ServerBuilder.forPort(port).addService(service)
-                .executor(Executors.newSingleThreadScheduledExecutor()).build();
+                .executor(Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "corfu-grpc-server-adapter");
+                    t.setDaemon(true);
+                    return t;
+                })).build();
 
         LoadBalancerRegistry.getDefaultRegistry().register(new PickFirstLoadBalancerProvider());
     }

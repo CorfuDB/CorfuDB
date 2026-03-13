@@ -40,7 +40,11 @@ public class Generator {
             op.execute();
         };
 
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, r -> {
+            Thread t = new Thread(r, "generator-scheduler");
+            t.setDaemon(true);
+            return t;
+        });
         scheduler.scheduleAtFixedRate(cpTrimTask, 30, cpPeriod, TimeUnit.SECONDS);
 
         ExecutorService appWorkers = newWorkStealingPool(numThreads);

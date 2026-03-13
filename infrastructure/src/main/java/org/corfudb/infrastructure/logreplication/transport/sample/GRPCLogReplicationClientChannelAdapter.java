@@ -68,7 +68,11 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         this.channelMap = new HashMap<>();
         this.blockingStubMap = new HashMap<>();
         this.asyncStubMap = new HashMap<>();
-        this.executorService = Executors.newSingleThreadExecutor();
+        this.executorService = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "corfu-grpcclientchannel");
+            t.setDaemon(true);
+            return t;
+        });
         this.connectionFuture = new CompletableFuture<>();
         this.requestObserverMap = new ConcurrentHashMap<>();
         this.responseObserverMap = new ConcurrentHashMap<>();

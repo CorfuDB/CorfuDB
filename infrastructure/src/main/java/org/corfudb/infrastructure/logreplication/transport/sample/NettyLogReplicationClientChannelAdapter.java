@@ -36,7 +36,11 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
                                                    @NonNull LogReplicationClientRouter router) {
         super(localClusterId, remoteClusterDescriptor, router);
         this.channels = new ConcurrentHashMap<>();
-        this.executorService = Executors.newSingleThreadExecutor();
+        this.executorService = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "corfu-nettyclientchannel");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     @Override

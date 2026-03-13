@@ -121,7 +121,7 @@ public class Lock {
         this.clientContext = clientContext;
         this.lockListener = lockListener;
         this.eventConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("lock-event-consumer").build());
+                ThreadFactoryBuilder().setNameFormat("lock-event-consumer").setDaemon(true).build());
 
         initializeStates();
         // set initial state as NO_LEASE

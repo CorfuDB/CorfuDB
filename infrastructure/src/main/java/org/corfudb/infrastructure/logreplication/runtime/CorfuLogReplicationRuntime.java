@@ -170,11 +170,11 @@ public class CorfuLogReplicationRuntime {
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
                 metadataManager, replicationConfigManager);
         this.connectedNodes = new HashSet<>();
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").setDaemon(true).build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
                 TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
+                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").setDaemon(true).build());
         this.replicationConfigManager = replicationConfigManager;
 
         initializeStates();

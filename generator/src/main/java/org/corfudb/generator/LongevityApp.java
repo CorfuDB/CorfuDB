@@ -63,10 +63,22 @@ public class LongevityApp {
 
         state = new State(50, 100, rt);
 
-        taskProducer = Executors.newSingleThreadExecutor();
+        taskProducer = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "longevity-task-producer");
+            t.setDaemon(true);
+            return t;
+        });
 
-        workers = Executors.newFixedThreadPool(numberThreads);
-        checkpointer = Executors.newScheduledThreadPool(1);
+        workers = Executors.newFixedThreadPool(numberThreads, r -> {
+            Thread t = new Thread(r, "longevity-worker");
+            t.setDaemon(true);
+            return t;
+        });
+        checkpointer = Executors.newScheduledThreadPool(1, r -> {
+            Thread t = new Thread(r, "longevity-checkpointer");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     /**
