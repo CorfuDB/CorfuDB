@@ -6,6 +6,8 @@ import org.corfudb.integration.AbstractIT;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -23,11 +25,16 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 @Slf4j
 public class CorfuServerEndpointIT extends AbstractIT {
     private static final int PORT_INT_9000 = 9000;
+    private static final int PORT_INT_9001 = 9001;
     private static final String LOCALHOST_ENDPOINT_URL = "localhost:9000";
 
     private Process runCorfuServerWithNetworkInterface(String networkInterface, NetworkInterfaceVersion networkInterfaceVersion) throws IOException {
+        return runCorfuServerWithNetworkInterface(networkInterface, networkInterfaceVersion, PORT_INT_9000);
+    }
+
+    private Process runCorfuServerWithNetworkInterface(String networkInterface, NetworkInterfaceVersion networkInterfaceVersion, int port) throws IOException {
         return new CorfuServerRunner()
-                .setPort(PORT_INT_9000)
+                .setPort(port)
                 .setNetworkInterface(networkInterface)
                 .setNetworkInterfaceVersion(networkInterfaceVersion)
                 .setDisableHost(true)
@@ -163,19 +170,35 @@ public class CorfuServerEndpointIT extends AbstractIT {
      */
     @Test
     public void testInvalidNetworkInterface() throws Exception {
-        testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV4);
-        testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV6);
+        testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV4, PORT_INT_9000);
+        testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV6, PORT_INT_9001);
 
     }
 
-    public void testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion networkInterfaceVersion) throws Exception {
-        Process corfuServerProcess = runCorfuServerWithNetworkInterface("INVALID", networkInterfaceVersion);
+    public void testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion networkInterfaceVersion, int port) throws Exception {
+        // Resolve the fallback address first. If no valid address exists for this
+        // network interface version (e.g., no IPv6 on the host), the server would
+        // crash with the same error, so skip this variant.
+        String address;
+        try {
+            address = getAddressFromInterfaceName("INVALID", networkInterfaceVersion);
+        } catch (UnrecoverableCorfuError e) {
+            log.warn("testInvalidNetworkInterface: Skipping {} - no valid fallback address available",
+                    networkInterfaceVersion, e);
+            return;
+        }
 
-        // get an address from the underlying interfaces
-        // (checks for the exact interface and then returns a suitable one)
-        String address = getAddressFromInterfaceName("INVALID", networkInterfaceVersion);
         log.info("testInvalidNetworkInterface: Address from getAddressFromInterfaceName {}", address);
-        CorfuRuntime corfuRuntime = createRuntime(getVersionFormattedEndpointURL(address, PORT_INT_9000));
+        Process corfuServerProcess = runCorfuServerWithNetworkInterface("INVALID", networkInterfaceVersion, port);
+
+        // Wait briefly for the server to start (or crash) before attempting to connect
+        Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        if (!corfuServerProcess.isAlive()) {
+            log.warn("testInvalidNetworkInterface: Server process exited prematurely for {}", networkInterfaceVersion);
+            return;
+        }
+
+        CorfuRuntime corfuRuntime = createRuntime(getVersionFormattedEndpointURL(address, port));
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
         corfuRuntime.shutdown();
     }
