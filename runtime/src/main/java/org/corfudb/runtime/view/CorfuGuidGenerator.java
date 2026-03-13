@@ -122,7 +122,11 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
 
     private CorfuGuidGenerator(CorfuRuntime rt) {
         corfuStore = new CorfuStore((rt));
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "corfu-guid-init");
+            t.setDaemon(true);
+            return t;
+        });
         boolean success;
         try {
             success = executorService.submit(() -> {
@@ -169,7 +173,11 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
      * Synchronous Network RPCs among other overheads
      **/
     private void updateInstanceId() {
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        ExecutorService executorService = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "corfu-guid-update");
+            t.setDaemon(true);
+            return t;
+        });
         final long badInstanceId = -1L;
         long nextInstanceID;
         try {

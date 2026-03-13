@@ -123,6 +123,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         configStreamListener = new ConfigStreamListener(this);
         corfuStore.subscribeListener(configStreamListener, CONFIG_NAMESPACE, "cluster_manager_test", ts);
         Thread thread = new Thread(clusterManagerCallback);
+        thread.setDaemon(true);
         thread.start();
     }
 

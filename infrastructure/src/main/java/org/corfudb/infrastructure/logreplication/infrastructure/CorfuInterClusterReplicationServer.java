@@ -357,6 +357,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 clusterManagerAdapter, discoveryServiceCallback);
 
         Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService, "discovery-service");
+        replicationDiscoveryThread.setDaemon(true);
         replicationDiscoveryThread.start();
 
         return discoveryServiceCallback;

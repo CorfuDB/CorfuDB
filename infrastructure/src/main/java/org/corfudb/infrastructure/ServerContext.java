@@ -722,6 +722,7 @@ public class ServerContext implements AutoCloseable {
      */
     private @Nonnull EventLoopGroup getNewWorkerGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setDaemon(true)
                 .setNameFormat(getThreadPrefix() + "worker-%d")
                 .build();
 
@@ -745,6 +746,7 @@ public class ServerContext implements AutoCloseable {
      */
     private @Nonnull EventLoopGroup getNewClientGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setDaemon(true)
                 .setNameFormat(getThreadPrefix() + "client-%d")
                 .build();
 

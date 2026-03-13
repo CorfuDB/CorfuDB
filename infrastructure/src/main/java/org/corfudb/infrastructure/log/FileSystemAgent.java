@@ -75,7 +75,11 @@ public final class FileSystemAgent {
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
 
-        scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "corfu-filesystem-agent");
+            t.setDaemon(true);
+            return t;
+        });
         scheduler.scheduleWithFixedDelay(
                 this::reportQuotaExceeded, INIT_DELAY, DELAY_NUM, DELAY_UNITS);
         log.info("FileSystemAgent: {} size is {} bytes, limit {}", config.logDir, initialLogSize, logSizeLimit);
@@ -237,7 +241,11 @@ public final class FileSystemAgent {
         private final FileSystemConfig config;
 
         // A single thread scheduler that has a single instance of execution at any given time.
-        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "corfu-partition-agent");
+            t.setDaemon(true);
+            return t;
+        });
 
         private final BatchProcessorContext batchProcessorContext;
 

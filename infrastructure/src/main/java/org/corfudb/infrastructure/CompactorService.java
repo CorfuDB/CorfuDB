@@ -65,6 +65,7 @@ public class CompactorService implements ManagementService {
         this.compactionTriggerPolicy = compactionTriggerPolicy;
         this.orchestratorThread = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
+                        .setDaemon(true)
                         .setNameFormat("Cmpt-" + serverContext.getServerConfig().get("<port>") + "-chkpter")
                         .build());
         this.trimLog = new TrimLog();
