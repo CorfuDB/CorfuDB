@@ -16,6 +16,8 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -161,6 +163,7 @@ public class StreamLogFiles implements StreamLog {
     private void initializeLogMetadata() {
         long startingSegment = getStartingSegment();
         long tailSegment = dataStore.getTailSegment();
+        long currentTrimMark = getTrimMark();
 
         long start = System.currentTimeMillis();
         // Scan the log in reverse, this will ease stream trim mark resolution (as we require the
@@ -176,6 +179,19 @@ public class StreamLogFiles implements StreamLog {
                     }
                     LogData logEntry = read(address);
                     logMetadata.update(logEntry, true);
+                }
+            }
+        }
+
+        // For streams whose trimMark was not resolved by a checkpoint END record,
+        // set the trim mark so the sequencer bootstraps with correct per-stream trim
+        // data. All bitmap entries are already >= startingAddress (scan skips trimmed
+        // entries), so setTrimMark is sufficient — no bitmap entries need removal.
+        if (currentTrimMark > 0) {
+            long lastTrimmedAddress = currentTrimMark - 1;
+            for (StreamAddressSpace sas : logMetadata.getStreamsAddressSpaceMap().values()) {
+                if (sas.getTrimMark() == Address.NON_EXIST) {
+                    sas.setTrimMark(lastTrimmedAddress);
                 }
             }
         }
