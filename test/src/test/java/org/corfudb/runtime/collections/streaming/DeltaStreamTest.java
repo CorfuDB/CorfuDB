@@ -17,6 +17,7 @@ import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -26,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SuppressWarnings("checkstyle:magicnumber")
@@ -316,5 +319,57 @@ public class DeltaStreamTest {
         for (int x = 0; x < numToProduce; x++) {
             assertThat(consumed.get(x).getGlobalAddress()).isEqualTo(x);
         }
+    }
+
+    /**
+     * Verifies that when the sequencer returns a correct per-stream trim mark
+     * (as it will after the StreamAddressSpace.trim() and log unit init fixes),
+     * DeltaStream.refresh() detects the gap and next() throws TrimmedException
+     * WITHOUT delivering any post-gap data.
+     *
+     * Scenario: client subscribed at position 100, trim advanced to 500,
+     * new addresses at 600 and 700 are discovered. The trim mark from the
+     * sequencer is 500. DeltaStream must throw before delivering 600 or 700.
+     */
+    @Test
+    public void trimGapDetectedBeforeDataDelivery() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+        final int bufferSize = 10;
+        final long lastAddressRead = 100;
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
+
+        StreamAddressSpace sas = new StreamAddressSpace(500L, Set.of(600L, 700L));
+
+        stream.refresh(sas);
+
+        assertThat(stream.hasNext()).isTrue();
+        assertThatThrownBy(stream::next)
+                .isInstanceOf(TrimmedException.class);
+
+        verify(addressSpaceView, never()).read(600L, options);
+        verify(addressSpaceView, never()).read(700L, options);
+    }
+
+    /**
+     * With NON_ADDRESS trim mark (broken sequencer state before the fix),
+     * DeltaStream does NOT detect the gap and would deliver post-gap data.
+     * This test documents the pre-fix behavior to show the fix is needed.
+     */
+    @Test
+    public void nonAddressTrimMarkDoesNotDetectGap() {
+        UUID streamId = UUID.randomUUID();
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+        final int bufferSize = 10;
+        final long lastAddressRead = 100;
+        DeltaStream stream = new DeltaStream(addressSpaceView, streamId, lastAddressRead, bufferSize);
+
+        StreamAddressSpace sas = new StreamAddressSpace(Address.NON_ADDRESS, Set.of(600L, 700L));
+
+        stream.refresh(sas);
+
+        assertThat(stream.availableSpace())
+                .as("with NON_ADDRESS trim mark, addresses are buffered (gap not detected)")
+                .isEqualTo(bufferSize - 2);
     }
 }
