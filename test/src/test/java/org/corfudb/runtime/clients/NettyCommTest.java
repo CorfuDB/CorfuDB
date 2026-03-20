@@ -21,7 +21,6 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.NettyCommTestUtil.CertificateManager;
 import org.corfudb.security.tls.TlsUtils.CertStoreConfig.CertManagementConfig;
 import org.corfudb.util.NodeLocator;
-import org.junit.Assume;
 import org.junit.Test;
 
 import javax.annotation.Nonnull;
@@ -610,8 +609,6 @@ public class NettyCommTest extends AbstractCorfuTest {
 
     @Test
     public void testFileWatcherTriggeredReloadSslCerts() throws Exception {
-        // NIO WatchService does not work properly on macOS
-        Assume.assumeTrue(System.getProperty("os.name").contains("Linux"));
 
         int port = findRandomOpenPort();
 

@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.util.FileWatcher;
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -83,15 +82,17 @@ public class FileWatcherTest {
      */
     @Test
     public void testFileWatcherLastModified() throws IOException, InterruptedException {
-        // NIO WatchService does not work properly on macOS
-        // To run this IT on macOS, one can configure in IntelliJ Idea to run remotely on docker containers
-        Assume.assumeTrue(System.getProperty("os.name").contains("Linux"));
-
         AtomicInteger onChangeCounter = new AtomicInteger(0);
         fileWatcher = new FileWatcher(filePath.toFile().getAbsolutePath(), onChangeCounter::incrementAndGet);
 
-        // FileWatcher 'executorService.submit(this::start);' is async
-        TimeUnit.SECONDS.sleep(1);
+        // Wait for FileWatcher to register (async via executorService.submit)
+        for (int i = 0; i < MAX_RETRY_LIMIT; i++) {
+            if (fileWatcher.getIsRegistered().get()) {
+                break;
+            }
+            TimeUnit.SECONDS.sleep(SLEEP_TIMER_1S);
+        }
+        assertThat(fileWatcher.getIsRegistered()).isTrue();
 
         byte[] randomBytes = new byte[100];
         Random random = new Random();
@@ -102,15 +103,20 @@ public class FileWatcherTest {
         log.info("Done writing to the file!");
 
         // Verify that the file watch callback has been invoked
-        TimeUnit.SECONDS.sleep(1);
+        for (int i = 0; i < MAX_RETRY_LIMIT; i++) {
+            if (onChangeCounter.get() == 1) {
+                break;
+            }
+            TimeUnit.SECONDS.sleep(SLEEP_TIMER_1S);
+        }
         assertThat(onChangeCounter.get()).isEqualTo(1);
 
         Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rwxrwx---");
         Files.setPosixFilePermissions(filePath.toAbsolutePath(), permissions);
         log.info("Done updating file permission!");
 
-        // Verify that the file watch callback has NOT been invoked
-        TimeUnit.SECONDS.sleep(1);
+        // Verify that the file watch callback has NOT been invoked again
+        TimeUnit.SECONDS.sleep(SLEEP_TIMER_1S);
         assertThat(onChangeCounter.get()).isEqualTo(1);
     }
 
