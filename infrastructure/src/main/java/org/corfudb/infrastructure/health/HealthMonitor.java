@@ -54,6 +54,7 @@ public final class HealthMonitor {
                 MicroMeterUtils.gauge("overall.status", new AtomicInteger(-1));
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
+                        .setDaemon(true)
                         .setNameFormat("HealthMonitorLivenessThread")
                         .build());
         this.scheduledExecutorService.scheduleWithFixedDelay(

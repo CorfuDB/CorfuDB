@@ -40,7 +40,11 @@ public class CheckpointLivenessUpdater implements LivenessUpdater {
             log.error("Opening ActiveCheckpointsTable failed due to exception: ", e);
             throw new IllegalThreadStateException("Opening ActiveCheckpointsTable failed " + e);
         }
-        this.executorService = Executors.newSingleThreadScheduledExecutor();
+        this.executorService = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "corfu-checkpoint-liveness");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     private Table<TableName, ActiveCPStreamMsg, Message> getActiveCheckpointsTable()

@@ -99,7 +99,7 @@ public class LogReplicationSourceManager {
         }
 
         ExecutorService logReplicationFSMWorkers = Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
-                ThreadFactoryBuilder().setNameFormat("state-machine-worker").build());
+                ThreadFactoryBuilder().setDaemon(true).setNameFormat("state-machine-worker").build());
         ReadProcessor readProcessor = new DefaultReadProcessor(runtime);
         this.metadataManager = metadataManager;
         // Ack Reader for Snapshot and LogEntry Sync
