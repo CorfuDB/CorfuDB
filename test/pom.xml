@@ -133,7 +133,10 @@
                                 <propertyName>test.seed</propertyName>
                             </systemPropertyVariables>
                             <skipTests>false</skipTests>
+                            <!-- Skip the remaining tests after these many failures -->
                             <skipAfterFailureCount>1</skipAfterFailureCount>
+                            <!-- Rerun failing tests additionally this many times after the first failure -->
+                            <rerunFailingTestsCount>2</rerunFailingTestsCount>
                         </configuration>
                         <executions>
                             <execution>
