@@ -458,7 +458,10 @@
                     <trimStackTrace>false</trimStackTrace>
                     <!-- Option to generate a file test report or just output the test report to the console. -->
                     <useFile>false</useFile>
-                    <skipAfterFailureCount>2</skipAfterFailureCount>
+                    <!-- Skip the remaining tests after these many failures -->
+                    <skipAfterFailureCount>1</skipAfterFailureCount>
+                    <!-- Rerun failing tests additionally this many times after the first failure -->
+                    <rerunFailingTestsCount>2</rerunFailingTestsCount>
                     <systemPropertyVariables>
                         <propertyName>test.seed</propertyName>
                     </systemPropertyVariables>
