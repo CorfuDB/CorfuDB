@@ -13,6 +13,9 @@ jobs:
   cloud_deployment_test:
     runs-on: ubuntu-22.04
 
+    env:
+      DOCKER_API_VERSION: "1.43"
+
     strategy:
       matrix:
         jdk_base_image_version: ['eclipse-temurin:11-jdk-noble']
@@ -65,6 +68,9 @@ jobs:
           helm repo add jetstack https://charts.jetstack.io
           helm repo update
 
+      - name: Create k3d volume directory
+        run: mkdir -p /tmp/k3dvol
+
       - name: Create k3d Cluster
         uses: AbsaOSS/k3d-action@v2
         with:
@@ -72,7 +78,7 @@ jobs:
           args: >-
             --volume /tmp/k3dvol:/tmp/k3dvol
             --agents 2
-            --k3s-arg "--no-deploy=traefik,servicelb,metrics-server@server:*"
+            --k3s-arg "--disable=traefik,servicelb,metrics-server@server:*"
 
       - name: install corfu package
         working-directory: ./cloud/corfu
