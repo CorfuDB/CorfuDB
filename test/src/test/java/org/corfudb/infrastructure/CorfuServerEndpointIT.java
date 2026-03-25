@@ -8,13 +8,21 @@ import org.junit.Test;
 
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Enumeration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.common.util.URLUtils.getVersionFormattedEndpointURL;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
@@ -162,6 +170,30 @@ public class CorfuServerEndpointIT extends AbstractIT {
     }
 
     /**
+     * Log all available network interfaces and their addresses for debugging.
+     */
+    private void logAllNetworkInterfaces() throws SocketException {
+        log.info("=== BEGIN: All Network Interfaces ===");
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface ni = interfaces.nextElement();
+            log.info("Interface: name={}, displayName={}, isUp={}, isLoopback={}, isVirtual={}",
+                    ni.getName(), ni.getDisplayName(), ni.isUp(), ni.isLoopback(), ni.isVirtual());
+            
+            List<InterfaceAddress> interfaceAddresses = ni.getInterfaceAddresses();
+            for (InterfaceAddress ia : interfaceAddresses) {
+                InetAddress addr = ia.getAddress();
+                String addrType = addr instanceof Inet4Address ? "IPv4" : 
+                                  addr instanceof Inet6Address ? "IPv6" : "Unknown";
+                log.info("  Address: {} (type={}, isLoopback={}, isLinkLocal={}, isSiteLocal={})",
+                        addr.getHostAddress(), addrType, addr.isLoopbackAddress(),
+                        addr.isLinkLocalAddress(), addr.isSiteLocalAddress());
+            }
+        }
+        log.info("=== END: All Network Interfaces ===");
+    }
+
+    /**
      * Test that Corfu Server runs with available interfaces
      * when INVALID network interface is used.
      * Server picks up any known of the interfaces (eth0,en0,etc.) and connects to them.
@@ -170,37 +202,80 @@ public class CorfuServerEndpointIT extends AbstractIT {
      */
     @Test
     public void testInvalidNetworkInterface() throws Exception {
+        // Log all network interfaces for debugging CI issues
+        logAllNetworkInterfaces();
+        
         testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV4, PORT_INT_9000);
         testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion.IPV6, PORT_INT_9001);
 
     }
 
     public void testInvalidNetworkInterfaceHelper(NetworkInterfaceVersion networkInterfaceVersion, int port) throws Exception {
+        log.info("testInvalidNetworkInterface: Starting test for {} on port {}", networkInterfaceVersion, port);
+        
         // Resolve the fallback address first. If no valid address exists for this
         // network interface version (e.g., no IPv6 on the host), the server would
         // crash with the same error, so skip this variant.
         String address;
         try {
             address = getAddressFromInterfaceName("INVALID", networkInterfaceVersion);
+            log.info("testInvalidNetworkInterface: getAddressFromInterfaceName('INVALID', {}) returned: {}",
+                    networkInterfaceVersion, address);
         } catch (UnrecoverableCorfuError e) {
             log.warn("testInvalidNetworkInterface: Skipping {} - no valid fallback address available",
                     networkInterfaceVersion, e);
             return;
         }
 
-        log.info("testInvalidNetworkInterface: Address from getAddressFromInterfaceName {}", address);
+        // Log address details for debugging
+        String cleanAddress = address.replace("[", "").replace("]", "");
+        InetAddress inetAddr = InetAddress.getByName(cleanAddress);
+        log.info("testInvalidNetworkInterface: Resolved address details - address={}, isLoopback={}, " +
+                "isLinkLocal={}, isSiteLocal={}, isAnyLocal={}, isReachable(1000ms)={}",
+                inetAddr.getHostAddress(), inetAddr.isLoopbackAddress(),
+                inetAddr.isLinkLocalAddress(), inetAddr.isSiteLocalAddress(),
+                inetAddr.isAnyLocalAddress(), inetAddr.isReachable(1000));
+
+        log.info("testInvalidNetworkInterface: Proceeding with address {} for {}", address, networkInterfaceVersion);
         Process corfuServerProcess = runCorfuServerWithNetworkInterface("INVALID", networkInterfaceVersion, port);
+        log.info("testInvalidNetworkInterface: Server process started, PID={}, isAlive={}", 
+                corfuServerProcess.pid(), corfuServerProcess.isAlive());
 
         // Wait briefly for the server to start (or crash) before attempting to connect
         Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        log.info("testInvalidNetworkInterface: After sleep, server isAlive={}", corfuServerProcess.isAlive());
+        
         if (!corfuServerProcess.isAlive()) {
-            log.warn("testInvalidNetworkInterface: Server process exited prematurely for {}", networkInterfaceVersion);
-            return;
+            int exitCode = corfuServerProcess.exitValue();
+            log.error("testInvalidNetworkInterface: Server process exited prematurely for {}, exitValue={}",
+                    networkInterfaceVersion, exitCode);
+            
+            // Print server console log for debugging
+            String serverLogPath = CORFU_LOG_PATH + File.separator + address.replace("[", "").replace("]", "") 
+                    + "_" + port + "_consolelog";
+            try {
+                Path logFile = Path.of(serverLogPath);
+                if (Files.exists(logFile)) {
+                    String logContent = Files.readString(logFile);
+                    log.error("Server console log ({}):\n{}", serverLogPath, logContent);
+                } else {
+                    log.warn("Server console log not found at: {}", serverLogPath);
+                }
+            } catch (IOException e) {
+                log.warn("Failed to read server console log: {}", e.getMessage());
+            }
+            
+            fail("Server process exited prematurely for " + networkInterfaceVersion + " with exit code " + exitCode);
         }
 
-        CorfuRuntime corfuRuntime = createRuntime(getVersionFormattedEndpointURL(address, port));
+        String endpoint = getVersionFormattedEndpointURL(address, port);
+        log.info("testInvalidNetworkInterface: Attempting to connect runtime to endpoint: {}", endpoint);
+        CorfuRuntime corfuRuntime = createRuntime(endpoint);
+        log.info("testInvalidNetworkInterface: Runtime connected successfully");
+        
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
         corfuRuntime.shutdown();
+        log.info("testInvalidNetworkInterface: Test completed successfully for {}", networkInterfaceVersion);
     }
 
     /**
