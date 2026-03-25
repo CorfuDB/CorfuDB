@@ -118,13 +118,25 @@ public class NetworkUtils {
 
     /**
      * Finds an ipv4 or ipv6 address in a list of interface addresses
-     * based on the Server arguments
+     * based on the Server arguments.
+     * 
+     * Link-local addresses (fe80::/10 for IPv6, 169.254.0.0/16 for IPv4) are skipped
+     * because they require a scope ID to be routable and cannot be used reliably
+     * for network connections without additional context about which interface to use.
      */
     private static String getIPAddress(List<InterfaceAddress> addresses, NetworkInterfaceVersion networkInterfaceVersion) {
         for (InterfaceAddress interfaceAddress : addresses) {
             if (interfaceAddress.getAddress() instanceof Inet6Address && networkInterfaceVersion == NetworkInterfaceVersion.IPV6) {
+                if (interfaceAddress.getAddress().isLinkLocalAddress()) {
+                    log.warn("Skipping link-local IPv6 address: {}", interfaceAddress.getAddress().getHostAddress());
+                    continue;
+                }
                 return getVersionFormattedHostAddress(interfaceAddress.getAddress().getHostAddress());
             } else if (interfaceAddress.getAddress() instanceof Inet4Address && networkInterfaceVersion == NetworkInterfaceVersion.IPV4) {
+                if (interfaceAddress.getAddress().isLinkLocalAddress()) {
+                    log.warn("Skipping link-local IPv4 address: {}", interfaceAddress.getAddress().getHostAddress());
+                    continue;
+                }
                 return getVersionFormattedHostAddress(interfaceAddress.getAddress().getHostAddress());
             }
         }
