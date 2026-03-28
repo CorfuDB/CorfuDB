@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import lombok.NonNull;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
@@ -45,13 +46,13 @@ public class PersistentCorfuTable<K, V> implements
     }
 
     @Override
-    public void delete(@Nonnull K key) {
+    public void delete(@NonNull K key) {
         Object[] conflictField = new Object[]{key};
         proxy.logUpdate("remove", conflictField, key);
     }
 
     @Override
-    public void insert(@Nonnull K key, @Nonnull V value) {
+    public void insert(@NonNull K key, @NonNull V value) {
         Object[] conflictField = new Object[]{key};
         proxy.logUpdate("put", conflictField, key, value);
     }
@@ -88,7 +89,7 @@ public class PersistentCorfuTable<K, V> implements
     }
 
     @Override
-    public boolean containsKey(@Nonnull Object key) {
+    public boolean containsKey(@NonNull Object key) {
         Object[] conflictField = new Object[]{key};
         return proxy.access(corfuSmr -> corfuSmr.containsKey((K)key), conflictField);
     }
@@ -104,7 +105,7 @@ public class PersistentCorfuTable<K, V> implements
     }
 
     @Override
-    public <I> Iterable<Map.Entry<K, V>> getByIndex(@Nonnull final Index.Name indexName, I indexKey) {
+    public <I> Iterable<Map.Entry<K, V>> getByIndex(@NonNull final Index.Name indexName, I indexKey) {
         return proxy.access(corfuSmr -> corfuSmr.getByIndex(indexName, indexKey), null);
     }
 
