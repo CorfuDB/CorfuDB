@@ -11,11 +11,13 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.PersistentCorfuTable;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -779,6 +781,75 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Instantiate streamA as map after restart (verify it can load from empty checkpoint)
             PersistentCorfuTable<String, Integer> tableRestart = createCorfuTable(rtRestart, streamA);
             assertThat(tableRestart.size()).isZero();
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    @Test
+    public void testUncheckpointedStreamAfterRestart() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+
+            // Write 10 Entries to streamA
+            for (int i = 0; i < numEntries; i++) {
+                mA.insert(String.valueOf(i), i);
+            }
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Trim the log at A's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Instantiate streamB
+            final String streamB = "streamB";
+            PersistentCorfuTable<String, Integer> mB = createCorfuTable(runtime, streamB);
+
+            // Write 10 Entries to streamB
+            for (int i = 0; i < numEntries; i++) {
+                mB.insert(String.valueOf(i), i);
+            }
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streamB from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamBAfterRestart = createCorfuTable(rtRestart, streamB);
+
+            // Access streamB will hit TrimmedException
+            Assert.assertThrows(TrimmedException.class, streamBAfterRestart::size);
         } finally {
             shutdownCorfuServer(server);
 
