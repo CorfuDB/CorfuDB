@@ -789,8 +789,293 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         }
     }
 
+    // Tables skipped checkpointing will hit TrimmedException
     @Test
-    public void testUncheckpointedStreamAfterRestart() throws Exception {
+    public void testSkippedCheckpointTrimmedException() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            final String streamB = "streamB";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+            PersistentCorfuTable<String, Integer> mB = createCorfuTable(runtime, streamB);
+
+            // Write 10 Entries to streamA
+            for (int i = 0; i < numEntries; i++) {
+                mA.insert(String.valueOf(i), i);
+                mB.insert(String.valueOf(i), i);
+            }
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Trim the log at A's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streams from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamAAfterRestart = createCorfuTable(rtRestart, streamA);
+            PersistentCorfuTable<String, Integer> streamBAfterRestart = createCorfuTable(rtRestart, streamB);
+
+            // Read verification
+            assertThat(streamAAfterRestart.size()).isEqualTo(numEntries);
+            Assert.assertThrows(TrimmedException.class, streamBAfterRestart::size);
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    // OpenTable -> Restart -> Read
+    @Test
+    public void testOpenRestartRead() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streamA from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamAAfterRestart = createCorfuTable(rtRestart, streamA);
+
+            // Read verification
+            assertThat(streamAAfterRestart.size()).isEqualTo(0);
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    // OpenTable -> Write -> Restart -> Read
+    @Test
+    public void testOpenWriteRestartRead() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+
+            // Write 10 Entries to streamA
+            for (int i = 0; i < numEntries; i++) {
+                mA.insert(String.valueOf(i), i);
+            }
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streamA from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamAAfterRestart = createCorfuTable(rtRestart, streamA);
+
+            // Read verification
+            assertThat(streamAAfterRestart.size()).isEqualTo(numEntries);
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    // OpenTable -> CP&Trim -> Restart -> Read
+    @Test
+    public void testOpenCompactRestartRead() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Trim the log at A's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streamA from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamAAfterRestart = createCorfuTable(rtRestart, streamA);
+
+            // Read verification
+            assertThat(streamAAfterRestart.size()).isEqualTo(0);
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    // OpenTable -> Write -> CP&Trim -> Restart -> Read
+    @Test
+    public void testOpenWriteCompactRestartRead() throws Exception {
+        final int numEntries = 10;
+
+        // Run Corfu Server
+        Process server = runDefaultServer();
+
+        CorfuRuntime runtime = null;
+        CorfuRuntime rtRestart = null;
+
+        try {
+            // Create Runtime
+            runtime = createDefaultRuntime();
+
+            // Instantiate streamA
+            final String streamA = "streamA";
+            PersistentCorfuTable<String, Integer> mA = createCorfuTable(runtime, streamA);
+
+            // Write 10 Entries to streamA
+            for (int i = 0; i < numEntries; i++) {
+                mA.insert(String.valueOf(i), i);
+            }
+
+            // Start a CheckpointWriter for streamA
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpwA =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA);
+            Token cpTokenA = cpwA.appendCheckpoint();
+
+            // Trim the log at A's CPToken
+            runtime.getAddressSpaceView().prefixTrim(cpTokenA);
+
+            // Flush Server Cache after trim
+            runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(NodeLocator.builder()
+                            .host(DEFAULT_HOST)
+                            .port(DEFAULT_PORT)
+                            .build()
+                            .toEndpointUrl())
+                    .flushCache();
+
+            // Restart Server
+            assertThat(shutdownCorfuServer(server)).isTrue();
+            server = runDefaultServer();
+
+            // Start a new runtime
+            rtRestart = createRuntimeWithCache();
+
+            // Instantiate streamA from new Runtime, so stream is rebuilt
+            PersistentCorfuTable<String, Integer> streamAAfterRestart = createCorfuTable(rtRestart, streamA);
+
+            // Read verification
+            assertThat(streamAAfterRestart.size()).isEqualTo(numEntries);
+        } finally {
+            shutdownCorfuServer(server);
+
+            if (runtime != null) runtime.shutdown();
+            if (rtRestart != null) rtRestart.shutdown();
+        }
+    }
+
+    // OpenTable -> CP&Trim -> Write -> Restart -> Read
+    @Test
+    public void testOpenCompactWriteRestartRead() throws Exception {
         final int numEntries = 10;
 
         // Run Corfu Server
