@@ -558,12 +558,10 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                 tableB.insert(String.valueOf(i), i);
             }
 
-            // Checkpoint both tables (matching production where all tables are
-            // checkpointed before trim). Checkpoint A at snapshot @ 9.
-            MultiCheckpointWriter<PersistentCorfuTable<String, Integer>> mcw = new MultiCheckpointWriter<>();
-            mcw.addMap(tableA);
-            mcw.addMap(tableB);
-            Token cpAddress = mcw.appendCheckpoints(runtime, "checkpointer-test");
+            // Checkpoint A with snapshot @ 9
+            CheckpointWriter<PersistentCorfuTable<String, Integer>> cpw =
+                    new CheckpointWriter<>(runtime, CorfuRuntime.getStreamID(streamNameA), "checkpointer-test", tableA);
+            Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1), Optional.empty());
 
             // Trim the log
             runtime.getAddressSpaceView().prefixTrim(cpAddress);
@@ -582,9 +580,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
-            // With both tables checkpointed, streamB's trimMark is set by
-            // trim() during prefixTrim (highest removed bitmap address).
-            assertThat(addressSpaceB.getTrimMark()).isNotEqualTo(Address.NON_EXIST);
+            // Verify address space and trim mark is properly set for the given stream.
+            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
+            assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open tableB new runtime
             PersistentCorfuTable<String, Integer> tableBNewRuntime = createCorfuTable(rt2, streamNameB);
@@ -608,9 +606,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
-            // After restart, initializeLogMetadata or checkpoint END record
-            // ensures streamB's trimMark is set.
-            assertThat(addressSpaceB.getTrimMark()).isNotEqualTo(Address.NON_EXIST);
+            // Verify address space and trim mark is properly set for the given stream.
+            assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
+            assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open tableB after restart
             PersistentCorfuTable<String, Integer> tableBRestart = createCorfuTable(runtimeRestart, streamNameB);
