@@ -175,6 +175,23 @@ public class DeltaStream {
 
         int maxAddressesToTransfer = availableSpace();
         long[] newAddresses = streamAddressSpace.toArray();
+
+        // Detect silent trim gap: sequencer returned no trim mark (NON_ADDRESS) but first address is far ahead of
+        // maxAddressSeen, indicating addresses in between were trimmed. Surface as trim so the client gets
+        // TrimmedException and can trigger full re-sync instead of silently having stale state.
+        // Only apply when we have already seen addresses (maxAddressSeen is valid); at stream start (NON_ADDRESS)
+        // the first address can legitimately be > 0 (e.g. address 0 may not belong to this stream).
+        if (newAddresses.length > 0 && !Address.isAddress(streamAddressSpace.getTrimMark())) {
+            long firstAddress = newAddresses[0];
+            if (Address.isAddress(maxAddressSeen.get()) && firstAddress > maxAddressSeen.get() + 1) {
+                log.warn("StreamId={} trim gap detected: first address {} >> maxAddressSeen {} + 1; "
+                                + "addresses in [{}, {}] were likely trimmed. Setting trim mark so client receives "
+                                + "TrimmedException and can full re-sync.", streamId, firstAddress, maxAddressSeen.get(),
+                        maxAddressSeen.get() + 1, firstAddress - 1);
+                trimMark.set(firstAddress - 1);
+                return;
+            }
+        }
         for (int idx = 0; idx < newAddresses.length && idx < maxAddressesToTransfer; idx++) {
             // if maxAddressesToTransfer doesn't fit, then the rest of the addresses will be
             // thrown away and re-discovered on the next poll
