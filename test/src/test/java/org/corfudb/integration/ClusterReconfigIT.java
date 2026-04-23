@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -35,6 +36,7 @@ import org.corfudb.util.Utils;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,6 +58,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Slf4j
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
@@ -195,11 +198,116 @@ public class ClusterReconfigIT extends AbstractIT {
         moreDataToBeWritten.set(false);
         t.join();
 
-        verifyData(runtime);
+        verifyData(runtime, false);
 
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
         shutdownCorfuServer(corfuServer_3);
+    }
+
+    /*
+     * 3 node cluster is brought up.
+     * Leader node has its STARTING_ADDRESS_CURRENT.ds file locked.
+     * Then trigger prefix trim which writes to that file causing error in the batch processor.
+     * Wait for recovery and test that writes go through.
+     */
+    @Test
+    public void testBatchProcessorSurvivesFailedTrim() throws Exception {
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
+        final String fileToLock = "STARTING_ADDRESS_CURRENT.ds";
+
+        File logfile = new File(CORFU_LOG_PATH + "/localhost_9000_log/corfu/" + fileToLock);
+        ProcessBuilder pb;
+        Process process;
+
+        String OS = System.getProperty("os.name", "generic").toLowerCase();
+        String immutableCMD = "chattr +i ";
+        String mutableCMD = "chattr -i ";
+        if ((OS.contains("mac")) || (OS.contains("darwin"))) {
+            immutableCMD = "chflags uchg ";
+            mutableCMD = "chflags nouchg ";
+        }
+
+        try {
+            Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
+            CorfuRuntime runtime = createDefaultRuntime();
+
+            Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+            runtime.getManagementView().addNode("localhost:9001", workflowNumRetry,
+                    timeout, pollPeriod);
+
+            Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+            runtime.getManagementView().addNode("localhost:9002", workflowNumRetry,
+                    timeout, pollPeriod);
+
+            // Create empty STARTING_ADDRESS_RECORD to lock later so that prefix trim write fails
+            logfile.createNewFile();
+
+            final int nodesCount = 3;
+            waitForLayoutChange(layout -> layout.getAllActiveServers().size() == nodesCount
+                    && layout.getUnresponsiveServers().isEmpty()
+                    && layout.getSegments().size() == 1, runtime);
+
+            PersistentCorfuTable<String, String> table = createCorfuTable(runtime, testStream);
+            final String data = createStringOfSize(1_000);
+
+            Random r = getRandomNumberGenerator();
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+                String key = Long.toString(r.nextLong());
+                table.insert(key, data);
+            }
+
+            verifyData(runtime, false);
+            log.info("Data verified!!!");
+
+            // Lock STARTING_ADDRESS_RECORD
+            pb = new ProcessBuilder("/bin/sh", "-c", immutableCMD + logfile.getAbsolutePath());
+            process = pb.start();
+            process.waitFor();
+
+            // Trim operation should fail
+            try {
+                Token token = new Token(0, runtime.getAddressSpaceView().getLogTail());
+                runtime.getAddressSpaceView().prefixTrim(token);
+            } catch (Exception e) {
+                log.info("FAILED TRIM!!!");
+            }
+
+            // Unlock STARTING_ADDRESS_RECORD
+            pb = new ProcessBuilder("/bin/sh", "-c", mutableCMD + logfile.getAbsolutePath());
+            process = pb.start();
+            process.waitFor();
+
+            // Wait for failure detection and node to start healing process
+            Thread.sleep(5000);
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty()
+                    && layout.getSegments().size() == 1, runtime);
+
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+                String key = Long.toString(r.nextLong());
+                table.insert(PARAMETERS.NUM_ITERATIONS_VERY_LOW + key, data);
+            }
+
+            // Waiting node to be healed and added back to the layout.
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty()
+                    && layout.getSegments().size() == 1, runtime);
+
+            verifyData(runtime, true);
+            log.info("More data verified!!!");
+
+            shutdownCorfuServer(corfuServer_1);
+            shutdownCorfuServer(corfuServer_2);
+            shutdownCorfuServer(corfuServer_3);
+        } finally {
+            pb = new ProcessBuilder("/bin/sh", "-c", mutableCMD + logfile.getAbsolutePath());
+            process = pb.start();
+            process.waitFor();
+        }
     }
 
     /**
@@ -209,7 +317,7 @@ public class ClusterReconfigIT extends AbstractIT {
      * @param corfuRuntime Connected instance of the runtime.
      * @throws Exception
      */
-    private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
+    private void verifyData(CorfuRuntime corfuRuntime, boolean trimmed) throws Exception {
 
         long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
 
@@ -217,8 +325,18 @@ public class ClusterReconfigIT extends AbstractIT {
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
 
-        assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
-        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        if (trimmed) {
+            // ThreadID for trimmed entries will be null so overridden equals() will fail
+            for (Map.Entry<Long, LogData> x : map_0.entrySet()) {
+                LogData y = map_1.get(x.getKey());
+                LogData z = map_2.get(x.getKey());
+                assertThat(x.getValue().toString().equals(y.toString())
+                        && y.toString().equals(z.toString())).isTrue();
+            }
+        } else {
+            assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+            assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        }
     }
 
     /**
@@ -663,7 +781,7 @@ public class ClusterReconfigIT extends AbstractIT {
                     && refreshedLayout.getUnresponsiveServers().size() == 0
                     && refreshedLayout.getAllActiveServers().size() == layout.getAllServers().size();
         });
-        verifyData(runtime);
+        verifyData(runtime, false);
 
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
