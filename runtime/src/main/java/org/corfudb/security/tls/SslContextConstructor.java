@@ -45,6 +45,13 @@ public class SslContextConstructor {
             sslContext = SslContextBuilder
                     .forClient()
                     .sslProvider(provider)
+                    // Netty 4.2 changed the client default of endpointIdentificationAlgorithm
+                    // from null to "HTTPS" (hostname verification enabled). Explicitly set
+                    // null to preserve the pre-4.2 behavior, where peer identity is asserted
+                    // solely via the configured trust manager. Flip to "HTTPS" only after
+                    // confirming all Corfu server certificates carry SANs matching the
+                    // hostnames clients dial.
+                    .endpointIdentificationAlgorithm(null)
                     .keyManager(kmf)
                     .trustManager(tmf)
                     .build();
