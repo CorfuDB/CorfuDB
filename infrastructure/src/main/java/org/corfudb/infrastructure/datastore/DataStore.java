@@ -1,10 +1,8 @@
 package org.corfudb.infrastructure.datastore;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import io.netty.buffer.ByteBuf;
@@ -16,7 +14,6 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -120,7 +117,6 @@ public class DataStore implements KvDataStore {
         return Caffeine.newBuilder()
                 .recordStats()
                 .maximumSize(dsCacheSize)
-                .writer(new DataStoreCacheWriter())
                 .build();
     }
 
@@ -154,7 +150,16 @@ public class DataStore implements KvDataStore {
 
     @Override
     public <T> void put(KvRecord<T> key, T value) {
-        cache.put(key.getFullKeyName(), value);
+        String fullKey = key.getFullKeyName();
+        if (inMem) {
+            cache.put(fullKey, value);
+        } else {
+            // Caffeine 3 removed CacheWriter; use Map#compute for write-through persistence.
+            cache.asMap().compute(fullKey, (k, old) -> {
+                persistToDisk(k, value);
+                return value;
+            });
+        }
     }
 
     @Override
@@ -187,67 +192,61 @@ public class DataStore implements KvDataStore {
     }
 
 
-    private class DataStoreCacheWriter implements CacheWriter<String, Object> {
-
-        @Override
-        public void write(@Nonnull String key, @Nonnull Object value) {
-            if (value == NullValue.NULL_VALUE) {
-                return;
-            }
-
-            ByteBuf buffer = null;
-            FileChannel writeChannel = null;
-
-            try {
-                String dsFileName = key + EXTENSION;
-                Path path = Paths.get(logDirPath, dsFileName);
-                Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
-
-                String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
-                byte[] bytes = jsonPayload.getBytes();
-
-                buffer = Unpooled
-                        .directBuffer(bytes.length + Integer.BYTES)
-                        .writeInt(getChecksum(bytes))
-                        .writeBytes(bytes);
-                ByteBuffer nioBuffer = buffer.nioBuffer();
-
-                OpenOption[] attrs = {
-                        StandardOpenOption.WRITE,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.TRUNCATE_EXISTING,
-                        StandardOpenOption.SYNC
-                };
-                writeChannel = FileChannel.open(tmpPath, attrs);
-
-                while (nioBuffer.hasRemaining()) {
-                    writeChannel.write(nioBuffer);
-                }
-
-                CopyOption[] moveAttrs = {
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE
-                };
-                Files.move(tmpPath, path, moveAttrs);
-
-                syncDirectory(logDirPath);
-                // Invoking the cleanup on each disk file write is fine for performance
-                // since DataStore files are not supposed to change too frequently
-                cleanupTask.accept(dsFileName);
-            } catch (IOException e) {
-                throw new DataCorruptionException(e);
-            } finally {
-                if (buffer != null) {
-                    buffer.release();
-                }
-                IOUtils.closeQuietly(writeChannel);
-            }
+    /**
+     * Persists a value to disk for the persistent DataStore. Evictions and invalidations do not
+     * remove on-disk files (previously a no-op in {@code CacheWriter#delete}).
+     */
+    private void persistToDisk(@Nonnull String key, @Nonnull Object value) {
+        if (value == NullValue.NULL_VALUE) {
+            return;
         }
 
-        @Override
-        public void delete(@Nonnull String key, @Nullable Object value, @Nonnull RemovalCause cause) {
-            // Delete should not remove the underlying file.
-            // Removal of underlying file is done by cleanupTask.
+        ByteBuf buffer = null;
+        FileChannel writeChannel = null;
+
+        try {
+            String dsFileName = key + EXTENSION;
+            Path path = Paths.get(logDirPath, dsFileName);
+            Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
+
+            String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
+            byte[] bytes = jsonPayload.getBytes();
+
+            buffer = Unpooled
+                    .directBuffer(bytes.length + Integer.BYTES)
+                    .writeInt(getChecksum(bytes))
+                    .writeBytes(bytes);
+            ByteBuffer nioBuffer = buffer.nioBuffer();
+
+            OpenOption[] attrs = {
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.SYNC
+            };
+            writeChannel = FileChannel.open(tmpPath, attrs);
+
+            while (nioBuffer.hasRemaining()) {
+                writeChannel.write(nioBuffer);
+            }
+
+            CopyOption[] moveAttrs = {
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE
+            };
+            Files.move(tmpPath, path, moveAttrs);
+
+            syncDirectory(logDirPath);
+            // Invoking the cleanup on each disk file write is fine for performance
+            // since DataStore files are not supposed to change too frequently
+            cleanupTask.accept(dsFileName);
+        } catch (IOException e) {
+            throw new DataCorruptionException(e);
+        } finally {
+            if (buffer != null) {
+                buffer.release();
+            }
+            IOUtils.closeQuietly(writeChannel);
         }
     }
 }
