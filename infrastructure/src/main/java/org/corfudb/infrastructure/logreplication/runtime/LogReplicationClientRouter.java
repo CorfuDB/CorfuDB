@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -184,7 +185,8 @@ public class LogReplicationClientRouter implements IClientRouter {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
                 .setVersion(getDefaultProtocolVersionMsg())
-                .setIgnoreClusterId(true)
+                .setClusterId(getUuidMsg(UUID.fromString(parameters.getLocalClusterId())))
+                .setIgnoreClusterId(false)
                 .setIgnoreEpoch(true);
 
         if (isValidMessage(payload)) {
