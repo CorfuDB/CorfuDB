@@ -49,7 +49,7 @@ public class CorfuReplicationLargeTxIT extends LogReplicationAbstractIT {
     private static final int NUM_ENTRIES_PER_TABLE = 20;
 
     // Max transaction size(in bytes) for applying snapshot sync updates
-    private static final int MAX_WRITE_SIZE_BYTES = 8000;
+    private static final int MAX_WRITE_SIZE_BYTES = 10000;
 
     // Max number of entries applied in a single transaction during snapshot sync
     private static final int MAX_SNAPSHOT_ENTRIES_APPLIED = 1;
