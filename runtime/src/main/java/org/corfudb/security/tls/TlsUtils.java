@@ -64,7 +64,7 @@ public class TlsUtils {
                     KeyStore.getDefaultType());
             throw new SSLException(errorMessage, e);
         } finally {
-            Consumer<IOException> emptyExceptionHandler = ex -> {
+            Consumer<Exception> emptyExceptionHandler = ex -> {
             };
             IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
         }

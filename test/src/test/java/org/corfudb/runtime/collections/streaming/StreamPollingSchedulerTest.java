@@ -245,7 +245,9 @@ public class StreamPollingSchedulerTest {
         task.run();
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo(StreamStatus.ERROR);
         streamPoller.schedule();
-        verify(workers, times(2)).execute(taskCaptor.capture());
+        // Mockito 5.x ArgumentCaptor<StreamingTask>.capture() is type-safe: the second execute
+        // passes task::propagateError (a Runnable lambda, not a StreamingTask) so use any(Runnable.class).
+        verify(workers, times(2)).execute(any(Runnable.class));
         task.propagateError();
         assertThat(listener.getThrowable())
                 .isInstanceOf(StreamingException.class)
@@ -327,10 +329,12 @@ public class StreamPollingSchedulerTest {
         assertThat(listener.getEntries()).isEmpty();
 
         // Verify that the task has been submitted to the worker thread pool 3 times.
-        // 1. Runnable -> sync
-        // 2. sync -> sync
-        // 3. sync -> error
-        verify(workers, times(3)).execute(taskCaptor.capture());
+        // 1. Runnable -> sync (StreamingTask)
+        // 2. sync -> sync (StreamingTask, self-rescheduled via produce)
+        // 3. sync -> error (task::propagateError lambda via handleFailures)
+        // Mockito 5.x ArgumentCaptor<StreamingTask>.capture() is type-safe and won't match the
+        // Runnable lambda in call 3, so use any(Runnable.class) for the total-count verification.
+        verify(workers, times(3)).execute(any(Runnable.class));
         task.propagateError();
         assertThat(listener.getThrowable())
                 .isInstanceOf(StreamingException.class)
