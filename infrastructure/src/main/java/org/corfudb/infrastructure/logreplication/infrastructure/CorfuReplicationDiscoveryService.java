@@ -492,6 +492,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 }
                 logReplicationEventListener.start();
                 replicationManager.setTopology(topologyDescriptor);
+                replicationManager.reconcileStatusTable();
                 replicationManager.start();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
