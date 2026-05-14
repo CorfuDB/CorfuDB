@@ -244,6 +244,27 @@ public class CorfuReplicationManager {
     }
 
     /**
+     * Reconcile the LogReplicationStatus table against the current topology on leadership acquisition.
+     *
+     * <p>{@link #processStandbyChange} only cleans up clusters that leave the topology while this
+     * leader is running; clusters decommissioned before this leader started leave ghost rows behind.
+     *
+     * <p>Must be called after {@link #setTopology} and before {@link #start}.
+     */
+    public void reconcileStatusTable() {
+        Set<String> clustersInStatusTable = new HashSet<>(metadataManager.getReplicationRemainingEntries().keySet());
+        Set<String> clustersInTopology = topology.getStandbyClusters().keySet();
+
+        for (String clusterId : clustersInStatusTable) {
+            if (!clustersInTopology.contains(clusterId)) {
+                log.warn("Leadership reconciliation: removing stale LogReplicationStatus entry " +
+                        "for cluster {} not present in current topology", clusterId);
+                removeClusterInfoFromStatusTable(clusterId);
+            }
+        }
+    }
+
+    /**
      * Stop the current log replication event and start a full snapshot sync for the given remote cluster.
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
