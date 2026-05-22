@@ -128,7 +128,10 @@ public class DistributedCheckpointerUnitTest {
 
         ArgumentCaptor<CheckpointingStatus> captor = ArgumentCaptor.forClass(CheckpointingStatus.class);
         final int numTimesMethodInvoked = 3;
-        final int putInvokedPerMethodCall = 3;
+        // Mockito 5.x ArgumentCaptor.capture() is type-safe: only invocations where the
+        // third arg is a CheckpointingStatus are counted. The ActiveCPStreamMsg putRecord
+        // in tryLockTableToCheckpoint is no longer matched, so 2 per call (tryLock + unlock).
+        final int putInvokedPerMethodCall = 2;
         int i = 0;
         verify(txn, times(numTimesMethodInvoked * putInvokedPerMethodCall))
                 .putRecord(any(), any(), captor.capture(), any());
