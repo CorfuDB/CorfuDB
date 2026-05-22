@@ -89,7 +89,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private static final String TEST_NAMESPACE = "LR-Test";
 
-    static private final int NUM_KEYS = 10;
+    // droppingAcksNum = 2 makes an assumption that log entry sync always produces >=3 messages
+    // for NUM_KEYS=10. This behavior changes with protobuf upgrade carrying larger serialized data
+    // TODO: Deterministically calculate the number of entries
+    static private final int NUM_KEYS = 15;
 
     private static final int NUM_KEYS_LARGE = 1000;
     private static final int NUM_KEYS_VERY_LARGE = 20000;
@@ -104,7 +107,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Number of messages per batch
     private static final int BATCH_SIZE = 4;
 
-    private static final int SMALL_MSG_SIZE = 12000;
+    // This size is sensitive to the protobuf library version
+    // newer protobuf libraries tend to produce larger serialized messages
+    // If this is not correctly fixed up the test can timeout
+    private static final int SMALL_MSG_SIZE = 20000;
 
     private TestConfig testConfig;
 
