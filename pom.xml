@@ -87,6 +87,12 @@
 
     <repositories>
         <repository>
+            <id>google-maven-central</id>
+            <name>Google Maven Central</name>
+            <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+        </repository>
+
+        <repository>
             <id>clojars.org</id>
             <url>https://clojars.org/repo</url>
         </repository>
@@ -103,6 +109,14 @@
             <url>https://s01.oss.sonatype.org/content/repositories/orgcorfudb-1014</url>
         </repository>
     </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>google-maven-central</id>
+            <name>Google Maven Central</name>
+            <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+        </pluginRepository>
+    </pluginRepositories>
 
     <reporting>
         <plugins>
