@@ -17,7 +17,6 @@
         <rocksdb.version>10.10.1.1</rocksdb.version>
         <kryo.version>5.6.2</kryo.version>
         <kryo.serializers.version>0.45</kryo.serializers.version>
-        <javassist.version>3.31.0-GA</javassist.version>
         <commons.lang3.version>3.20.0</commons.lang3.version>
         <commons.compress.version>1.28.0</commons.compress.version>
         <annotations.api.version>6.0.53</annotations.api.version>
@@ -116,11 +115,6 @@
             <version>${gson.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.javassist</groupId>
-            <artifactId>javassist</artifactId>
-            <version>${javassist.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>${commons.lang3.version}</version>
@@ -134,6 +128,11 @@
             <groupId>org.rocksdb</groupId>
             <artifactId>rocksdbjni</artifactId>
             <version>${rocksdb.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>1.6.14</version>
         </dependency>
 
         <dependency>
