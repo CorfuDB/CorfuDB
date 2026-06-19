@@ -17,7 +17,6 @@
         <rocksdb.version>10.10.1.1</rocksdb.version>
         <kryo.version>5.6.2</kryo.version>
         <kryo.serializers.version>0.45</kryo.serializers.version>
-        <plexus.version>3.0.24</plexus.version>
         <javassist.version>3.31.0-GA</javassist.version>
         <commons.lang3.version>3.20.0</commons.lang3.version>
         <commons.compress.version>1.28.0</commons.compress.version>
@@ -105,11 +104,6 @@
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
             <version>${kryo.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.plexus</groupId>
-            <artifactId>plexus-utils</artifactId>
-            <version>${plexus.version}</version>
         </dependency>
         <dependency>
             <groupId>de.javakaffee</groupId>
