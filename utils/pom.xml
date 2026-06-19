@@ -15,9 +15,6 @@
     <name>Corfu Utils</name>
     <url>http://maven.apache.org</url>
 
-    <properties>
-        <immutables.version>2.9.0</immutables.version>
-    </properties>
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -25,18 +22,6 @@
             <version>${revision}</version>
         </dependency>
 
-        <!-- external dependencies -->
-        <dependency>
-            <groupId>org.immutables</groupId>
-            <artifactId>gson</artifactId>
-            <version>${immutables.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.immutables</groupId>
-            <artifactId>value</artifactId>
-            <version>${immutables.version}</version>
-        </dependency>
- 
     </dependencies>
 
     <build>
