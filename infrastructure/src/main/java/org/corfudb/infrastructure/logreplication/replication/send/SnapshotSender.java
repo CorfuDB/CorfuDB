@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -79,6 +80,20 @@ public class SnapshotSender {
 
     private boolean snapshotCompleted = false;  // Flag indicating the snapshot sync is completed
 
+    // Maximum number of times to retry waiting for the snapshot sync ack before giving up and
+    // canceling the snapshot sync. A single DEFAULT_TIMEOUT_MS timeout does not necessarily mean
+    // the sink has failed -- it may simply be busy (e.g. still applying a large snapshot) -- so
+    // retry a few times, extending total patience to maxSnapshotAckWaitRetries * DEFAULT_TIMEOUT_MS,
+    // before canceling and restarting the entire snapshot sync from scratch.
+    // Package-private (not final) so tests can shrink it to keep retry tests fast; production
+    // code should rely on the default.
+    @VisibleForTesting
+    int maxSnapshotAckWaitRetries = 6;
+
+    // Package-private so tests can seed/inspect it directly instead of via reflection.
+    @VisibleForTesting
+    CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
+
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
@@ -91,8 +106,6 @@ public class SnapshotSender {
                         ImmutableList.of(Tag.of("replication.type", "snapshot")),
                         new AtomicLong(0)));
     }
-
-    private CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
 
     /**
      * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
@@ -154,8 +167,7 @@ public class SnapshotSender {
             if (snapshotCompleted) {
                 // Block until ACK from last sent message is received
                 try {
-                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in PR 3750
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    LogReplicationEntryMsg ack = waitForSnapshotSyncAck(snapshotSyncEventId);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
@@ -193,11 +205,43 @@ public class SnapshotSender {
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                waitForSnapshotSyncAck(snapshotSyncEventId);
                 snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+            }
+        }
+    }
+
+    /**
+     * Wait for the outstanding {@link #snapshotSyncAck} future, retrying on {@link TimeoutException}
+     * instead of failing on the first timeout. A slow or busy sink (e.g. one still applying a large
+     * previous batch) can legitimately take longer than a single DEFAULT_TIMEOUT_MS window to ack,
+     * and canceling the whole snapshot sync in that case discards all transfer progress and forces
+     * a full restart, which is far more expensive than waiting a bit longer.
+     *
+     * @param snapshotSyncEventId identifier of the snapshot sync, used for logging only
+     * @return the received ack
+     * @throws Exception if the ack is not received after {@link #maxSnapshotAckWaitRetries} attempts,
+     *                    or some other (non-timeout) failure occurs
+     */
+    // Package-private so tests can invoke it directly instead of via reflection.
+    @VisibleForTesting
+    LogReplicationEntryMsg waitForSnapshotSyncAck(UUID snapshotSyncEventId) throws Exception {
+        int attempt = 0;
+        while (true) {
+            try {
+                return snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException te) {
+                attempt++;
+                if (attempt >= maxSnapshotAckWaitRetries) {
+                    throw te;
+                }
+                log.warn("Timed out ({}ms) waiting for snapshot sync ack for {} on baseSnapshot {}, " +
+                                "retry {}/{} before canceling",
+                        DEFAULT_TIMEOUT_MS, snapshotSyncEventId, baseSnapshotTimestamp,
+                        attempt, maxSnapshotAckWaitRetries);
             }
         }
     }
