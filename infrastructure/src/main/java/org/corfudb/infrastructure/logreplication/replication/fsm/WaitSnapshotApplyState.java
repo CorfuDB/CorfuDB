@@ -147,6 +147,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     // We need to set a new transition event Id, so anything happening on this new state
                     // is marked with this unique Id and correlated to cancel or trimmed events.
                     logEntrySyncState.setTransitionSyncId(transitionSyncId);
+                    // Snapshot sync has now fully succeeded (transfer AND apply); reset any
+                    // backoff/cancellation history InSnapshotSyncState accumulated from prior
+                    // retries, so a future, unrelated failure starts counting from a clean slate.
+                    ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     if (tableManagerPlugin.isUpgraded()) {

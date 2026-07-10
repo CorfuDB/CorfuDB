@@ -296,13 +296,26 @@ public class InSnapshotSyncState implements LogReplicationState {
         return backoff;
     }
 
+    /**
+     * Clear backoff/cancellation history after the snapshot sync fully completes (transfer AND
+     * apply), so a future, unrelated failure starts counting from a clean slate rather than an
+     * inflated backoff. Package-private so {@link WaitSnapshotApplyState} can call it once it
+     * confirms SNAPSHOT_APPLY_COMPLETE.
+     * <p>
+     * This must NOT be tied to transfer completing alone (i.e. reaching WAIT_SNAPSHOT_APPLY):
+     * a failure localized to the apply phase -- transfer keeps succeeding, only apply keeps
+     * failing/getting canceled -- would then zero the counter every single cycle right before the
+     * next apply-side cancellation could grow it, pinning the backoff at its initial value forever
+     * instead of escalating for what is, in fact, a persistently repeating failure.
+     */
+    void resetBackoff() {
+        consecutiveCancellations = 0;
+        retryBackoffMs = 0;
+    }
+
     @Override
     public void onExit(LogReplicationState to) {
         if (to.getType().equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
-            // Snapshot transfer succeeded: clear any backoff/cancellation history so a future,
-            // unrelated failure starts counting from a clean slate rather than an inflated backoff.
-            consecutiveCancellations = 0;
-            retryBackoffMs = 0;
             snapshotSyncTransferTimerSample
                     .flatMap(sample -> MeterRegistryProvider.getInstance()
                             .map(registry -> {
