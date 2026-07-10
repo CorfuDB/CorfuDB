@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
@@ -69,6 +70,27 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @Setter
     private boolean forcedSnapshotSync;
+
+    /**
+     * Maximum time to wait for the sink to confirm snapshot apply has completed before giving up
+     * and self-canceling (retried with backoff, same as any other SYNC_CANCEL). Without this, a
+     * stuck apply (e.g. a bug on the sink's apply path) would poll here forever: nothing in this
+     * class -- or, as far as we've found, anywhere in this repo -- generates a SYNC_CANCEL for a
+     * stalled apply on its own; the only paths out are an external cancel/stop or an operator
+     * forcing a new snapshot sync. This makes recovery from a stuck apply automatic instead of
+     * depending on an operator noticing.
+     * Package-private (not final) so tests can shrink it to keep tests fast.
+     */
+    @VisibleForTesting
+    long maxApplyWaitMs = TimeUnit.MINUTES.toMillis(30);
+
+    /**
+     * Wall-clock time (epoch millis) the current apply-wait began, i.e. since we first entered
+     * this state for this attempt -- not re-stamped on every polling self-loop (SNAPSHOT_APPLY_IN_PROGRESS).
+     * Package-private so tests can seed/inspect it directly.
+     */
+    @VisibleForTesting
+    volatile long applyWaitStartTimeMs = 0;
 
     /**
      * Constructor
@@ -203,6 +225,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
         if (from != this) {
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+            applyWaitStartTimeMs = System.currentTimeMillis();
         }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
     }
@@ -219,7 +242,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
     }
 
-    private void verifyStatusOfSnapshotSyncApply() {
+    // Package-private so tests can invoke it directly instead of via reflection.
+    @VisibleForTesting
+    void verifyStatusOfSnapshotSyncApply() {
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -245,6 +270,20 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
         }
+
+        long applyElapsedMs = System.currentTimeMillis() - applyWaitStartTimeMs;
+        if (applyElapsedMs >= maxApplyWaitMs) {
+            // Apply has not completed after a generous wait. Nothing here (or, as far as we've
+            // found, anywhere in this repo) will otherwise cancel a stuck apply on its own, so
+            // self-cancel instead of polling forever -- this goes through the SYNC_CANCEL handling
+            // above, which backs off before retrying.
+            log.warn("Snapshot sync apply for {} has not completed after {}ms (limit {}ms); giving up and retrying.",
+                    transitionSyncId, applyElapsedMs, maxApplyWaitMs);
+            fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                    new LogReplicationEventMetadata(transitionSyncId, forcedSnapshotSync)));
+            return;
+        }
+
         // Schedule a one time action which will verify the snapshot apply status after a given delay
         this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                 TimeUnit.MILLISECONDS);

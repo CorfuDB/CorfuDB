@@ -6,15 +6,21 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckRe
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -39,11 +45,12 @@ public class WaitSnapshotApplyStateTest {
     private LogReplicationFSM fsm;
     private InSnapshotSyncState inSnapshotSyncState;
     private WaitSnapshotApplyState state;
+    private DataSender dataSender;
 
     private void setup() {
         fsm = mock(LogReplicationFSM.class);
         LogReplicationAckReader ackReader = mock(LogReplicationAckReader.class);
-        DataSender dataSender = mock(DataSender.class);
+        dataSender = mock(DataSender.class);
         LogReplicationConfigManager tableManagerPlugin = mock(LogReplicationConfigManager.class);
         SnapshotSender snapshotSender = mock(SnapshotSender.class);
 
@@ -117,5 +124,44 @@ public class WaitSnapshotApplyStateTest {
 
         Assert.assertEquals(0, inSnapshotSyncState.consecutiveCancellations);
         Assert.assertEquals(0, inSnapshotSyncState.retryBackoffMs);
+    }
+
+    private LogReplicationMetadataResponseMsg notYetAppliedResponse() {
+        // Deliberately mismatched fields so verifyStatusOfSnapshotSyncApply() takes the
+        // "still in progress" branch rather than firing SNAPSHOT_APPLY_COMPLETE.
+        return LogReplicationMetadataResponseMsg.newBuilder()
+                .setLastLogEntryTimestamp(5)
+                .setSnapshotApplied(1)
+                .build();
+    }
+
+    @Test
+    public void selfCancelsAfterMaxApplyWaitElapsed() {
+        setup();
+        state.maxApplyWaitMs = 100;
+        state.applyWaitStartTimeMs = System.currentTimeMillis() - 200; // already past the limit
+        state.setTransitionSyncId(UUID.randomUUID());
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        ArgumentCaptor<LogReplicationEvent> captor = ArgumentCaptor.forClass(LogReplicationEvent.class);
+        verify(fsm).input(captor.capture());
+        Assert.assertEquals(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, captor.getValue().getType());
+    }
+
+    @Test
+    public void keepsPollingBeforeMaxApplyWaitElapsed() {
+        setup();
+        state.maxApplyWaitMs = TimeUnit.MINUTES.toMillis(30);
+        state.applyWaitStartTimeMs = System.currentTimeMillis();
+        state.setTransitionSyncId(UUID.randomUUID());
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        // Still well within the wait budget: no SYNC_CANCEL (or any other FSM input) should fire;
+        // the method should simply reschedule another check instead.
+        verify(fsm, never()).input(any());
     }
 }
