@@ -95,6 +95,12 @@ public class InSnapshotSyncStateTest {
         Assert.assertTrue(state.retryBackoffMs > 0);
         Assert.assertTrue(state.consecutiveCancellations > 0);
 
+        // Simulate that the current attempt has been running for a while (as it would in
+        // production, where onEntry() re-stamps lastEntryTimeMs on every real transition) so this
+        // genuinely reads as a fresh, externally requested sync rather than part of the same
+        // restart storm -- see backoffAppliesWhenRequestArrivesRightAfterEntry for the other case.
+        state.lastEntryTimeMs = System.currentTimeMillis() - InSnapshotSyncState.MIN_ATTEMPT_AGE_FOR_UNTHROTTLED_RESTART_MS;
+
         LogReplicationEvent freshRequest = new LogReplicationEvent(
                 LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
                 new LogReplicationEventMetadata(UUID.randomUUID()));
@@ -102,6 +108,21 @@ public class InSnapshotSyncStateTest {
 
         Assert.assertEquals(0, state.retryBackoffMs);
         Assert.assertEquals(0, state.consecutiveCancellations);
+    }
+
+    @Test
+    public void backoffAppliesWhenRequestArrivesRightAfterEntry() throws IllegalTransitionException {
+        // setup() stamped lastEntryTimeMs via onEntry() moments ago, so a SNAPSHOT_SYNC_REQUEST
+        // arriving now looks like part of a restart storm (e.g. a caller repeatedly invoking
+        // enforceSnapshotSync()) rather than a deliberate new request, and should back off instead
+        // of restarting unthrottled.
+        LogReplicationEvent request = new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
+                new LogReplicationEventMetadata(UUID.randomUUID()));
+        state.processEvent(request);
+
+        Assert.assertTrue("expected backoff to apply instead of resetting to zero", state.retryBackoffMs > 0);
+        Assert.assertEquals(1, state.consecutiveCancellations);
     }
 
     @Test

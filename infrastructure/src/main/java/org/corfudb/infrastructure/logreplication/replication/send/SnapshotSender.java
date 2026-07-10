@@ -122,6 +122,17 @@ public class SnapshotSender {
             return;
         }
 
+        if (stopSnapshotSync.get()) {
+            // A stale invocation: this transmit() was queued behind a backoff that got cut short by
+            // a newer cancellation/request calling stop() before this call actually started running.
+            // Return immediately without logging "Running snapshot sync..." below, which would
+            // otherwise read as a new attempt starting when it is really one that's already been
+            // aborted.
+            log.debug("Skipping transmit for {} on baseSnapshot {}, snapshot sync already stopped.",
+                    snapshotSyncEventId, baseSnapshotTimestamp);
+            return;
+        }
+
         log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
@@ -235,7 +246,11 @@ public class SnapshotSender {
                 return snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             } catch (TimeoutException te) {
                 attempt++;
-                if (attempt >= maxSnapshotAckWaitRetries) {
+                if (attempt >= maxSnapshotAckWaitRetries || stopSnapshotSync.get()) {
+                    // Either exhausted our patience, or a cancel/stop request has already arrived --
+                    // in the latter case, retrying further here would only delay that cancellation by
+                    // up to the remaining retry budget for no benefit, since this attempt is being
+                    // torn down anyway.
                     throw te;
                 }
                 log.warn("Timed out ({}ms) waiting for snapshot sync ack for {} on baseSnapshot {}, " +

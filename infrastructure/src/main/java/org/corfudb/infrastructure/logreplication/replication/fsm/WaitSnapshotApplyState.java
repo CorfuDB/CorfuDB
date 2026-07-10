@@ -104,6 +104,18 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+
+                    // A cancellation reaching us here means transfer already completed and we were
+                    // only waiting on the sink to finish applying it, but the overall snapshot sync
+                    // still did not succeed and is about to restart from scratch. Route it through the
+                    // same backoff accounting InSnapshotSyncState applies to its own SYNC_CANCEL;
+                    // otherwise a sink that keeps failing during apply verification would restart
+                    // immediately every time, reproducing the cancel-and-immediately-retry livelock
+                    // via this path instead.
+                    long backoff = ((InSnapshotSyncState) inSnapshotSyncState).registerCancellationAndComputeBackoff();
+                    log.warn("Snapshot sync canceled while waiting for apply to complete, remote={}; backing off {}ms before retrying with ID={}",
+                            fsm.getAckReader().getRemoteClusterId(), backoff, newSnapshotSyncId);
+
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
