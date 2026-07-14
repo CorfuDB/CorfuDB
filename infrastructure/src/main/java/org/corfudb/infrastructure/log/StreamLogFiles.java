@@ -204,10 +204,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public TailsResponse getTails(List<UUID> streams) {
-        Map<UUID, Long> tails = new HashMap<>();
-        streams.forEach(stream -> {
-            tails.put(stream, logMetadata.getStreamTails().get(stream));
-        });
+        Map<UUID, Long> tails = logMetadata.getStreamTails();
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }
 
@@ -218,7 +215,7 @@ public class StreamLogFiles implements StreamLog {
 
     @Override
     public TailsResponse getAllTails() {
-        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
+        Map<UUID, Long> tails = logMetadata.getStreamTails();
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }
 

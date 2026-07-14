@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
@@ -39,14 +40,18 @@ public class LogMetadata {
     @Getter
     private final Map<UUID, StreamAddressSpace> streamsAddressSpaceMap;
 
-    @Getter
-    private final Map<UUID, Long> streamTails;
-
     public LogMetadata(StreamLogDataStore dataStore) {
         this.globalTail = Address.NON_ADDRESS;
-        this.streamTails = new HashMap<>();
         this.streamsAddressSpaceMap = new HashMap<>();
         this.dataStore = dataStore;
+    }
+
+    public Map<UUID, Long> getStreamTails() {
+        Map<UUID, Long> res = HashMap.newHashMap(streamsAddressSpaceMap.size());
+        streamsAddressSpaceMap.forEach((uuid, space) ->
+                res.put(uuid, space.getTail())
+        );
+        return res;
     }
 
     public void update(List<LogData> entries) {
@@ -87,10 +92,6 @@ public class LogMetadata {
      * @param entryAddress stream address.
      */
     private void updateStreamSpace(UUID streamId, long entryAddress, boolean initialize) {
-        // Update stream tails
-        long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
-        streamTails.put(streamId, Math.max(currentStreamTail, entryAddress));
-
         // Update stream address space (used for sequencer recovery), add this entry as a valid address for this stream.
         streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
             if (addressSpace == null) {
@@ -118,11 +119,7 @@ public class LogMetadata {
         long lastUpdateToStream = entry.getCheckpointedStreamStartLogAddress();
 
         if (Address.isAddress(lastUpdateToStream)) {
-            // 1. Update stream tail
-            long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
-            streamTails.put(streamId, Math.max(currentStreamTail, lastUpdateToStream));
-
-            // 2. Update stream trim mark
+            // Update stream trim mark
             // This is only required on initialization as on all other paths trim mark will be set by
             // explicit trimming.
 
