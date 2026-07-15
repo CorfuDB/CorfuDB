@@ -254,19 +254,16 @@ public class Utils {
     }
 
   /**
-   * Find the chain's head node of each segment
+   * Return the head node in the chain which contains the complete log (i.e.,
+   * superset)
    *
    * @param layout layout to search in
-   * @return returns a set of nodes the represent the first node in all segments
+   * @return returns the head node
    */
-  private static Set<String> getChainHeadFromAllSegments(Layout layout) {
+  private static String getHeadNode(Layout layout) {
     validateSegments(layout.getSegments());
     List<Layout.LayoutSegment> segments = layout.getSegments();
-    return segments.stream()
-        .map(Layout.LayoutSegment::getFirstStripe)
-        .map(Layout.LayoutStripe::getLogServers)
-        .map(strip -> strip.get(0))
-        .collect(Collectors.toSet());
+    return segments.get(0).getFirstStripe().getLogServers().get(0);
   }
 
   /** Throws a WrongEpochException if the actual and expected epochs don't match. */
@@ -285,24 +282,10 @@ public class Utils {
   public static long getLogTail(RuntimeLayout runtimeLayout) {
     // Since a node can exist as a head for multiple segments we need to a set to
     // coalesce the candidates to unique nodes only
-    Set<String> segmentsHeadNodes = getChainHeadFromAllSegments(runtimeLayout.getLayout());
-    List<CompletableFuture<TailsResponse>> cfs =
-        segmentsHeadNodes.stream()
-            .map(node -> runtimeLayout.getLogUnitClient(node).getLogTail())
-            .collect(Collectors.toList());
-
-    long globalLogTail =
-        cfs.stream()
-            .map(CFUtils::getUninterruptibly)
-            .mapToLong(
-                resp -> {
-                  epochCheck(resp.getEpoch(), runtimeLayout.getLayout().getEpoch());
-                  return resp.getLogTail();
-                })
-            .max()
-            .orElseThrow(NoSuchElementException::new);
-
-    log.trace("getLogTail: nodes selected {} global tail {}", segmentsHeadNodes, globalLogTail);
+    String headNode = getHeadNode(runtimeLayout.getLayout());
+    CompletableFuture<TailsResponse> cf = runtimeLayout.getLogUnitClient(headNode).getLogTail();
+    long globalLogTail = CFUtils.getUninterruptibly(cf).getLogTail();
+    log.trace("getLogTail: nodes selected {} global tail {}", headNode, globalLogTail);
     return globalLogTail;
   }
 
@@ -317,32 +300,17 @@ public class Utils {
   public static TailsResponse getAllTails(RuntimeLayout runtimeLayout) {
     // Since a node can exist as a head for multiple segments we need to a set to
     // coalesce the candidates to unique nodes only
-    Set<String> segmentsHeadNodes = getChainHeadFromAllSegments(runtimeLayout.getLayout());
+    String headNode = getHeadNode(runtimeLayout.getLayout());
 
-    AtomicLong globalTail = new AtomicLong(Address.NON_EXIST);
-    final Map<UUID, Long> streamTails = new HashMap<>();
-
-    List<CompletableFuture<TailsResponse>> cfs =
-        segmentsHeadNodes.stream()
-            .map(node -> runtimeLayout.getLogUnitClient(node).getAllTails())
-            .collect(Collectors.toList());
-
-    cfs.stream()
-        .map(CFUtils::getUninterruptibly)
-        .forEach(
-            resp -> {
-              // All responses should be computed on the same epoch
-              epochCheck(resp.getEpoch(), runtimeLayout.getLayout().getEpoch());
-              // Find the global max global tail and stream tails across all responses
-              globalTail.set(Long.max(resp.getLogTail(), globalTail.get()));
-              resp.getStreamTails().forEach((k, v) -> streamTails.merge(k, v, Long::max));
-            });
+    TailsResponse res = CFUtils.getUninterruptibly(runtimeLayout.getLogUnitClient(headNode).getAllTails());
+    epochCheck(res.getEpoch(), runtimeLayout.getLayout().getEpoch());
+    long globalTail = Long.max(res.getLogTail(), Address.NON_EXIST);
 
     if (log.isTraceEnabled()) {
-        log.trace("getAllTails: nodes selected {} stream tails {}", segmentsHeadNodes, streamTails);
+        log.trace("getAllTails: nodes selected {} stream tails {}", headNode, res.getStreamTails());
     }
 
-    return new TailsResponse(runtimeLayout.getLayout().getEpoch(), globalTail.get(), streamTails);
+    return new TailsResponse(runtimeLayout.getLayout().getEpoch(), globalTail, res.getStreamTails());
   }
 
   /**
@@ -355,31 +323,18 @@ public class Utils {
   public static StreamsAddressResponse getLogAddressSpace(RuntimeLayout runtimeLayout) {
     // Since a node can exist as a head for multiple segments we need to a set to
     // coalesce the candidates to unique nodes only
-    Set<String> segmentsHeadNodes = getChainHeadFromAllSegments(runtimeLayout.getLayout());
-    AtomicLong globalTail = new AtomicLong(Address.NON_EXIST);
-    final Map<UUID, StreamAddressSpace> streamsAddressSpace = new HashMap<>();
-    List<CompletableFuture<StreamsAddressResponse>> cfs =
-        segmentsHeadNodes.stream()
-            .map(node -> runtimeLayout.getLogUnitClient(node).getLogAddressSpace())
-            .collect(Collectors.toList());
+    String headNode = getHeadNode(runtimeLayout.getLayout());
+    StreamsAddressResponse res = CFUtils.getUninterruptibly(runtimeLayout.getLogUnitClient(headNode)
+            .getLogAddressSpace());
 
-    cfs.stream()
-        .map(CFUtils::getUninterruptibly)
-        .forEach(
-            resp -> {
-              // All responses should be computed on the same epoch
-              epochCheck(resp.getEpoch(), runtimeLayout.getLayout().getEpoch());
-              // Find the global max global tail and stream tails across all responses
-              globalTail.set(Long.max(resp.getLogTail(), globalTail.get()));
-              resp.getAddressMap()
-                  .forEach((k, v) -> streamsAddressSpace.merge(k, v, StreamAddressSpace::merge));
-            });
+    epochCheck(res.getEpoch(), runtimeLayout.getLayout().getEpoch());
+    long globalTail = Long.max(res.getLogTail(), Address.NON_EXIST);
 
     log.debug(
         "getLogAddressSpace: nodes selected {} log tail {} stream addresses {}",
-        segmentsHeadNodes,
-        globalTail.get(),
-        streamsAddressSpace);
-    return new StreamsAddressResponse(globalTail.get(), streamsAddressSpace);
+        headNode,
+        globalTail,
+        res.getAddressMap());
+    return new StreamsAddressResponse(globalTail, res.getAddressMap());
   }
 }

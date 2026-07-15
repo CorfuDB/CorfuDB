@@ -231,24 +231,6 @@ public class Layout {
     }
 
     /**
-     * Return a list of segments which contain global
-     * addresses less than or equal to the given address
-     * (known as the prefix).
-     *
-     * @param globalAddress The global address prefix
-     *                      to use.
-     * @return              A list of segments which
-     *                      contain addresses less than
-     *                      or equal to the global
-     *                      address.
-     */
-    public @Nonnull List<LayoutSegment> getPrefixSegments(long globalAddress) {
-        return segments.stream()
-                .filter(p -> p.getEnd() <= globalAddress)
-                .collect(Collectors.toList());
-    }
-
-    /**
      * Return layout segment stripe.
      *
      * @param globalAddress The global address.
