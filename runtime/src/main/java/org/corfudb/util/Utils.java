@@ -203,15 +203,11 @@ public class Utils {
      * @param address a token with address to trim
      */
     public static void prefixTrim(RuntimeLayout runtimeLayout, Token address) {
-        List<CompletableFuture<Void>> futures = runtimeLayout
-                .getLayout()
-                .getAllLogServers()
-                .stream()
-                .map(runtimeLayout::getLogUnitClient)
-                .map(lu -> lu.prefixTrim(address))
-                .collect(Collectors.toList());
-
-        futures.forEach(CFUtils::getUninterruptibly);
+        for (var server : runtimeLayout.getLayout().getAllLogServers()) {
+            var lu = runtimeLayout.getLogUnitClient(server);
+            var future = lu.prefixTrim(address);
+            CFUtils.getUninterruptibly(future);
+        }
     }
 
     /**

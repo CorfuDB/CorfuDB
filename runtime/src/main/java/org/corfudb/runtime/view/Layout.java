@@ -199,12 +199,13 @@ public class Layout {
     /**
      * Get all the unique log unit server endpoints in the layout.
      *
-     * @return a set of all log unit server endpoints
+     * @return a list of all log unit server endpoints ordered by HEAD -> Tail node
      */
-    public Set<String> getAllLogServers() {
+    public List<String> getAllLogServers() {
         return segments.stream()
                 .flatMap(seg -> seg.getAllLogServers().stream())
-                .collect(Collectors.toSet());
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**
