@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.log;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -13,8 +12,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
@@ -73,13 +72,37 @@ public class LogMetadata {
             updateStreamSpace(streamId, entryAddress, initialize);
         }
 
-        // We should also consider checkpoint metadata while updating the tails and stream trim mark.
-        // This is important because there could be streams which data is completely checkpointed,
-        // i.e., no actual entries on the regular stream but only on the checkpoint stream.
-        // If those streams are not updated with this info, then clients would observe those
-        // streams as empty, which is not correct.
-        if (entry.hasCheckpointMetadata()) {
-            updateFromCheckpoint(entry, initialize);
+        // We can assume that every stream table/tag will have at least a No-op hole
+        // with valid backpointers because of the following:
+        // 1. The checkpointer captures a MinToken before it starts checkpointing
+        // 2. The table checkpointer will emit a No-Op hope with backpointers before it writes the checkpoint
+        // 3. The prefix trim will only happen after a full checkpoint cycle
+        // 4. The prefix trim will always issue a trim based on the MinToken
+
+        if (initialize && entry.isHole() && !entry.getBackpointerMap().isEmpty()) {
+            for (var streamId : entry.getStreams()) {
+                streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
+                    var backPointer = entry.getBackpointer(streamId);
+                    Objects.nonNull(backPointer);
+
+                    // This metadata update path is called during node initialization (i.e., restarts) and
+                    // during state transfer when redundancy is being restored on a replica. As a result, the
+                    // updates for differnt parts of the log can appear out-of-order which would result in a
+                    // temporarily incorrect StreamAddressSpace but not observable to external clients or
+                    // sequencer bootstrap workflows. Additionally, since state transfer can interleave with prefix
+                    // trim operations, the larger prefix trim address will override the min calculations below only
+                    // if the bitmap is not empty.
+
+                    if (addressSpace == null) {
+                        return new StreamAddressSpace(backPointer, Collections.emptySet());
+                    } else if (addressSpace.getTrimMark() < 0) {
+                        addressSpace.setTrimMark(backPointer);
+                    } else {
+                        addressSpace.setTrimMark(Math.min(addressSpace.getTrimMark(), backPointer));
+                    }
+                    return addressSpace;
+                });
+            }
         }
     }
 
@@ -103,49 +126,6 @@ public class LogMetadata {
             addressSpace.addAddress(entryAddress, initialize);
             return addressSpace;
         });
-    }
-
-    /**
-     * Update's relevant info of a stream's space from a checkpoint, concretely:
-     * 1. Stream tail for those stream's that have all updates within a checkpoint.
-     * 2. Stream trim mark, i.e., last observed address for a stream subsumed by a checkpoint.
-     *
-     * @param entry log entry
-     * @param initialize true, if called on log unit initialization (full scan)
-     *                   false, otherwise.
-     */
-    private void updateFromCheckpoint(LogData entry, boolean initialize) {
-        UUID streamId = entry.getCheckpointedStreamId();
-        long lastUpdateToStream = entry.getCheckpointedStreamStartLogAddress();
-
-        if (Address.isAddress(lastUpdateToStream)) {
-            // Update stream trim mark
-            // This is only required on initialization as on all other paths trim mark will be set by
-            // explicit trimming.
-
-            // The trim mark is part of the address space information and is also required
-            // so clients can observe updates to streams that have been completely checkpointed.
-            // For instance, an empty address space with a stream trim mark != -6, requires data to be
-            // loaded from a checkpoint (vs. no data ever written to this stream).
-
-            // If we hit a checkpoint END record we can use this info to compute the stream trim mark,
-            // i.e., last observed update to the stream that has already been checkpointed, hence
-            // can be safely trimmed from the log.
-            if (initialize && entry.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END) {
-                streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
-                    if (addressSpace == null) {
-                        // If this entry still does not exist, means no updates have been observed for
-                        // this stream yet. We can initialize the trim mark to the last observed update by the
-                        // checkpoint. If further entries are observed they will be added to the address space.
-                        return new StreamAddressSpace(lastUpdateToStream, Collections.EMPTY_SET);
-                    }
-                    // We will hold the maximum of these observed updates as the stream trim mark (highest
-                    // checkpointed address), as this guarantees data is available in a checkpoint (safe trim mark).
-                    addressSpace.setTrimMark(Long.max(addressSpace.getTrimMark(), lastUpdateToStream));
-                    return addressSpace;
-                });
-            }
-        }
     }
 
     public void updateGlobalTail(long newTail) {
