@@ -199,12 +199,13 @@ public class Layout {
     /**
      * Get all the unique log unit server endpoints in the layout.
      *
-     * @return a set of all log unit server endpoints
+     * @return a list of all log unit server endpoints ordered by HEAD -> Tail node
      */
-    public Set<String> getAllLogServers() {
+    public List<String> getAllLogServers() {
         return segments.stream()
                 .flatMap(seg -> seg.getAllLogServers().stream())
-                .collect(Collectors.toSet());
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**
@@ -227,24 +228,6 @@ public class Layout {
      */
     public String getPrimarySequencer() {
         return sequencers.get(0);
-    }
-
-    /**
-     * Return a list of segments which contain global
-     * addresses less than or equal to the given address
-     * (known as the prefix).
-     *
-     * @param globalAddress The global address prefix
-     *                      to use.
-     * @return              A list of segments which
-     *                      contain addresses less than
-     *                      or equal to the global
-     *                      address.
-     */
-    public @Nonnull List<LayoutSegment> getPrefixSegments(long globalAddress) {
-        return segments.stream()
-                .filter(p -> p.getEnd() <= globalAddress)
-                .collect(Collectors.toList());
     }
 
     /**

@@ -31,8 +31,8 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <protocVersion>${protobuf.version}</protocVersion>
-                            <includeStdTypes>true</includeStdTypes>
+                            <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:osx-x86_64</protocArtifact>
+                            <includeStdTypes>false</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
                             <includeMavenTypes>direct</includeMavenTypes>
 

@@ -123,10 +123,7 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public synchronized TailsResponse getAllTails() {
-        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
-        for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
-            tails.put(entry.getKey(), entry.getValue());
-        }
+        Map<UUID, Long> tails = logMetadata.getStreamTails();
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }
 
