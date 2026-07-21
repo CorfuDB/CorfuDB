@@ -167,7 +167,8 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
-            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
+            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()),
+                    sinkManager.isProcessingSnapshotSync());
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
 

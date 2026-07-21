@@ -19,6 +19,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
@@ -27,11 +28,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SNAPSHOT_SYNC_ACK_MAX_RETRIES;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
@@ -56,6 +59,7 @@ public class SnapshotSender {
     @Getter
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
+    private final DataSender dataSender;
 
     @Getter
     private long baseSnapshotTimestamp;
@@ -84,6 +88,7 @@ public class SnapshotSender {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        this.dataSender = dataSender;
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
@@ -154,8 +159,7 @@ public class SnapshotSender {
             if (snapshotCompleted) {
                 // Block until ACK from last sent message is received
                 try {
-                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in PR 3750
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    LogReplicationEntryMsg ack = waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
@@ -193,12 +197,64 @@ public class SnapshotSender {
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
                 snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
             }
+        }
+    }
+
+    /**
+     * Wait for the ack of the final snapshot sync message, tolerating a busy-but-alive sink instead
+     * of giving up on the first timeout. On each timeout with no ack, poll the sink directly: if it
+     * reports it's still actively processing this snapshot sync, keep waiting without counting it
+     * against the retry budget; a sink that stays genuinely silent (no ack, and either no response
+     * or a not-busy response to the poll) for SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts is
+     * treated as stalled and the caller cancels the sync.
+     *
+     * @param snapshotSyncEventId identifier of the snapshot sync being waited on, for logging only
+     * @param ackFuture completes with the ack for the last message sent for this attempt
+     * @return the received ack
+     * @throws Exception if the ack does not arrive and the sink is not reporting activity for
+     *                    SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts, or some other failure occurs
+     */
+    LogReplicationEntryMsg waitForSnapshotSyncAck(UUID snapshotSyncEventId,
+                                                  CompletableFuture<LogReplicationEntryMsg> ackFuture) throws Exception {
+        int genuineTimeouts = 0;
+        while (true) {
+            try {
+                return ackFuture.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException te) {
+                if (isSinkStillProcessing()) {
+                    log.info("Sink reported busy while waiting for ack for snapshot sync {}; extending wait.",
+                            snapshotSyncEventId);
+                    continue;
+                }
+                genuineTimeouts++;
+                log.warn("Ack timeout {}/{} waiting for snapshot sync {} to be acked; sink not reporting activity.",
+                        genuineTimeouts, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
+                if (genuineTimeouts >= SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
+                    throw te;
+                }
+            }
+        }
+    }
+
+    /**
+     * Actively poll the sink for whether it is still working on the current snapshot sync. Used only
+     * to extend patience on an otherwise-unexplained ack timeout, so any failure to determine this
+     * (including the poll itself timing out) is conservatively treated as "not processing".
+     */
+    private boolean isSinkStillProcessing() {
+        try {
+            LogReplicationMetadataResponseMsg response = dataSender.sendMetadataRequest()
+                    .get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            return response.getIsProcessing();
+        } catch (Exception e) {
+            log.warn("Failed to query sink status while waiting for snapshot sync ack.", e);
+            return false;
         }
     }
 

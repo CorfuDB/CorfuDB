@@ -95,6 +95,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionSyncId(event.getMetadata().getSyncId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                // A request arriving here abandons and restarts the current attempt exactly like a
+                // SYNC_CANCEL does, and must not bypass the same backoff accounting, or repeated
+                // requests landing during apply-wait would be another avenue for a restart storm.
+                ((InSnapshotSyncState) snapshotSyncState).registerCancellationAndComputeBackoff();
                 return snapshotSyncState;
             case SYNC_CANCEL:
                 if(fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -104,6 +108,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                    ((InSnapshotSyncState) inSnapshotSyncState).registerCancellationAndComputeBackoff();
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
@@ -151,6 +156,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getMetadata().getSyncId(), event.getMetadata().getLastTransferredBaseSnapshot());
+                    // Full end-to-end completion; clear the backoff so the next, unrelated snapshot
+                    // sync doesn't inherit it.
+                    ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                     return logEntrySyncState;
                 }
 
@@ -161,9 +169,12 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                // A stop is a clean boundary; a later, unrelated session must not inherit this backoff.
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 if (!fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {

@@ -31,6 +31,26 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
+    // Number of consecutive ack-wait timeouts, during a single snapshot-sync attempt, for which the
+    // sink reports no activity at all (not even a busy signal) before the source gives up on that
+    // attempt and cancels it. This bounds how long the source will wait in genuine silence.
+    public static final int SNAPSHOT_SYNC_ACK_MAX_RETRIES = 6;
+
+    // Exponential backoff applied between a canceled snapshot-sync attempt and the next retry, to
+    // avoid a tight zero-delay restart loop against a struggling sink.
+    public static final long INITIAL_RETRY_BACKOFF_MS = 2000;
+    public static final long MAX_RETRY_BACKOFF_MS = 60000;
+
+    // The sink independently unfreezes local checkpointing if it has heard nothing at all from the
+    // source for this many multiples of the source's own genuine-silence bound
+    // (SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS). Deliberately derived from that same
+    // value -- not an independent constant -- so it can never be tuned out of sync with the source,
+    // and can never fire before the source has actually given up on the current attempt.
+    public static final double SINK_SELF_UNFREEZE_SAFETY_FACTOR = 1.5;
+
+    public static final long SINK_SELF_UNFREEZE_TIMEOUT_MS =
+            (long) (SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS * SINK_SELF_UNFREEZE_SAFETY_FACTOR);
+
     // Log Replication default max number of messages generated at the active cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 5;
 

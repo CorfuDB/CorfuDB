@@ -7,6 +7,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
 import org.corfudb.infrastructure.logreplication.proto.Sample.IntValue;
@@ -18,10 +19,14 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
@@ -31,6 +36,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.junit.After;
@@ -59,6 +65,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEF
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_CACHE_NUM_ENTRIES;
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -953,6 +960,114 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testSnapshotSyncAndLogEntrySync(0, true, 0);
     }
 
+    /**
+     * Test the case where the ack for the final snapshot-transfer message (SNAPSHOT_TRANSFER_COMPLETE)
+     * is delayed past the source's ack-wait timeout, while the sink reports (via the metadata poll)
+     * that it is still actively processing. The source must extend its patience instead of canceling
+     * and restarting the snapshot sync, and the sync must still complete successfully with correct
+     * data on the destination once the delayed ack finally arrives.
+     */
+    @Test
+    public void testSnapshotSyncSurvivesSlowFinalAckViaBusySignal() throws Exception {
+        openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
+        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcCorfuStore, NUM_KEYS);
+
+        log.debug("****** Verify Source Data");
+        verifyData(srcCorfuStore, srcCorfuTables, srcDataForVerification);
+
+        openStreams(dstCorfuTables, dstCorfuStore, NUM_STREAMS);
+        log.debug("****** Verify No Data in Destination");
+        verifyNoData(dstCorfuTables);
+
+        // Delay the final transfer ack well past DEFAULT_TIMEOUT_MS, so the source is guaranteed to
+        // hit at least one ack-wait timeout and fall back to polling the sink directly. As long as
+        // the sink keeps reporting isProcessing=true on that poll, the source must not cancel.
+        testConfig.setDelayTransferCompleteAckMs(LogReplicationConfig.DEFAULT_TIMEOUT_MS + 2000);
+        testConfig.setReportSinkBusyOnMetadataPoll(true);
+
+        log.debug("****** Start Snapshot Sync with delayed final ack");
+        startSnapshotSync(Collections.singleton(WAIT.ON_METADATA_RESPONSE));
+
+        log.debug("****** Snapshot Sync COMPLETE despite delayed final ack");
+
+        // Verify isDataConsistent is true and data was correctly and fully replicated -- i.e. the
+        // sync genuinely completed, it wasn't canceled and silently abandoned.
+        sourceDataSender.checkStatusOnStandby(true);
+        verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+
+        // Verify the busy-signal mechanism was actually exercised: the source only polls the sink
+        // directly on an ack-wait timeout, so this being non-zero proves the delay was long enough to
+        // trigger at least one such timeout, and the sync surviving it proves the busy response
+        // extended the source's patience rather than it giving up.
+        assertThat(sourceDataSender.getMetadataRequestCount().get()).isGreaterThan(0);
+    }
+
+    /**
+     * Test the case where the source disappears (e.g. a network partition or crash) immediately after
+     * SNAPSHOT_START, having frozen local checkpointing on the sink, and is never heard from again --
+     * no SYNC_CANCEL, no retry. The sink must notice the prolonged silence on its own and unfreeze
+     * local checkpointing without depending on any further message from the source.
+     */
+    @Test
+    public void testSinkSelfUnfreezesOnProlongedSilenceDuringTransfer() throws Exception {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
+                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
+                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+
+        try {
+            LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(UUID.randomUUID()))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(100L)
+                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                    .build();
+            LogReplicationEntryMsg snapshotStart = LogReplicationEntryMsg.newBuilder().setMetadata(metadata).build();
+
+            log.debug("****** Deliver SNAPSHOT_START, then go silent forever");
+            sinkManager.receive(snapshotStart);
+
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
+                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
+                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
+                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
+                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
+                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
+                    .build();
+
+            log.debug("****** Confirm checkpointing was frozen on SNAPSHOT_START");
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
+
+            log.debug("****** Wait past the self-unfreeze timeout for the sink to notice the silence on its own");
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE,
+                    LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS + 15_000);
+        } finally {
+            sinkManager.shutdown();
+        }
+    }
+
+    private void waitForPluginValue(Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> table,
+                                    ExampleSchemas.Uuid key, String expectedValue, long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            try (TxnContext txn = dstCorfuStore.txn(DefaultSnapshotSyncPlugin.NAMESPACE)) {
+                CorfuStoreEntry<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> entry =
+                        txn.getRecord(table, key);
+                txn.commit();
+                if (entry.getPayload() != null && entry.getPayload().getValue().equals(expectedValue)) {
+                    return;
+                }
+            }
+            sleep(1000);
+        }
+        throw new AssertionError("Timed out waiting for snapshot sync plugin value: " + expectedValue);
+    }
+
     private void testSnapshotSyncAndLogEntrySync(int numCyclesToDelayApply, boolean delayResponse, int dropAcksLevel) throws Exception {
 
         // Open streams in source Corfu
@@ -1473,6 +1588,19 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         private int numNullAcksToWaitFor = DEFAULT_NULL_ACKS_TO_WAIT_FOR;
 
+        // Delay (in ms) before completing the ack for the final snapshot-transfer message
+        // (SNAPSHOT_TRANSFER_COMPLETE), to simulate a sink that is slow to acknowledge without
+        // actually being unresponsive.
+        private int delayTransferCompleteAckMs = 0;
+
+        // Force every metadata-poll response to report isProcessing=true, simulating a sink that
+        // tells the source it's still busy whenever asked.
+        private boolean reportSinkBusyOnMetadataPoll = false;
+
+        // Silently drop every message except SNAPSHOT_START, simulating a source that vanishes
+        // (network partition, crash) right after starting a snapshot sync.
+        private boolean dropAllAfterSnapshotStart = false;
+
         public TestConfig clear() {
             dropMessageLevel = 0;
             dropAckLevel = 0;
@@ -1484,6 +1612,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             deleteOP = false;
             remoteClusterId = null;
             dropSnapshotStartMsg = false;
+            delayTransferCompleteAckMs = 0;
+            reportSinkBusyOnMetadataPoll = false;
+            dropAllAfterSnapshotStart = false;
             return this;
         }
     }

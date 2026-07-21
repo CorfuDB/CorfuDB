@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -55,6 +56,11 @@ public class LogReplicationSinkManager implements DataReceiver {
     private static final String CONFIG_FILE = "/config/corfu/corfu_replication_config.properties";
 
     private static final int DEFAULT_ACK_CNT = 1;
+
+    // How often to check whether the current snapshot sync attempt has gone silent (see
+    // checkSnapshotSyncLiveness()). Deliberately smaller than the self-unfreeze timeout itself so
+    // the check granularity doesn't materially delay the reaction once the threshold is crossed.
+    private static final long SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS = 5000;
 
     // Duration in milliseconds after which an ACK is sent back to the sender
     // if the message count is not reached before
@@ -103,6 +109,27 @@ public class LogReplicationSinkManager implements DataReceiver {
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
     private int waitMsBeforeSnapshotApply;
+
+    // Set while a received snapshot-sync message is actively being written (e.g. blocked on fsync),
+    // so the source can distinguish "sink is alive but slow" from "sink is unresponsive" instead of
+    // relying solely on a fixed ack timeout.
+    private final AtomicBoolean processingSnapshotWrite = new AtomicBoolean(false);
+
+    // Timestamp of the most recent snapshot-sync-related message received, used to detect that the
+    // source has gone silent on the current attempt (e.g. it canceled and is backing off before
+    // retrying, or the connection dropped) so local checkpointing can be unfrozen proactively instead
+    // of waiting on a message that may not arrive for a while, if at all.
+    private volatile long lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+
+    // Guards against calling onSnapshotSyncEnd() on every liveness-check tick once the self-timeout
+    // has fired for the current idle period; cleared as soon as new activity is observed.
+    private final AtomicBoolean selfUnfrozeForCurrentIdlePeriod = new AtomicBoolean(false);
+
+    private final ScheduledExecutorService snapshotSyncLivenessExecutor = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("snapshotSyncLivenessExecutor")
+                    .build());
 
     /**
      * Constructor Sink Manager
@@ -169,6 +196,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setDaemon(true)
                         .setNameFormat("snapshotSyncApplyExecutor")
                         .build());
+
+        this.snapshotSyncLivenessExecutor.scheduleWithFixedDelay(this::checkSnapshotSyncLiveness,
+                SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS, SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
 
         initWriterAndBufferMgr();
     }
@@ -261,6 +292,9 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         log.debug("Sink manager received {} while in {}", message.getMetadata().getEntryType(), rxState);
 
+        lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+        selfUnfrozeForCurrentIdlePeriod.set(false);
+
         // Ignore messages that have different topologyConfigId.
         // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
         // If there is a siteConfig change, the discovery service will detect it and reset the state.
@@ -331,8 +365,54 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplication.LogReplicationEntryMsg processReceivedMessage(LogReplication.LogReplicationEntryMsg message) {
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
             return logEntrySinkBufferManager.processMsgAndBuffer(message);
-        } else {
+        }
+        processingSnapshotWrite.set(true);
+        try {
             return snapshotSinkBufferManager.processMsgAndBuffer(message);
+        } finally {
+            processingSnapshotWrite.set(false);
+        }
+    }
+
+    /**
+     * Whether the sink is currently actively working on the in-progress snapshot sync (writing an
+     * incoming batch, or applying a completed transfer), as opposed to merely having one open with
+     * nothing happening. Used by the source to tell a busy-but-alive sink apart from a stalled one.
+     */
+    public boolean isProcessingSnapshotSync() {
+        return processingSnapshotWrite.get() || ongoingApply.get();
+    }
+
+    /**
+     * Runs periodically while a snapshot sync is open. If the source has gone silent on the current
+     * TRANSFER-phase attempt (no message at all, not even one indicating it's still working) for
+     * longer than the calibrated self-unfreeze timeout, unfreeze local checkpointing proactively
+     * instead of waiting on a retry (or a connection recovery) that may not come for a while.
+     *
+     * Deliberately restricted to the TRANSFER phase: unfreezing during APPLY risks the checkpointer
+     * trimming shadow-stream data the apply still needs, mirroring the same restriction already
+     * applied in stopOnLeadershipLoss().
+     */
+    private void checkSnapshotSyncLiveness() {
+        try {
+            if (rxState != RxState.SNAPSHOT_SYNC
+                    || snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.TRANSFER_PHASE
+                    || isProcessingSnapshotSync()) {
+                selfUnfrozeForCurrentIdlePeriod.set(false);
+                return;
+            }
+
+            long idleMs = System.currentTimeMillis() - lastSnapshotSyncActivityTimeMs;
+            if (idleMs > LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS
+                    && selfUnfrozeForCurrentIdlePeriod.compareAndSet(false, true)) {
+                log.warn("No activity for snapshot sync {} for {} ms while in TRANSFER phase; unfreezing local " +
+                        "checkpointing proactively instead of waiting on the source.", lastSnapshotSyncId, idleMs);
+                log.info("Enter onSnapshotSyncEnd (self-timeout) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+                snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+                log.info("Exit onSnapshotSyncEnd (self-timeout) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+            }
+        } catch (Throwable t) {
+            log.error("Error while checking snapshot sync liveness.", t);
         }
     }
 
@@ -603,6 +683,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
+        this.snapshotSyncLivenessExecutor.shutdownNow();
     }
 
     /**

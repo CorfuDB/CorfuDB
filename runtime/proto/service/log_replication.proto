@@ -32,6 +32,9 @@ message LogReplicationMetadataResponseMsg {
   uint64 snapshotTransferred = 4;
   uint64 snapshotApplied = 5;
   uint64 lastLogEntryTimestamp = 6;
+  // Set by the sink to indicate it is still actively processing (writing/applying) the current
+  // snapshot sync, so the source should not treat a slow response as a dead/stalled sink.
+  bool isProcessing = 7;
 }
 
 message LogReplicationLeadershipLossResponseMsg {
