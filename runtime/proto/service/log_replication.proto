@@ -15,6 +15,21 @@ message LogReplicationEntryMetadataMsg {
   UuidMsg syncRequestId = 5;
   int64 snapshotTimestamp = 6;
   int64 snapshotSyncSeqNum = 7;
+  // Set by the sink on every ack to explicitly state the next snapshotSyncSeqNum it is still
+  // waiting for, so the source can target retransmission precisely instead of blindly resending
+  // on a fixed cadence. A real value (including 0, legitimate at the very start of a transfer)
+  // is indistinguishable on the wire from an absent field once decoded as a plain scalar -- proto3
+  // always decodes an unset scalar as its zero value, so a sentinel constant doesn't work here.
+  // Wrapped in a oneof (proto3's presence-tracking primitive predating the `optional` keyword) to
+  // get an explicit has-method instead, so a source new enough to read this can tell "peer doesn't
+  // support this yet" apart from a genuine value of 0 -- required for safe rolling-upgrade
+  // behavior. (`optional` would express this more directly and generates the identical
+  // presence-tracking under the hood, but it crashes this repo's protoc toolchain when combined
+  // with the existing custom-options extension setup -- confirmed by testing in isolation; this
+  // explicit oneof form does not hit that path.)
+  oneof expected_seq_num_oneof {
+    int64 expectedSeqNum = 8;
+  }
 }
 
 message LogReplicationEntryMsg {

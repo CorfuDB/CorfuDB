@@ -1,11 +1,13 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -69,6 +71,15 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @Setter
     private boolean forcedSnapshotSync;
+
+    /**
+     * Wall-clock time this apply wait began for the current attempt. Stamped only on a genuine
+     * (from != this) entry, mirroring InSnapshotSyncState's lastEntryTimeMs -- the periodic
+     * self-verification re-entry (onEntry(this)) must not reset it, or a stuck apply would never
+     * actually be judged to have exceeded the bound.
+     */
+    @VisibleForTesting
+    long applyWaitStartTimeMs;
 
     /**
      * Constructor
@@ -198,6 +209,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
         if (from != this) {
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+            // Only a genuine new entry marks "this apply wait just started" -- the periodic
+            // self-verification loop re-enters via onEntry(this) every SCHEDULE_APPLY_MONITOR_DELAY,
+            // and restamping here would make a stuck apply always look like it just started.
+            applyWaitStartTimeMs = System.currentTimeMillis();
         }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
     }
@@ -214,7 +229,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
     }
 
-    private void verifyStatusOfSnapshotSyncApply() {
+    @VisibleForTesting
+    void verifyStatusOfSnapshotSyncApply() {
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -240,6 +256,26 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
         }
+
+        // Previously this loop had no bound at all: on the sink, an apply that failed with an
+        // uncaught exception (e.g. a TrimmedException from a checkpoint/trim running concurrently --
+        // now fixed to at least clean up locally, see LogReplicationSinkManager.startSnapshotApply())
+        // would never advance its persisted snapshotApplied metadata, so the condition above could
+        // never become true and this would poll forever with no way for the source to ever notice or
+        // recover. There's no way to observe partial apply progress today (the sink only reports a
+        // single done/not-done boundary), so this is a generous absolute bound rather than a
+        // stall-since-last-progress one -- see SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS's Javadoc. Canceling
+        // and restarting is always safe (a fresh full transfer, not data loss), so erring generous
+        // here only costs time, not correctness.
+        long applyWaitElapsedMs = System.currentTimeMillis() - applyWaitStartTimeMs;
+        if (applyWaitElapsedMs > LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS) {
+            log.error("Snapshot sync apply for {} did not complete within {} ms; canceling and restarting " +
+                    "a fresh snapshot sync.", transitionSyncId, LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS);
+            fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                    new LogReplicationEventMetadata(transitionSyncId)));
+            return;
+        }
+
         // Schedule a one time action which will verify the snapshot apply status after a given delay
         this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                 TimeUnit.MILLISECONDS);

@@ -7,15 +7,21 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckRe
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -54,6 +60,16 @@ public class WaitSnapshotApplyStateTest {
         when(fsm.getAckReader()).thenReturn(ackReader);
         when(fsm.isValidTransition(any(), any())).thenReturn(true);
         when(fsm.getStates()).thenReturn(states);
+        when(fsm.getLogReplicationFSMWorkers()).thenReturn(mock(ExecutorService.class));
+    }
+
+    private LogReplicationMetadataResponseMsg notYetAppliedResponse() {
+        // Deliberately doesn't match baseSnapshotTimestamp, so verifyStatusOfSnapshotSyncApply()
+        // takes the "still in progress" branch rather than firing SNAPSHOT_APPLY_COMPLETE.
+        return LogReplicationMetadataResponseMsg.newBuilder()
+                .setSnapshotApplied(0L)
+                .setLastLogEntryTimestamp(0L)
+                .build();
     }
 
     @Test
@@ -145,5 +161,57 @@ public class WaitSnapshotApplyStateTest {
 
         Assert.assertEquals(0, inSnapshotSyncState.consecutiveCancellations);
         Assert.assertEquals(0, inSnapshotSyncState.retryBackoffMs);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // verifyStatusOfSnapshotSyncApply()'s apply-wait bound: previously this polling loop had no
+    // bound at all, so a sink whose apply died silently (e.g. an uncaught exception on its apply
+    // executor -- see LogReplicationSinkManager.startSnapshotApply()) would leave the source polling
+    // forever with no way to notice or recover.
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void applyWaitExceedingMaxBoundCancelsAndRestarts() {
+        setup();
+        UUID syncId = UUID.randomUUID();
+        state.setTransitionSyncId(syncId);
+        state.setBaseSnapshotTimestamp(100L);
+        state.applyWaitStartTimeMs = System.currentTimeMillis() - LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS - 1000;
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        ArgumentCaptor<LogReplicationEvent> captor = ArgumentCaptor.forClass(LogReplicationEvent.class);
+        verify(fsm).input(captor.capture());
+        Assert.assertEquals("expected the stuck apply to be canceled so the existing backoff/retry " +
+                        "pipeline can restart a fresh snapshot sync",
+                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, captor.getValue().getType());
+    }
+
+    @Test
+    public void applyWaitWithinBoundDoesNotCancel() {
+        setup();
+        UUID syncId = UUID.randomUUID();
+        state.setTransitionSyncId(syncId);
+        state.setBaseSnapshotTimestamp(100L);
+        state.applyWaitStartTimeMs = System.currentTimeMillis(); // just started
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
+    public void selfLoopReEntryDoesNotRestampApplyWaitStartTime() {
+        setup();
+        state.applyWaitStartTimeMs = 12345L;
+
+        state.onEntry(state); // self-loop re-entry (from == this), as SNAPSHOT_APPLY_IN_PROGRESS produces
+
+        Assert.assertEquals("a stuck apply must not get its wait-start time perpetually refreshed by " +
+                        "its own periodic self-verification loop, or it would never be judged as having " +
+                        "exceeded the bound",
+                12345L, state.applyWaitStartTimeMs);
     }
 }

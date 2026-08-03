@@ -72,6 +72,10 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
 
         metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
+        // Explicitly state what's still needed, so the source can target retransmission precisely
+        // instead of blindly resending on a fixed cadence -- see the field's Javadoc in the .proto
+        // for why this needs to always be set (not just on a detected gap) and why it's a oneof.
+        metadata.setExpectedSeqNum(lastProcessedSeq + 1);
         log.debug("SnapshotSinkBufferManager send ACK {} for {}",
                 lastProcessedSeq, TextFormat.shortDebugString(metadata));
         return metadata.build();

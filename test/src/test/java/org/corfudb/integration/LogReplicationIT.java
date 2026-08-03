@@ -20,6 +20,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationS
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -35,6 +36,7 @@ import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
@@ -57,6 +59,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.sleep;
@@ -66,6 +69,9 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 import static org.corfudb.integration.LogReplicationAbstractIT.checkpointAndTrimCorfuStore;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -1046,6 +1052,224 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             log.debug("****** Wait past the self-unfreeze timeout for the sink to notice the silence on its own");
             waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE,
                     LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS + 15_000);
+        } finally {
+            sinkManager.shutdown();
+        }
+    }
+
+    /**
+     * Regression test for the sink's liveness signal keying off real progress rather than raw
+     * message receipt (LogReplicationSinkManager.processReceivedMessage()). Before this fix, ANY
+     * received message -- including a duplicate or out-of-order one that never advances
+     * lastProcessedSeq -- reset the self-unfreeze idle timer. A source that keeps blindly resending
+     * an unacked entry (SenderBufferManager.resend() has no retry cap of its own) could therefore
+     * keep the sink's checkpointer frozen forever, even though no real forward progress was ever
+     * being made.
+     */
+    @Test
+    public void testSinkSelfUnfreezesDespiteContinuousNonAdvancingTraffic() throws Exception {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
+                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
+                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+
+        UUID syncId = UUID.randomUUID();
+        ScheduledExecutorService nonAdvancingResends = Executors.newSingleThreadScheduledExecutor();
+        try {
+            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(syncId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(100L)
+                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                    .build();
+            log.debug("****** Deliver SNAPSHOT_START");
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+
+            // Out-of-order relative to whatever the sink expects next: gets buffered, never applied,
+            // so lastProcessedSeq never advances -- yet it's still a message the sink genuinely
+            // received, which is exactly what the old, unconditional top-of-receive() bump couldn't
+            // distinguish from real progress.
+            LogReplication.LogReplicationEntryMetadataMsg staleMessageMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(syncId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(100L)
+                    .setSnapshotSyncSeqNum(99999L)
+                    .build();
+            LogReplicationEntryMsg staleMessage = LogReplicationEntryMsg.newBuilder().setMetadata(staleMessageMetadata).build();
+
+            // Simulate a source that keeps blindly resending an unacked, out-of-order entry every 2s
+            // -- far more often than the 5s liveness-check interval -- so if any received message
+            // still reset the idle timer, self-unfreeze would never fire.
+            nonAdvancingResends.scheduleWithFixedDelay(() -> sinkManager.receive(staleMessage), 2, 2, TimeUnit.SECONDS);
+
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
+                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
+                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
+                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
+                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
+                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
+                    .build();
+
+            log.debug("****** Confirm checkpointing was frozen on SNAPSHOT_START");
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
+
+            log.debug("****** Wait past the self-unfreeze timeout, despite continuous non-advancing traffic");
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE,
+                    LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS + 15_000);
+        } finally {
+            nonAdvancingResends.shutdownNow();
+            sinkManager.shutdown();
+        }
+    }
+
+    /**
+     * Regression test for LogReplicationSinkManager.startSnapshotApply()'s exception safety. Before
+     * this fix, an uncaught exception during apply (most notably a TrimmedException -- e.g. an
+     * external, LR-unaware safety valve like the checkpointer's own freeze-token auto-expiry running
+     * a checkpoint+trim concurrently) left ongoingApply permanently true, which permanently blocked
+     * every future snapshot sync attempt (receive() drops a new attempt's SNAPSHOT_START while
+     * ongoingApply is true) -- a silent, total, unrecoverable deadlock of the whole replication
+     * session, with the source's WaitSnapshotApplyState polling forever for a completion that could
+     * never come.
+     */
+    @Test
+    public void testSinkRecoversFromApplyFailureInsteadOfPermanentlyStalling() throws Exception {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
+                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
+                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+
+        try {
+            // There's no way to force a real concurrent trim deterministically in a test, so this
+            // injects the one otherwise-untriggerable failure directly: the apply call itself
+            // throwing, exactly as it would if a concurrent trim removed shadow-stream data mid-read.
+            StreamsSnapshotWriter failingWriter = mock(StreamsSnapshotWriter.class);
+            when(failingWriter.getPhase()).thenReturn(StreamsSnapshotWriter.Phase.TRANSFER_PHASE);
+            doThrow(new TrimmedException("shadow stream data trimmed concurrently"))
+                    .when(failingWriter).startSnapshotSyncApply();
+            sinkManager.setSnapshotWriter(failingWriter);
+
+            UUID firstAttemptId = UUID.randomUUID();
+            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(firstAttemptId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(100L)
+                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                    .build();
+            log.debug("****** Deliver SNAPSHOT_START for the doomed first attempt");
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+
+            LogReplication.LogReplicationEntryMetadataMsg endMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(firstAttemptId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(100L)
+                    .setSnapshotSyncSeqNum(0L)
+                    .build();
+            log.debug("****** Deliver SNAPSHOT_END, triggering apply, which fails via the injected TrimmedException");
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(endMetadata).build());
+
+            log.debug("****** Confirm ongoingApply resets instead of staying stuck permanently true");
+            long deadline = System.currentTimeMillis() + 10_000;
+            while (sinkManager.getOngoingApply().get() && System.currentTimeMillis() < deadline) {
+                sleep(200);
+            }
+            assertThat(sinkManager.getOngoingApply().get()).isFalse();
+
+            log.debug("****** Confirm a fresh snapshot sync attempt is accepted instead of dropped");
+            UUID secondAttemptId = UUID.randomUUID();
+            LogReplication.LogReplicationEntryMetadataMsg freshStartMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(secondAttemptId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(200L)
+                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                    .build();
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(freshStartMetadata).build());
+
+            assertThat(logReplicationMetadataManager.getLastStartedSnapshotTimestamp()).isEqualTo(200L);
+        } finally {
+            sinkManager.shutdown();
+        }
+    }
+
+    /**
+     * Regression test for isProcessingSnapshotSync()'s windowed activity signal
+     * (LogReplicationSinkManager.PROCESSING_ACTIVITY_WINDOW_MS). Before this fix,
+     * isProcessingSnapshotSync() was a point-in-time snapshot of a boolean flag that flips back to
+     * false the instant a write finishes -- so a busy-signal poll landing in the gap between two
+     * discrete write bursts could under-report busyness even though the sink was clearly under
+     * continuous load. This verifies the signal stays "busy" for a short window past the write
+     * actually completing, then genuinely goes idle once that window elapses.
+     */
+    @Test
+    public void testIsProcessingReportsBusyWithinActivityWindowAfterWriteCompletes() throws Exception {
+        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
+        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
+                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
+        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
+                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+
+        try {
+            // Only the busy/idle activity-window bookkeeping in LogReplicationSinkManager itself is
+            // under test here, not actual snapshot-data application -- substitute a no-op writer so an
+            // unserialized/empty SNAPSHOT_MESSAGE payload (this test never constructs a real OpaqueEntry)
+            // doesn't fail deep inside StreamsSnapshotWriter.apply(), which expects one.
+            StreamsSnapshotWriter noOpWriter = mock(StreamsSnapshotWriter.class);
+            when(noOpWriter.getPhase()).thenReturn(StreamsSnapshotWriter.Phase.TRANSFER_PHASE);
+            sinkManager.setSnapshotWriter(noOpWriter);
+
+            UUID syncId = UUID.randomUUID();
+            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(syncId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(300L)
+                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                    .build();
+            log.debug("****** Deliver SNAPSHOT_START");
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+
+            LogReplication.LogReplicationEntryMetadataMsg dataMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
+                    .setTopologyConfigID(0)
+                    .setSyncRequestId(getUuidMsg(syncId))
+                    .setTimestamp(Address.NON_ADDRESS)
+                    .setPreviousTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotTimestamp(300L)
+                    .setSnapshotSyncSeqNum(0L)
+                    .build();
+            log.debug("****** Deliver one SNAPSHOT_MESSAGE, then check busy status immediately after "
+                    + "the (synchronous) write has already completed");
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(dataMetadata).build());
+
+            assertThat(sinkManager.isProcessingSnapshotSync())
+                    .as("still within the activity window right after the write completed")
+                    .isTrue();
+
+            log.debug("****** Wait past the activity window and confirm the sink genuinely goes idle");
+            sleep(LogReplicationConfig.PROCESSING_ACTIVITY_WINDOW_MS + 500);
+            assertThat(sinkManager.isProcessingSnapshotSync())
+                    .as("activity window has elapsed with no further writes")
+                    .isFalse();
         } finally {
             sinkManager.shutdown();
         }

@@ -83,6 +83,17 @@ public class SnapshotSender {
 
     private boolean snapshotCompleted = false;  // Flag indicating the snapshot sync is completed
 
+    // Consecutive genuine (non-busy) mid-transfer stall checks, mirroring the genuineTimeouts counter
+    // in waitForSnapshotSyncAck -- reset as soon as either progress resumes or the sink reports busy.
+    @VisibleForTesting
+    int consecutiveGenuineStallChecks = 0;
+
+    // Wall-clock time of the last mid-transfer stall check, so a tight SNAPSHOT_SYNC_CONTINUE
+    // self-loop (pending buffer permanently full) can't hammer the sink with metadata-poll requests
+    // more often than the final-ack path already does.
+    @VisibleForTesting
+    long lastStallCheckTimeMs = 0;
+
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
@@ -182,6 +193,11 @@ public class SnapshotSender {
                     snapshotSyncAck = null;
                 }
             } else if (!cancel && !stopSnapshotSync.get()) {
+                if (checkForGenuineMidTransferStall(snapshotSyncEventId, forcedSnapshotSync)) {
+                    // Cancellation already triggered for this attempt; do not also continue it.
+                    return;
+                }
+
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
                 // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
@@ -224,6 +240,15 @@ public class SnapshotSender {
                                                   CompletableFuture<LogReplicationEntryMsg> ackFuture) throws Exception {
         int genuineTimeouts = 0;
         while (true) {
+            if (stopSnapshotSync.get()) {
+                // A stop was requested (e.g. a new cancellation/request) while waiting on this
+                // attempt's ack. Without this check, a sink that always reports busy=true would keep
+                // this loop (and, transitively, cancelSnapshotSync()'s blocking wait on
+                // transmitFuture) alive indefinitely, since genuineTimeouts only advances on a
+                // non-busy timeout.
+                throw new InterruptedException("Snapshot sync " + snapshotSyncEventId
+                        + " stopped while waiting for ack.");
+            }
             try {
                 return ackFuture.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             } catch (TimeoutException te) {
@@ -256,6 +281,59 @@ public class SnapshotSender {
             log.warn("Failed to query sink status while waiting for snapshot sync ack.", e);
             return false;
         }
+    }
+
+    /**
+     * If the pending buffer has been genuinely stalled (no ack has advanced maxAckTimestamp) for at
+     * least as long as the final-ack path's own genuine-silence bound, and the sink isn't reporting
+     * activity on a paced busy-signal poll, treat this as a stalled mid-transfer attempt and cancel
+     * it -- the same busy-aware give-up waitForSnapshotSyncAck applies to the final ack, just
+     * triggered from the buffer-full self-loop instead of the tail-end blocking wait. Without this,
+     * a sink that stops acking before the source finishes reading all data never reaches
+     * waitForSnapshotSyncAck at all (snapshotCompleted never becomes true), so the final-ack fix
+     * never engages and SenderBufferManager.resend() -- which has no retry cap of its own -- would
+     * retry forever with no path to cancellation.
+     *
+     * Paces its own busy-signal polls at DEFAULT_TIMEOUT_MS so a tight SNAPSHOT_SYNC_CONTINUE
+     * self-loop (buffer permanently full) can't hammer the sink with metadata requests every
+     * iteration.
+     *
+     * @return true if a cancellation was triggered this cycle (caller must not also fire
+     *         SNAPSHOT_SYNC_CONTINUE)
+     */
+    @VisibleForTesting
+    boolean checkForGenuineMidTransferStall(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
+        if (dataSenderBufferManager.getMillisSinceLastAckAdvance()
+                < SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS) {
+            consecutiveGenuineStallChecks = 0;
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastStallCheckTimeMs < DEFAULT_TIMEOUT_MS) {
+            return false; // paced -- don't poll more often than the final-ack path does
+        }
+        lastStallCheckTimeMs = now;
+
+        if (isSinkStillProcessing()) {
+            log.info("Sink reported busy while its oldest pending snapshot entry is unacked for {}; extending patience.",
+                    snapshotSyncEventId);
+            consecutiveGenuineStallChecks = 0;
+            return false;
+        }
+
+        consecutiveGenuineStallChecks++;
+        log.warn("Mid-transfer stall {}/{} for snapshot sync {}: no ack has advanced and sink not reporting activity.",
+                consecutiveGenuineStallChecks, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
+        if (consecutiveGenuineStallChecks < SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
+            return false;
+        }
+
+        log.error("Canceling snapshot sync {}: mid-transfer stall persisted for {} genuine checks.",
+                snapshotSyncEventId, consecutiveGenuineStallChecks);
+        consecutiveGenuineStallChecks = 0;
+        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+        return true;
     }
 
     private int processReads(List<LogReplicationEntryMsg> logReplicationEntries,
@@ -366,6 +444,8 @@ public class SnapshotSender {
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
         snapshotCompleted = false;
+        consecutiveGenuineStallChecks = 0;
+        lastStallCheckTimeMs = 0;
     }
 
     /**
