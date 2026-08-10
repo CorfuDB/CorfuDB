@@ -218,6 +218,13 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
      * This is useful for JVMs who do not wish to keep the entire table
      * around in memory.
      * DO NOT USE THIS METHOD WITH NO_CACHE TABLES
+     *
+     * WARNING: this is close-then-reopen, not a release. For a disk-backed
+     * ({@link org.corfudb.runtime.collections.PersistedCorfuTable}) table it tears down the
+     * RocksDB instance and immediately builds a fresh one at the same path, so it frees no
+     * native memory and discards the materialized data as well. Callers trying to give back a
+     * disk-backed table's off-heap footprint must use {@link #close()} instead.
+     *
      * @param runtime - the runtime that was used to create this table
      */
     public void resetTableData(CorfuRuntime runtime) {
