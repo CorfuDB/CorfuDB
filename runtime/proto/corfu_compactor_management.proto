@@ -31,3 +31,23 @@ message StringKey {
 message ActiveCPStreamMsg {
   int64 sync_heartbeat = 1;
 }
+
+/**
+ * Key for the CompactionCycleHistory table.
+ * Uses cycle_count as the unique identifier for each compaction cycle.
+ */
+message CompactionCycleKey {
+  int64 cycle_count = 1;
+}
+
+/**
+ * Lightweight value for the CompactionCycleHistory table.
+ * Stores only essential information about each completed compaction cycle.
+ * Detailed per-table information can be found in logs.
+ */
+message CompactionCycleHistory {
+  int64 cycle_count = 1;
+  CheckpointingStatus.StatusType status = 2;  // COMPLETED or FAILED
+  int64 start_time_ms = 3;
+  int64 end_time_ms = 4;
+}
