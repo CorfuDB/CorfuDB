@@ -40,9 +40,9 @@ Options:
  -o <username_file>, --sasl-plain-text-username-file=<username_file>                    Path to the file containing the username for SASL Plain Text Authentication.
  -j <password_file>, --sasl-plain-text-password-file=<password_file>                    Path to the file containing the password for SASL Plain Text Authentication.
  -x <ciphers>, --tls-ciphers=<ciphers>                                                  Comma separated list of TLS ciphers to use.
-                                                                                        [default: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256].
+                                                                                        [default: strong ciphers only, see --help].
  -z <tls-protocols>, --tls-protocols=<tls-protocols>                                    Comma separated list of TLS protocols to use.
-                                                                                        [default: TLSv1.1,TLSv1.2].
+                                                                                        [default: TLSv1.2,TLSv1.3].
  -h, --help                                                                             Show this screen
  --version                                                                              Show version
 
