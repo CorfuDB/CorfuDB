@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
@@ -1054,7 +1055,63 @@ public class StreamingIT extends AbstractIT {
         assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates*2);
     }
 
+    /**
+     * Test that subscribing with a timestamp behind available data (trim-gap: sequencer returns
+     * trim mark NON_ADDRESS but first address in stream is above sync address) fails at subscribe
+     * time with StreamingException(TrimmedException) so the client can trigger full re-sync.
+     * <p>
+     * Scenario: Write only to table A, checkpoint and trim. Then write to table B (different stream
+     * tag). Stream for B has trim mark NON_ADDRESS and addresses only after trim. Subscribing to
+     * B with an old timestamp (e.g. sequence 0) triggers validateSyncAddress() to detect the gap
+     * and throw.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testSubscribeBehindTrimGapFailsAtSubscribeTime() throws Exception {
+        // Run a corfu server & initialize CorfuStore
+        CorfuRuntime runtime = initializeCorfu();
 
+        final String otherTableName = "tableTrimGap";
+        final String otherTag = "sample_streamer_2";
+
+        // Open default table (tag defaultTag) and another table (tag otherTag)
+        store.openTable(
+                namespace, defaultTableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
+        );
+        store.openTable(
+                namespace, otherTableName,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.fromProtoSchema(SampleTableBMsg.class)
+        );
+
+        // Write only to default table, then checkpoint and trim (only default table)
+        final int numUpdates = 10;
+        writeUpdatesToDefaultTable(numUpdates, 0);
+        checkpointAndTrim(runtime, namespace, Collections.singletonList(defaultTableName), false);
+        runtime.getGarbageCollector().runRuntimeGC();
+
+        // Write to the other table (other_tag) after trim — stream for other_tag now has
+        // addresses only after trim point and trim mark NON_ADDRESS on sequencer
+        writeUpdatesToRandomTable(3, 0, otherTableName);
+
+        // Subscribe to other_tag with an old timestamp (sequence 0). validateSyncAddress should
+        // see trim mark NON_ADDRESS but first address > syncAddress (1) and throw
+        // StreamingException(TrimmedException)
+        StreamListenerImpl listener = new StreamListenerImpl("listener_trim_gap");
+        assertThatThrownBy(() ->
+                store.subscribeListener(listener, namespace, otherTag,
+                        Collections.singletonList(otherTableName),
+                        Timestamp.newBuilder().setEpoch(0L).setSequence(0L).build()))
+                .isExactlyInstanceOf(StreamingException.class)
+                .hasCauseExactlyInstanceOf(TrimmedException.class)
+                .getCause()
+                .hasMessageContaining("trim")   // "trim mark" or "trimmed"
+                .hasMessageContaining("sync"); // "sync start" or "full re-sync"
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
 
     /**
      * Confirm client exceptions (during onNext processing) are not wrapped as corfu unrecoverable streaming exceptions.
