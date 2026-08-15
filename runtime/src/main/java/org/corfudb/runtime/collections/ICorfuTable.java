@@ -8,7 +8,7 @@ import java.util.stream.Stream;
 public interface ICorfuTable<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
-     *
+     * <p>
      * This function performs better than put, because no value
      * is returned (and is therefore a write rather than a read-modify-write).
      *
@@ -18,7 +18,7 @@ public interface ICorfuTable<K, V> {
     void insert(K key, V value);
 
     /** Delete a key from a map.
-     *
+     * <p>
      * This function performs better than a remove, because no value
      * is returned (and is therefore a write rather than a read-modify-write).
      *

@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Streams;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.google.common.reflect.TypeToken;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -204,6 +205,10 @@ public class DiskBackedCorfuTable<K, V> implements
     public DiskBackedCorfuTable(@NonNull PersistenceOptions persistenceOptions,
                                 @NonNull ISerializer serializer) {
         this(persistenceOptions, defaultOptions, serializer);
+    }
+
+    public static <K, V> TypeToken<DiskBackedCorfuTable<K, V>> getTypeToken() {
+        return new TypeToken<DiskBackedCorfuTable<K, V>>() {};
     }
 
     /**
