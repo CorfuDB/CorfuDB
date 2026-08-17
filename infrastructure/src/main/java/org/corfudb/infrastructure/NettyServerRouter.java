@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -18,6 +19,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The netty server router routes incoming messages to registered roles using the
@@ -100,6 +102,25 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      * @param ctx      The context of the channel handler.
      */
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
+
+        Channel channel = ctx.channel();
+        synchronized (channel) {
+            long timeout = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(100);
+            while (!channel.isWritable() && System.nanoTime() < timeout) {
+                try {
+                    TimeUnit.MILLISECONDS.sleep(1);
+                } catch (InterruptedException ie) {
+                    break;
+                }
+            }
+
+            if (!channel.isWritable()) {
+                channel.close();
+                log.warn("Channel {} not writable for {}. Dropping {}", channel, timeout, response);
+                return;
+            }
+        }
+
         ctx.writeAndFlush(response, ctx.voidPromise());
 
         if(log.isTraceEnabled()) {
