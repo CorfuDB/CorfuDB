@@ -18,10 +18,12 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 
-import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 @Builder
 @Slf4j
@@ -76,9 +78,22 @@ public class FailureDetectorService {
                 Optional<Long> unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);
                 // If the latest slot has not been filled, fill it with the previous known layout.
                 if (unfilledSlot.isPresent()) {
-                    log.info("Trying to fill an unfilled slot {}. PollReport: {}",
-                            unfilledSlot.get(), pollReport);
-                    failuresAgent.handleFailure(latestLayout, Collections.emptySet(), pollReport, endpoint).join();
+                    Set<String> locallyDetectedFailures = pollReport.getFailedNodes();
+
+                    long backoffMs = ThreadLocalRandom.current().nextLong(500, 2001);
+                    log.info("Trying to fill an unfilled slot {}. "
+                                    + "Backing off {}ms. Locally detected failures: {}. PollReport: {}",
+                            unfilledSlot.get(), backoffMs, locallyDetectedFailures, pollReport);
+
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return DetectorTask.NOT_COMPLETED;
+                    }
+
+                    failuresAgent.handleFailure(
+                            latestLayout, locallyDetectedFailures, pollReport, endpoint).join();
                     return DetectorTask.COMPLETED;
                 }
 

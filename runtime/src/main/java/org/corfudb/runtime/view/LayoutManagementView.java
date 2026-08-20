@@ -20,6 +20,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
@@ -376,6 +378,14 @@ public class LayoutManagementView extends AbstractView {
             log.error("Conflict in updating layout by attemptConsensus:", oe);
             // Update rank to be able to outrank other competition and complete paxos.
             prepareRank = oe.getNewRank() + 1;
+            try {
+                long backoffMs = ThreadLocalRandom.current().nextLong(100, 1000);
+                log.info("attemptConsensus: Backing off {}ms after OutrankedException",
+                        backoffMs);
+                TimeUnit.MILLISECONDS.sleep(backoffMs);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
             throw oe;
         }
 
