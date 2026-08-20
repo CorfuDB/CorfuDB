@@ -55,6 +55,20 @@ public class LogReplicationServer extends AbstractServer {
     private static final int MAX_EXECUTOR_QUEUE_SIZE = 5;
     private final ExecutorService executor;
 
+    /*
+     * Dedicated to LR_METADATA_REQUEST and LR_LEADERSHIP_QUERY: control-plane requests that must
+     * stay responsive independent of the data plane. Previously these shared `executor` with
+     * LR_ENTRY, whose handler (sinkManager.receive()) runs synchronously all the way down to the
+     * actual disk write/fsync with no offload -- so a metadata/heartbeat poll used specifically to
+     * distinguish "sink busy" from "sink dead" could itself get queued behind (or dropped alongside)
+     * a slow write on the very thread it needed a timely answer from, defeating its purpose exactly
+     * when it mattered most. Kept small since these handlers are cheap/non-blocking by construction
+     * (see handleMetadataRequest()/handleLogReplicationQueryLeadership() below) -- the point isn't
+     * throughput, it's never sharing a thread with LR_ENTRY's blocking work.
+     */
+    private static final int CONTROL_PLANE_EXECUTOR_QUEUE_SIZE = 5;
+    private final ExecutorService controlPlaneExecutor;
+
     @Getter
     private final LogReplicationMetadataManager metadataManager;
 
@@ -89,24 +103,35 @@ public class LogReplicationServer extends AbstractServer {
         this.metadataManager = metadataManager;
         this.sinkManager = sinkManager;
         this.executor = context.getExecutorService(1, "LogReplicationServer-");
+        this.controlPlaneExecutor = context.getExecutorService(1, "LogReplicationServer-control-");
     }
 
     /* ************ Override Methods ************ */
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        if (((ThreadPoolExecutor)executor).getQueue().size() < MAX_EXECUTOR_QUEUE_SIZE) {
-            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+        boolean isControlPlaneRequest = isControlPlaneRequest(req);
+        ExecutorService targetExecutor = isControlPlaneRequest ? controlPlaneExecutor : executor;
+        int maxQueueSize = isControlPlaneRequest ? CONTROL_PLANE_EXECUTOR_QUEUE_SIZE : MAX_EXECUTOR_QUEUE_SIZE;
+
+        if (((ThreadPoolExecutor) targetExecutor).getQueue().size() < maxQueueSize) {
+            targetExecutor.submit(() -> getHandlerMethods().handle(req, ctx, r));
         } else {
             log.warn("Server request queue at capacity ({}), dropping message {}",
-                    MAX_EXECUTOR_QUEUE_SIZE, req.getHeader().getRequestId());
+                    maxQueueSize, req.getHeader().getRequestId());
         }
+    }
+
+    private static boolean isControlPlaneRequest(RequestMsg req) {
+        PayloadCase type = req.getPayload().getPayloadCase();
+        return type == PayloadCase.LR_METADATA_REQUEST || type == PayloadCase.LR_LEADERSHIP_QUERY;
     }
 
     @Override
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
+        controlPlaneExecutor.shutdown();
     }
 
     /* ************ Server Handlers ************ */
@@ -167,7 +192,8 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(request, ctx, router, false)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
-            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
+            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()),
+                    sinkManager.isProcessingSnapshotSync());
             log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
             router.sendResponse(response, ctx);
 

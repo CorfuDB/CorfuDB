@@ -482,7 +482,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
     }
 
-    enum Phase {
+    public enum Phase {
         TRANSFER_PHASE,
         APPLY_PHASE
     }

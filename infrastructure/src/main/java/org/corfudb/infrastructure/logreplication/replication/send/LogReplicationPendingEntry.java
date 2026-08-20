@@ -29,6 +29,13 @@ public class LogReplicationPendingEntry {
     // The number of retries for this entry
     public int retry;
 
+    // Set to force this entry to be resent on the very next resend() call, bypassing timeout()'s
+    // cadence check entirely -- used when the receiver has explicitly confirmed it's still waiting
+    // for this entry (see SnapshotSenderBufferManager.expediteResendFrom()), rather than relying on
+    // this class's internal simulated clock (which advances a fixed amount per call, not per real
+    // elapsed time, so there is no wall-clock value that reliably forces an "immediate" timeout).
+    private boolean expedited = false;
+
     public LogReplicationPendingEntry(LogReplicationEntryMsg data) {
         this.data = data;
         this.time = getCurrentTime();

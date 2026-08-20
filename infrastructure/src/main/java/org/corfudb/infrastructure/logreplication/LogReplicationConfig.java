@@ -31,6 +31,47 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
+    // Number of consecutive ack-wait timeouts, during a single snapshot-sync attempt, for which the
+    // sink reports no activity at all (not even a busy signal) before the source gives up on that
+    // attempt and cancels it. This bounds how long the source will wait in genuine silence.
+    public static final int SNAPSHOT_SYNC_ACK_MAX_RETRIES = 6;
+
+    // Exponential backoff applied between a canceled snapshot-sync attempt and the next retry, to
+    // avoid a tight zero-delay restart loop against a struggling sink.
+    public static final long INITIAL_RETRY_BACKOFF_MS = 2000;
+    public static final long MAX_RETRY_BACKOFF_MS = 60000;
+
+    // The sink independently unfreezes local checkpointing if it has heard nothing at all from the
+    // source for this many multiples of the source's own genuine-silence bound
+    // (SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS). Deliberately derived from that same
+    // value -- not an independent constant -- so it can never be tuned out of sync with the source,
+    // and can never fire before the source has actually given up on the current attempt.
+    public static final double SINK_SELF_UNFREEZE_SAFETY_FACTOR = 1.5;
+
+    public static final long SINK_SELF_UNFREEZE_TIMEOUT_MS =
+            (long) (SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS * SINK_SELF_UNFREEZE_SAFETY_FACTOR);
+
+    // Maximum time the source will wait in WAIT_SNAPSHOT_APPLY for the sink to report apply complete
+    // before giving up on this attempt and restarting a fresh snapshot sync. There is no way to
+    // observe partial apply progress today (the sink only reports a single done/not-done boundary),
+    // so this is deliberately a generous absolute bound rather than a stall-since-last-progress bound:
+    // it exists purely as a backstop against the sink's apply having silently died (e.g. an uncaught
+    // exception on its apply executor -- see LogReplicationSinkManager.startSnapshotApply()) rather
+    // than to police the speed of a large, legitimately-slow-but-healthy apply. Giving up and
+    // restarting is always safe (a fresh full transfer, not data loss), so erring generous here only
+    // costs time, not correctness.
+    public static final long SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
+
+    // Window within which the sink still reports itself as "processing" even after the specific
+    // write/apply flag flips back to false, to smooth over the natural gap between two discrete
+    // write bursts (e.g. message N finishes, message N+1 arrives 50ms later -- during that gap the
+    // sink is clearly still under continuous load, not idle). Without this, isProcessingSnapshotSync()
+    // is a point-in-time snapshot that can under-report busyness purely due to being sampled between
+    // bursts, which matters because it's consulted by both the source's busy-signal poll and the
+    // sink's own self-unfreeze liveness check. Deliberately small relative to DEFAULT_TIMEOUT_MS so
+    // it only smooths real gaps between bursts, not meaningfully delay stall/self-unfreeze detection.
+    public static final long PROCESSING_ACTIVITY_WINDOW_MS = 2000;
+
     // Log Replication default max number of messages generated at the active cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 5;
 

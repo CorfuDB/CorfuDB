@@ -36,6 +36,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     public void updateAck(Long newAck) {
         if (maxAckTimestamp < newAck) {
             log.debug("Ack Received for Snapshot Sync {}", newAck);
+            markAckAdvanced();
             maxAckTimestamp = newAck;
             pendingMessages.evictAccordingToSeqNum(maxAckTimestamp);
             pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
@@ -61,6 +62,31 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
             // calculated correctly
             ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotTimestamp(),
                     ReplicationStatusVal.SyncType.SNAPSHOT);
+        }
+
+        // A sink new enough to report this has explicitly confirmed what it's still waiting for --
+        // a receiver-directed retransmit request, not a guess. Expedite resend of exactly that
+        // instead of waiting out each entry's individual per-entry cadence timer. An old sink's acks
+        // simply never set this field (hasExpectedSeqNum() == false), so this is a no-op against a
+        // peer that doesn't support it -- safe during a rolling upgrade in either direction.
+        if (entry.getMetadata().hasExpectedSeqNum()) {
+            expediteResendFrom(entry.getMetadata().getExpectedSeqNum());
+        }
+    }
+
+    /**
+     * Mark every pending entry at or after expectedSeqNum as due for resend on the very next
+     * resend() call, bypassing its individual per-entry cadence timer. Uses an explicit flag
+     * (LogReplicationPendingEntry.expedited) rather than manipulating the entry's own timer state:
+     * that class's internal clock advances a fixed amount per call rather than per real elapsed
+     * time, so there is no timer value that reliably forces an "immediate" timeout on the very next
+     * check.
+     */
+    private void expediteResendFrom(long expectedSeqNum) {
+        for (LogReplicationPendingEntry entry : pendingMessages.getPendingEntries()) {
+            if (entry.getData().getMetadata().getSnapshotSyncSeqNum() >= expectedSeqNum) {
+                entry.setExpedited(true);
+            }
         }
     }
 

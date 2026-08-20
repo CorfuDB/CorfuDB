@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -55,6 +56,11 @@ public class LogReplicationSinkManager implements DataReceiver {
     private static final String CONFIG_FILE = "/config/corfu/corfu_replication_config.properties";
 
     private static final int DEFAULT_ACK_CNT = 1;
+
+    // How often to check whether the current snapshot sync attempt has gone silent (see
+    // checkSnapshotSyncLiveness()). Deliberately smaller than the self-unfreeze timeout itself so
+    // the check granularity doesn't materially delay the reaction once the threshold is crossed.
+    private static final long SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS = 5000;
 
     // Duration in milliseconds after which an ACK is sent back to the sender
     // if the message count is not reached before
@@ -103,6 +109,45 @@ public class LogReplicationSinkManager implements DataReceiver {
     private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
     private int waitMsBeforeSnapshotApply;
+
+    // Set while a received snapshot-sync message is actively being written (e.g. blocked on fsync),
+    // so the source can distinguish "sink is alive but slow" from "sink is unresponsive" instead of
+    // relying solely on a fixed ack timeout.
+    private final AtomicBoolean processingSnapshotWrite = new AtomicBoolean(false);
+
+    // Timestamp of the most recent transition of processingSnapshotWrite/ongoingApply, in either
+    // direction. Lets isProcessingSnapshotSync() report "busy" for a short window even between two
+    // discrete write bursts, rather than being a point-in-time snapshot that can under-report
+    // busyness purely due to when it happens to be sampled.
+    private volatile long lastProcessingActivityTimeMs = System.currentTimeMillis();
+
+    // Timestamp of the most recent snapshot-sync-related message received, used to detect that the
+    // source has gone silent on the current attempt (e.g. it canceled and is backing off before
+    // retrying, or the connection dropped) so local checkpointing can be unfrozen proactively instead
+    // of waiting on a message that may not arrive for a while, if at all.
+    private volatile long lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+
+    // Guards against calling onSnapshotSyncEnd() on every liveness-check tick once the self-timeout
+    // has fired for the current idle period; cleared as soon as new activity is observed.
+    private final AtomicBoolean selfUnfrozeForCurrentIdlePeriod = new AtomicBoolean(false);
+
+    // Timestamp ongoingApply last transitioned to true, used by checkForStuckApply() to detect a
+    // genuine hang (as opposed to startSnapshotApply() failing fast, which its own try/finally
+    // already handles -- see that method's Javadoc). There is no safe way in Java to forcibly
+    // reclaim a thread stuck in a non-interruptible call, so this is deliberately detection/alerting
+    // only: it can't unstick the hung thread or free up applyExecutor's single worker, but it turns
+    // an otherwise totally silent, permanent deadlock into a loud, operator-visible one.
+    private volatile long applyStartTimeMs = 0;
+
+    // Guards against re-logging the stuck-apply alert on every watchdog tick once it's fired once for
+    // the current apply attempt; cleared as soon as a new apply attempt starts.
+    private final AtomicBoolean loggedStuckApplyForCurrentAttempt = new AtomicBoolean(false);
+
+    private final ScheduledExecutorService snapshotSyncLivenessExecutor = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat("snapshotSyncLivenessExecutor")
+                    .build());
 
     /**
      * Constructor Sink Manager
@@ -169,6 +214,13 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .setDaemon(true)
                         .setNameFormat("snapshotSyncApplyExecutor")
                         .build());
+
+        this.snapshotSyncLivenessExecutor.scheduleWithFixedDelay(this::checkSnapshotSyncLiveness,
+                SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS, SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
+        this.snapshotSyncLivenessExecutor.scheduleWithFixedDelay(this::checkForStuckApply,
+                SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS, SNAPSHOT_SYNC_LIVENESS_CHECK_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
 
         initWriterAndBufferMgr();
     }
@@ -279,14 +331,12 @@ public class LogReplicationSinkManager implements DataReceiver {
         // If it receives a SNAPSHOT_START message, prepare a transition
         if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
             if (isValidSnapshotStart(message)) {
+                // processSnapshotStart() resets the liveness clock and calls the snapshot sync
+                // plugin's start (freeze) callback itself, both inside the same synchronized(this)
+                // boundary that checkSnapshotSyncLiveness() uses for its unfreeze decision -- see
+                // that method's Javadoc for why this matters (a stale unfreeze decision for a prior,
+                // now-abandoned attempt must not be able to land after this attempt has re-frozen).
                 processSnapshotStart(message);
-                // The SnapshotPlugin will be called when LR is ready to start a snapshot sync,
-                // so the system can prepare for the full sync. Typically, to stop checkpoint/trim
-                // during the period of the snapshot sync to prevent data loss from shadow tables
-                // (temporal non-checkpointed streams). This is a blocking call.
-                log.info("Enter onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
-                snapshotSyncPlugin.onSnapshotSyncStart(runtime);
-                log.info("Exit onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
             }
             return null;
         }
@@ -331,8 +381,137 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplication.LogReplicationEntryMsg processReceivedMessage(LogReplication.LogReplicationEntryMsg message) {
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
             return logEntrySinkBufferManager.processMsgAndBuffer(message);
-        } else {
-            return snapshotSinkBufferManager.processMsgAndBuffer(message);
+        }
+        long lastProcessedSeqBefore = snapshotSinkBufferManager.lastProcessedSeq;
+        processingSnapshotWrite.set(true);
+        lastProcessingActivityTimeMs = System.currentTimeMillis();
+        try {
+            LogReplication.LogReplicationEntryMsg ack = snapshotSinkBufferManager.processMsgAndBuffer(message);
+            // Only genuine forward progress counts as liveness activity -- shouldAck() acks on a
+            // time/count cadence independent of whether this specific message advanced anything, so
+            // a duplicate or out-of-order message can still produce a non-null ack. Gating on
+            // lastProcessedSeq actually changing is what distinguishes "the sink made progress" from
+            // "the sink said something", which matters because the source may be blindly resending an
+            // unacked entry indefinitely (SenderBufferManager.resend() has no retry cap) -- without
+            // this, that alone would keep resetting checkSnapshotSyncLiveness()'s idle timer forever.
+            if (snapshotSinkBufferManager.lastProcessedSeq != lastProcessedSeqBefore) {
+                lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+                selfUnfrozeForCurrentIdlePeriod.set(false);
+            }
+            return ack;
+        } finally {
+            processingSnapshotWrite.set(false);
+            lastProcessingActivityTimeMs = System.currentTimeMillis();
+        }
+    }
+
+    /**
+     * Whether the sink is currently actively working on the in-progress snapshot sync (writing an
+     * incoming batch, or applying a completed transfer), as opposed to merely having one open with
+     * nothing happening. Used by the source to tell a busy-but-alive sink apart from a stalled one.
+     *
+     * Reports "busy" for a short window after the last write/apply transition too (see
+     * PROCESSING_ACTIVITY_WINDOW_MS), not just while a flag happens to be true at the exact instant
+     * this is called -- otherwise this is a point-in-time snapshot that can under-report continuous
+     * load purely because it was sampled in the gap between two discrete write bursts.
+     */
+    public boolean isProcessingSnapshotSync() {
+        return isWriteOrApplyInFlight()
+                || (System.currentTimeMillis() - lastProcessingActivityTimeMs) < LogReplicationConfig.PROCESSING_ACTIVITY_WINDOW_MS;
+    }
+
+    /**
+     * Whether a write or apply is in flight at this exact instant, with no smoothing window applied.
+     * Unlike isProcessingSnapshotSync(), this does NOT treat a message merely having been received
+     * recently as "busy" -- only used where that distinction matters (checkSnapshotSyncLiveness()):
+     * isProcessingSnapshotSync()'s windowed component exists to bridge the ~50ms gap between two
+     * discrete write bursts for the source's short (DEFAULT_TIMEOUT_MS-scale) busy poll, and every
+     * call into processReceivedMessage() re-arms it regardless of whether that call advanced anything
+     * -- including a duplicate or out-of-order message. At checkSnapshotSyncLiveness()'s much longer
+     * (SINK_SELF_UNFREEZE_TIMEOUT_MS-scale) timeout, that same windowing lets a steady drip of
+     * non-advancing messages (spaced closer than PROCESSING_ACTIVITY_WINDOW_MS) look perpetually busy
+     * forever, defeating self-unfreeze exactly in the scenario it exists to handle.
+     */
+    private boolean isWriteOrApplyInFlight() {
+        return processingSnapshotWrite.get() || ongoingApply.get();
+    }
+
+    /**
+     * Runs periodically while a snapshot sync is open. If the source has gone silent on the current
+     * TRANSFER-phase attempt (no message at all, not even one indicating it's still working) for
+     * longer than the calibrated self-unfreeze timeout, unfreeze local checkpointing proactively
+     * instead of waiting on a retry (or a connection recovery) that may not come for a while.
+     *
+     * Deliberately restricted to the TRANSFER phase: unfreezing during APPLY risks the checkpointer
+     * trimming shadow-stream data the apply still needs, mirroring the same restriction already
+     * applied in stopOnLeadershipLoss().
+     *
+     * The read-idle-then-CAS-then-call sequence below is deliberately inside a synchronized(this)
+     * block sharing the same monitor as processSnapshotStart(). Without that, a fresh SNAPSHOT_START
+     * for a new attempt could land -- resetting lastSnapshotSyncActivityTimeMs and re-freezing --
+     * in the gap between this method reading a stale idleMs (for the OLD, now-abandoned attempt) and
+     * actually calling onSnapshotSyncEnd(), incorrectly lifting the new attempt's freeze instead of
+     * the old one's. That window is narrow but not negligible: it's most likely to actually be hit
+     * early in a backoff sequence (e.g. ~16-32s backoff), where the gap between this timeout firing
+     * and the next SNAPSHOT_START arriving is only a few seconds rather than the tens-of-seconds
+     * margin the steady-state (60s-capped backoff) case has. Synchronizing on the same monitor makes
+     * the two mutually exclusive: whichever happens first (the stale unfreeze decision completing, or
+     * the new attempt's reset) fully completes before the other can begin.
+     *
+     * The guard clause is deliberately evaluated twice: once unsynchronized (fast path) and once
+     * again inside the synchronized block (the one that actually matters for correctness -- classic
+     * double-checked locking). This matters specifically because startSnapshotApply() (and
+     * processSnapshotStart()) also hold this same monitor: if apply ever genuinely hangs (as opposed
+     * to failing fast, which startSnapshotApply()'s try/finally already handles) rather than just
+     * running long, a version of this method that unconditionally entered synchronized(this) first
+     * would block this scheduled check forever too, right along with everything else contending for
+     * the monitor -- entirely defeating the purpose of a periodic liveness check. The unsynchronized
+     * guard clause reads ongoingApply (via isWriteOrApplyInFlight(), a lock-free AtomicBoolean) and
+     * snapshotWriter.getPhase() (a plain, unsynchronized field read on a different object) -- both
+     * readable without contending for this monitor at all, and ongoingApply is set true before
+     * startSnapshotApply() is even submitted and stays true for that call's entire duration
+     * (including any hang), so this fast path reliably and correctly bails out during any hang,
+     * regardless of whether the hang happens before or after the phase actually flips to APPLY_PHASE.
+     *
+     * Deliberately checks isWriteOrApplyInFlight(), not isProcessingSnapshotSync(): the latter's
+     * PROCESSING_ACTIVITY_WINDOW_MS smoothing is re-armed by every call into processReceivedMessage(),
+     * including a non-advancing duplicate or out-of-order message, which would let a steady drip of
+     * such messages (spaced closer than that window) mask the exact silent-source scenario this
+     * method exists to detect. lastSnapshotSyncActivityTimeMs below is the correctly progress-gated
+     * signal for that; isWriteOrApplyInFlight() only guards against firing mid-write.
+     */
+    private void checkSnapshotSyncLiveness() {
+        try {
+            if (rxState != RxState.SNAPSHOT_SYNC
+                    || snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.TRANSFER_PHASE
+                    || isWriteOrApplyInFlight()) {
+                selfUnfrozeForCurrentIdlePeriod.set(false);
+                return;
+            }
+
+            synchronized (this) {
+                // Re-verify: the fast, unsynchronized check above could be stale by the time we get
+                // here (e.g. a fresh SNAPSHOT_START landed in between). Everything from here down is
+                // atomic with processSnapshotStart()'s reset.
+                if (rxState != RxState.SNAPSHOT_SYNC
+                        || snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.TRANSFER_PHASE
+                        || isWriteOrApplyInFlight()) {
+                    selfUnfrozeForCurrentIdlePeriod.set(false);
+                    return;
+                }
+
+                long idleMs = System.currentTimeMillis() - lastSnapshotSyncActivityTimeMs;
+                if (idleMs > LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS
+                        && selfUnfrozeForCurrentIdlePeriod.compareAndSet(false, true)) {
+                    log.warn("No activity for snapshot sync {} for {} ms while in TRANSFER phase; unfreezing local " +
+                            "checkpointing proactively instead of waiting on the source.", lastSnapshotSyncId, idleMs);
+                    log.info("Enter onSnapshotSyncEnd (self-timeout) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+                    snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+                    log.info("Exit onSnapshotSyncEnd (self-timeout) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+                }
+            }
+        } catch (Throwable t) {
+            log.error("Error while checking snapshot sync liveness.", t);
         }
     }
 
@@ -421,8 +600,22 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
+        lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+        selfUnfrozeForCurrentIdlePeriod.set(false);
         log.info("Sink manager entry {} state, snapshot start with {}",
                 rxState, TextFormat.shortDebugString(entry.getMetadata()));
+
+        // The SnapshotPlugin is called when LR is ready to start a snapshot sync, so the system can
+        // prepare for the full sync -- typically, to stop checkpoint/trim during the snapshot sync to
+        // prevent data loss from shadow tables (temporal non-checkpointed streams). This is a
+        // blocking call. It's deliberately inside this synchronized method (rather than in the
+        // receive() caller, as it was previously) so it's atomic with respect to
+        // checkSnapshotSyncLiveness()'s unfreeze decision, which synchronizes on the same monitor:
+        // a stale unfreeze decision for a prior, now-abandoned attempt can no longer land after this
+        // freshly-started attempt has already re-frozen, and vice versa.
+        log.info("Enter onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+        snapshotSyncPlugin.onSnapshotSyncStart(runtime);
+        log.info("Exit onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
     }
 
     /**
@@ -503,33 +696,91 @@ public class LogReplicationSinkManager implements DataReceiver {
     private synchronized void startSnapshotApplyAsync(LogReplication.LogReplicationEntryMsg entry) {
         if (!ongoingApply.get()) {
             ongoingApply.set(true);
+            lastProcessingActivityTimeMs = System.currentTimeMillis();
+            applyStartTimeMs = System.currentTimeMillis();
+            loggedStuckApplyForCurrentAttempt.set(false);
             applyExecutor.submit(() -> startSnapshotApply(entry));
+        }
+    }
+
+    /**
+     * Runs periodically while a snapshot sync is open. Detects a genuinely hung apply -- as opposed
+     * to one that fails fast, which startSnapshotApply()'s try/finally already handles -- and logs a
+     * loud, explicit alert. This is deliberately detection/alerting only: there is no safe way in
+     * Java to forcibly reclaim a thread stuck in a non-interruptible call (e.g. blocked disk I/O with
+     * no internal timeout, or a genuine deadlock), and applyExecutor has exactly one worker thread,
+     * so even if ongoingApply were forced back to false here, a subsequent apply attempt would just
+     * queue behind the still-running hung task forever rather than actually making progress. Recovery
+     * from this specific case requires an operator (or automation watching for this log line)
+     * restarting the sink process. Turning an otherwise totally silent, permanent deadlock into a
+     * loud, operator-visible one is the achievable improvement here.
+     */
+    private void checkForStuckApply() {
+        try {
+            if (!ongoingApply.get()) {
+                loggedStuckApplyForCurrentAttempt.set(false);
+                return;
+            }
+
+            long applyElapsedMs = System.currentTimeMillis() - applyStartTimeMs;
+            if (applyElapsedMs > LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS
+                    && loggedStuckApplyForCurrentAttempt.compareAndSet(false, true)) {
+                log.error("Snapshot sync apply has been ongoing for {} ms with no completion -- this may be a " +
+                        "genuine hang (e.g. blocked I/O or a deadlock) that this process cannot recover from on " +
+                        "its own. Manual intervention (restarting this sink) is likely required if this " +
+                        "persists.", applyElapsedMs);
+            }
+        } catch (Throwable t) {
+            log.error("Error while checking for a stuck snapshot sync apply.", t);
         }
     }
 
     private synchronized void startSnapshotApply(LogReplication.LogReplicationEntryMsg entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
 
-        if (waitMsBeforeSnapshotApply > 0) {
-            log.info("Waiting for {} ms before starting Snapshot Apply", waitMsBeforeSnapshotApply);
-            try {
-                TimeUnit.MILLISECONDS.sleep(waitMsBeforeSnapshotApply);
-            } catch (InterruptedException e) {
-                log.warn("Snapshot Apply Wait Interrupted.  Continuing Snapshot Apply");
+        // Guards the whole apply attempt: previously, any exception thrown below (most notably a
+        // TrimmedException -- e.g. an external, LR-unaware safety valve like the checkpointer's own
+        // freeze-token auto-expiry running a checkpoint+trim concurrently and removing shadow-stream
+        // data this apply still needed) would propagate out of this Runnable uncaught. Nobody calls
+        // .get() on the Future returned by applyExecutor.submit(), so the exception was silently
+        // swallowed, and because ongoingApply.set(false) below never ran, ongoingApply stayed true
+        // permanently -- which also permanently blocks every future attempt, since receive() drops
+        // any new snapshot sync's messages (including its SNAPSHOT_START) while ongoingApply is true.
+        // The result was a silent, total, unrecoverable deadlock of the whole replication session,
+        // with the source's WaitSnapshotApplyState polling forever for a completion that could never
+        // come. This attempt's transferred data is unrecoverable in that scenario regardless (the
+        // shadow streams it depended on are gone) -- the only correct recovery is to abandon this
+        // attempt cleanly and let a fresh full transfer happen, which is exactly what resetting
+        // ongoingApply enables: it un-gates receive() so the next SNAPSHOT_START is accepted instead
+        // of dropped, and processSnapshotStart() unconditionally resets everything else needed.
+        try {
+            if (waitMsBeforeSnapshotApply > 0) {
+                log.info("Waiting for {} ms before starting Snapshot Apply", waitMsBeforeSnapshotApply);
+                try {
+                    TimeUnit.MILLISECONDS.sleep(waitMsBeforeSnapshotApply);
+                } catch (InterruptedException e) {
+                    log.warn("Snapshot Apply Wait Interrupted.  Continuing Snapshot Apply");
+                }
             }
-        }
 
-        // set data_consistent as false
-        setDataConsistentWithRetry(false);
-        
-        // Sync with registry after transfer phase to capture local updates, as transfer phase could
-        // take a relatively long time.
-        config.syncWithRegistry();
-        snapshotWriter.clearLocalStreams();
-        snapshotWriter.startSnapshotSyncApply();
-        completeSnapshotApply(entry);
-        ongoingApply.set(false);
-        log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+            // set data_consistent as false
+            setDataConsistentWithRetry(false);
+
+            // Sync with registry after transfer phase to capture local updates, as transfer phase could
+            // take a relatively long time.
+            config.syncWithRegistry();
+            snapshotWriter.clearLocalStreams();
+            snapshotWriter.startSnapshotSyncApply();
+            completeSnapshotApply(entry);
+            log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+        } catch (Throwable t) {
+            log.error("Snapshot sync apply failed for id={}; abandoning this attempt -- its transferred " +
+                    "data is unrecoverable, a fresh full snapshot sync will be needed.",
+                    entry.getMetadata().getSyncRequestId(), t);
+        } finally {
+            ongoingApply.set(false);
+            lastProcessingActivityTimeMs = System.currentTimeMillis();
+        }
     }
 
     private void completeSnapshotTransfer(LogReplication.LogReplicationEntryMsg message) {
@@ -574,6 +825,16 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
+     * Test-only seam to inject a substitute snapshot writer (e.g. one that throws on demand), so
+     * failure paths that are otherwise only reachable via an actual concurrent trim (see
+     * startSnapshotApply()'s exception handling) can be exercised deterministically.
+     */
+    @VisibleForTesting
+    public void setSnapshotWriter(StreamsSnapshotWriter snapshotWriter) {
+        this.snapshotWriter = snapshotWriter;
+    }
+
+    /**
      * Update the topology config id
      *
      * @param topologyConfigId
@@ -603,6 +864,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
+        this.snapshotSyncLivenessExecutor.shutdownNow();
     }
 
     /**

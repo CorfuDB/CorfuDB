@@ -1,11 +1,13 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -71,6 +73,15 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private boolean forcedSnapshotSync;
 
     /**
+     * Wall-clock time this apply wait began for the current attempt. Stamped only on a genuine
+     * (from != this) entry, mirroring InSnapshotSyncState's lastEntryTimeMs -- the periodic
+     * self-verification re-entry (onEntry(this)) must not reset it, or a stuck apply would never
+     * actually be judged to have exceeded the bound.
+     */
+    @VisibleForTesting
+    long applyWaitStartTimeMs;
+
+    /**
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
@@ -95,6 +106,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionSyncId(event.getMetadata().getSyncId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                // A request arriving here abandons and restarts the current attempt exactly like a
+                // SYNC_CANCEL does, and must not bypass the same backoff accounting, or repeated
+                // requests landing during apply-wait would be another avenue for a restart storm.
+                ((InSnapshotSyncState) snapshotSyncState).registerCancellationAndComputeBackoff();
                 return snapshotSyncState;
             case SYNC_CANCEL:
                 if(fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -104,6 +119,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                    ((InSnapshotSyncState) inSnapshotSyncState).registerCancellationAndComputeBackoff();
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
@@ -151,6 +167,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getMetadata().getSyncId(), event.getMetadata().getLastTransferredBaseSnapshot());
+                    // Full end-to-end completion; clear the backoff so the next, unrelated snapshot
+                    // sync doesn't inherit it.
+                    ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                     return logEntrySyncState;
                 }
 
@@ -161,9 +180,12 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                // A stop is a clean boundary; a later, unrelated session must not inherit this backoff.
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 if (!fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -187,6 +209,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
         if (from != this) {
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+            // Only a genuine new entry marks "this apply wait just started" -- the periodic
+            // self-verification loop re-enters via onEntry(this) every SCHEDULE_APPLY_MONITOR_DELAY,
+            // and restamping here would make a stuck apply always look like it just started.
+            applyWaitStartTimeMs = System.currentTimeMillis();
         }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
     }
@@ -203,7 +229,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
     }
 
-    private void verifyStatusOfSnapshotSyncApply() {
+    @VisibleForTesting
+    void verifyStatusOfSnapshotSyncApply() {
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -229,6 +256,26 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
         }
+
+        // Previously this loop had no bound at all: on the sink, an apply that failed with an
+        // uncaught exception (e.g. a TrimmedException from a checkpoint/trim running concurrently --
+        // now fixed to at least clean up locally, see LogReplicationSinkManager.startSnapshotApply())
+        // would never advance its persisted snapshotApplied metadata, so the condition above could
+        // never become true and this would poll forever with no way for the source to ever notice or
+        // recover. There's no way to observe partial apply progress today (the sink only reports a
+        // single done/not-done boundary), so this is a generous absolute bound rather than a
+        // stall-since-last-progress one -- see SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS's Javadoc. Canceling
+        // and restarting is always safe (a fresh full transfer, not data loss), so erring generous
+        // here only costs time, not correctness.
+        long applyWaitElapsedMs = System.currentTimeMillis() - applyWaitStartTimeMs;
+        if (applyWaitElapsedMs > LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS) {
+            log.error("Snapshot sync apply for {} did not complete within {} ms; canceling and restarting " +
+                    "a fresh snapshot sync.", transitionSyncId, LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS);
+            fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                    new LogReplicationEventMetadata(transitionSyncId)));
+            return;
+        }
+
         // Schedule a one time action which will verify the snapshot apply status after a given delay
         this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                 TimeUnit.MILLISECONDS);

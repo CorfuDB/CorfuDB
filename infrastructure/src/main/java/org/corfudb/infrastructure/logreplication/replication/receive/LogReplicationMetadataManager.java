@@ -246,6 +246,15 @@ public class LogReplicationMetadataManager {
     }
 
     public ResponseMsg getMetadataResponse(HeaderMsg header) {
+        return getMetadataResponse(header, false);
+    }
+
+    /**
+     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
+     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
+     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
+     */
+    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing) {
         LogReplication.LogReplicationMetadataResponseMsg metadataMsg = LogReplication.LogReplicationMetadataResponseMsg
                 .newBuilder()
                 .setTopologyConfigID(getTopologyConfigId())
@@ -253,7 +262,8 @@ public class LogReplicationMetadataManager {
                 .setSnapshotStart(getLastStartedSnapshotTimestamp())
                 .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
                 .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
-                .setLastLogEntryTimestamp(getLastProcessedLogEntryBatchTimestamp()).build();
+                .setLastLogEntryTimestamp(getLastProcessedLogEntryBatchTimestamp())
+                .setIsProcessing(isProcessing).build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
                 .setLrMetadataResponse(metadataMsg).build();
         return getResponseMsg(header, payload);
