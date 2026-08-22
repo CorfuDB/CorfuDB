@@ -1,4 +1,4 @@
-name: Integration Test
+name: Corfu Integration Test
 
 on: pull_request
 
@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integration_test:
+  corfu_integration_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     runs-on: ubuntu-22.04
 
@@ -35,5 +35,5 @@ jobs:
       - name: build corfu
         run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
-      - name: run integration tests
+      - name: run corfu integration tests
         run: ./mvnw -pl :test clean verify -Pit -DskipTests
