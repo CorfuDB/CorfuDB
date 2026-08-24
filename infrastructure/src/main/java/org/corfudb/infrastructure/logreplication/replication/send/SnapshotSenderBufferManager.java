@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -21,6 +22,14 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SnapshotSenderBufferManager extends SenderBufferManager {
     private LogReplicationAckReader ackReader;
+
+    // The expectedSeqNum most recently reported by the sink, or Address.NON_ADDRESS if none has
+    // been reported yet. expectedSeqNum is always lastProcessedSeq + 1 (see
+    // SnapshotSinkBufferManager.generateAckMetadata()), so by itself it carries no more
+    // information than the ack it rides on -- it only reveals a genuine gap when it fails to
+    // advance across two acks despite the source continuing to send, which is what this field is
+    // used to detect (see expediteResendFrom() callers).
+    private long lastReportedExpectedSeqNum = Address.NON_ADDRESS;
 
     public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
         super(dataSender, configureAcksCounter());
@@ -64,13 +73,20 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
                     ReplicationStatusVal.SyncType.SNAPSHOT);
         }
 
-        // A sink new enough to report this has explicitly confirmed what it's still waiting for --
-        // a receiver-directed retransmit request, not a guess. Expedite resend of exactly that
-        // instead of waiting out each entry's individual per-entry cadence timer. An old sink's acks
-        // simply never set this field (hasExpectedSeqNum() == false), so this is a no-op against a
-        // peer that doesn't support it -- safe during a rolling upgrade in either direction.
+        // A sink new enough to report this has explicitly confirmed what it's still waiting for.
+        // expectedSeqNum is always lastProcessedSeq + 1, so on its own it's just a restatement of
+        // the ack -- it only becomes a genuine "I'm stuck" signal if it fails to advance across two
+        // consecutive acks despite the source continuing to send in between. Only expedite in that
+        // case; otherwise this would fire on every single ack of a perfectly healthy transfer,
+        // resending the entire in-flight window each time. An old sink's acks simply never set this
+        // field (hasExpectedSeqNum() == false), so this is a no-op against a peer that doesn't
+        // support it -- safe during a rolling upgrade in either direction.
         if (entry.getMetadata().hasExpectedSeqNum()) {
-            expediteResendFrom(entry.getMetadata().getExpectedSeqNum());
+            long reportedExpectedSeqNum = entry.getMetadata().getExpectedSeqNum();
+            if (reportedExpectedSeqNum == lastReportedExpectedSeqNum) {
+                expediteResendFrom(reportedExpectedSeqNum);
+            }
+            lastReportedExpectedSeqNum = reportedExpectedSeqNum;
         }
     }
 
@@ -99,6 +115,18 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     @Override
     public void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf) {
         pendingCompletableFutureForAcks.put(message.getMetadata().getSnapshotSyncSeqNum(), cf);
+    }
+
+    /**
+     * In addition to the base reset, clears the previously-reported expectedSeqNum: it's scoped to
+     * a single attempt, and each attempt's sequence numbers restart from Address.NON_ADDRESS (see
+     * SenderBufferManager.reset()), so a stale value from a prior, now-abandoned attempt must not
+     * be compared against this attempt's acks.
+     */
+    @Override
+    public void reset(long lastAckedTimestamp) {
+        super.reset(lastAckedTimestamp);
+        lastReportedExpectedSeqNum = Address.NON_ADDRESS;
     }
 
     private static Optional<AtomicLong> configureAcksCounter() {

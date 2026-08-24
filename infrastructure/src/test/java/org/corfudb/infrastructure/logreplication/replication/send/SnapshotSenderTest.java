@@ -251,7 +251,7 @@ public class SnapshotSenderTest {
     // ------------------------------------------------------------------------------------------
 
     @Test
-    public void ackWithExpectedSeqNumExpeditesResendOfPendingEntriesAtOrAfterIt() {
+    public void repeatedExpectedSeqNumAcrossAcksExpeditesResendOfPendingEntriesAtOrAfterIt() {
         // sendWithBuffering() overrides whatever snapshotSyncSeqNum is set on the message with its
         // own auto-incrementing counter (starting at Address.NON_ADDRESS = -1), so four calls here
         // produce entries with seq -1, 0, 1, 2 regardless of what snapshotDataMessage() set.
@@ -261,8 +261,21 @@ public class SnapshotSenderTest {
         bufferManager.sendWithBuffering(snapshotDataMessage());
         bufferManager.sendWithBuffering(snapshotDataMessage());
 
-        // Sink confirms it received up through seq 0 (evicting seq -1 and 0), but is still waiting
-        // for seq 1 next (e.g. seq 1 was lost and seq 2 arrived out of order and got buffered).
+        // Sink confirms it received up through seq 0 (evicting seq -1 and 0). expectedSeqNum is
+        // always ack+1, so by itself this first ack carries no gap signal -- nothing should be
+        // expedited yet.
+        bufferManager.updateAck(ackMessage(0, 1));
+        java.util.List<LogReplicationPendingEntry> pendingAfterFirstAck =
+                bufferManager.getPendingMessages().getPendingEntries();
+        for (LogReplicationPendingEntry entry : pendingAfterFirstAck) {
+            Assert.assertFalse("entry seq=" + entry.getData().getMetadata().getSnapshotSyncSeqNum()
+                    + " should not be expedited off a single ack", entry.isExpedited());
+        }
+
+        // The sink reports the exact same expectedSeqNum again on the next ack cycle, despite more
+        // data having been sent in between -- it's genuinely stuck waiting for seq 1 (e.g. seq 1 was
+        // lost and seq 2 arrived out of order and got buffered). That repetition is the actual gap
+        // signal, and should now expedite everything still outstanding.
         bufferManager.updateAck(ackMessage(0, 1));
 
         java.util.List<LogReplicationPendingEntry> pending = bufferManager.getPendingMessages().getPendingEntries();
@@ -271,6 +284,28 @@ public class SnapshotSenderTest {
             Assert.assertTrue("entry seq=" + entry.getData().getMetadata().getSnapshotSyncSeqNum()
                     + " should be marked expedited", entry.isExpedited());
         }
+    }
+
+    @Test
+    public void steadilyAdvancingExpectedSeqNumNeverExpeditesAHealthyTransfer() {
+        // A perfectly healthy transfer where every ack reports a new, higher expectedSeqNum than
+        // the last (i.e. real forward progress, no gap) must never trigger an expedited resend --
+        // otherwise every single ack of a zero-loss transfer would blindly resend the entire
+        // in-flight window, doubling load on the sink this mechanism is meant to protect.
+        SenderBufferManager bufferManager = snapshotSender.getDataSenderBufferManager();
+        bufferManager.sendWithBuffering(snapshotDataMessage());
+        bufferManager.sendWithBuffering(snapshotDataMessage());
+        bufferManager.sendWithBuffering(snapshotDataMessage());
+        bufferManager.sendWithBuffering(snapshotDataMessage());
+        // Auto-assigned seq nums are -1, 0, 1, 2 (see note above).
+
+        bufferManager.updateAck(ackMessage(-1, 0));
+        bufferManager.updateAck(ackMessage(0, 1));
+        bufferManager.updateAck(ackMessage(1, 2));
+
+        java.util.List<LogReplicationPendingEntry> pending = bufferManager.getPendingMessages().getPendingEntries();
+        Assert.assertEquals(1, pending.size());
+        Assert.assertFalse("steadily-advancing acks should never expedite", pending.get(0).isExpedited());
     }
 
     @Test

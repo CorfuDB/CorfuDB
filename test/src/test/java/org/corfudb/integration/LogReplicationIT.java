@@ -1190,6 +1190,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             }
             assertThat(sinkManager.getOngoingApply().get()).isFalse();
 
+            log.debug("****** Confirm checkpointing is explicitly unfrozen on apply failure, rather than " +
+                    "staying frozen indefinitely since phase is stuck at APPLY_PHASE (checkSnapshotSyncLiveness()'s " +
+                    "self-unfreeze only fires in TRANSFER phase, so without an explicit unfreeze here nothing " +
+                    "would ever lift this attempt's freeze)");
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
+                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
+                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
+                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
+                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
+                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
+                    .build();
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE, 10_000);
+
             log.debug("****** Confirm a fresh snapshot sync attempt is accepted instead of dropped");
             UUID secondAttemptId = UUID.randomUUID();
             LogReplication.LogReplicationEntryMetadataMsg freshStartMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()

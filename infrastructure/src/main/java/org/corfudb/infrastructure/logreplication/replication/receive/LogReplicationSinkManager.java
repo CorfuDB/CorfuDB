@@ -81,7 +81,12 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @Getter
     private LogReplicationMetadataManager logReplicationMetadataManager;
-    private RxState rxState;
+    // Mutated only under synchronized(this) (see processSnapshotStart(), completeSnapshotApply()),
+    // but read from the snapshotSyncLivenessExecutor thread's unsynchronized fast-path guard clause
+    // in checkSnapshotSyncLiveness() before that method ever takes the lock -- volatile so that read
+    // has a defined happens-before relationship with the writes instead of relying entirely on the
+    // fast path's own double-checked re-verification under the lock to mask staleness.
+    private volatile RxState rxState;
 
     private LogReplicationConfig config;
 
@@ -142,6 +147,18 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Guards against re-logging the stuck-apply alert on every watchdog tick once it's fired once for
     // the current apply attempt; cleared as soon as a new apply attempt starts.
     private final AtomicBoolean loggedStuckApplyForCurrentAttempt = new AtomicBoolean(false);
+
+    // Exponential-backoff state for resumeSnapshotApply()'s auto-retry trigger (invoked by
+    // LogReplicationServer.handleMetadataRequest() on every metadata poll, ~every 2s, whenever the
+    // metadata store shows a transfer-complete-but-not-applied attempt and no apply currently
+    // ongoing). Without this, a permanently-doomed apply (e.g. the shadow streams it needs are
+    // genuinely gone) would be retried on every single poll forever. Keyed on the specific pending
+    // attempt's started-timestamp so a genuinely new attempt gets its own fresh backoff rather than
+    // inheriting a stuck prior attempt's; both fields are only ever touched while holding this
+    // instance's monitor (resumeSnapshotApply() is synchronized).
+    private long resumeBackoffForStartedTimestamp = Address.NON_ADDRESS;
+    private long resumeBackoffMs = 0;
+    private long nextResumeAttemptTimeMs = 0;
 
     private final ScheduledExecutorService snapshotSyncLivenessExecutor = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder()
@@ -594,9 +611,12 @@ public class LogReplicationSinkManager implements DataReceiver {
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
-        // Setup buffer manager.
+        // Setup buffer manager. lastSnapshotSyncId was just set above (isValidSnapshotStart()) to
+        // this new attempt's id -- passing it lets the buffer manager reject a stale message
+        // straggling in from a prior, already-cancelled attempt instead of matching it purely by
+        // numeric sequence number (see SnapshotSinkBufferManager's Javadoc on activeSyncRequestId).
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastSnapshotTransferredSequenceNumber(), this);
+                logReplicationMetadataManager.getLastSnapshotTransferredSequenceNumber(), lastSnapshotSyncId, this);
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -777,6 +797,22 @@ public class LogReplicationSinkManager implements DataReceiver {
             log.error("Snapshot sync apply failed for id={}; abandoning this attempt -- its transferred " +
                     "data is unrecoverable, a fresh full snapshot sync will be needed.",
                     entry.getMetadata().getSyncRequestId(), t);
+
+            // checkSnapshotSyncLiveness()'s self-unfreeze only fires in the TRANSFER phase, so a
+            // failure here that lands after snapshotWriter.startSnapshotSyncApply() flipped the
+            // phase to APPLY_PHASE (including inside that call or completeSnapshotApply()) would
+            // otherwise leave checkpointing frozen indefinitely -- nothing else resets the phase
+            // except a fresh SNAPSHOT_START, and this attempt is being abandoned, not retried in
+            // place. Unfreeze explicitly and deterministically here instead of leaving the freeze
+            // duration to depend on which line threw. Safe to call unconditionally: this attempt's
+            // data is already unrecoverable per the log message above, so there's no longer a live
+            // apply an unfreeze could endanger, and this runs while still holding this method's
+            // synchronized(this) lock, so it can't race a concurrently-arriving fresh SNAPSHOT_START
+            // re-freezing for a newer attempt (see processSnapshotStart()'s Javadoc for why that
+            // matters).
+            log.info("Enter onSnapshotSyncEnd (apply failure) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+            snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+            log.info("Exit onSnapshotSyncEnd (apply failure) :: {}", snapshotSyncPlugin.getClass().getSimpleName());
         } finally {
             ongoingApply.set(false);
             lastProcessingActivityTimeMs = System.currentTimeMillis();
@@ -871,19 +907,67 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Resume Snapshot Sync Apply
      *
      * In the event of restarts, a Snapshot Sync which had finished transfer can resume the apply stage.
+     * Also the auto-retry path for an apply that previously failed (see startSnapshotApply()'s
+     * catch block): LogReplicationServer.handleMetadataRequest() calls this on every metadata poll
+     * (~every 2s) while the metadata store shows a transfer-complete-but-not-applied attempt and no
+     * apply is currently ongoing.
+     *
+     * Synchronized on the same monitor as processSnapshotStart() and startSnapshotApply() for two
+     * reasons: (1) snapshotWriter.reset() below must not race a concurrent processSnapshotStart()
+     * doing the same on a fresh attempt -- previously this method wasn't synchronized at all, so
+     * that race was real, not just theoretical; (2) it lets this method authoritatively re-check
+     * "is this still actually pending?" using fresh metadata-store reads, since the caller's own
+     * check (in handleMetadataRequest(), on the control-plane thread) can be arbitrarily stale by
+     * the time this call actually acquires the lock -- a concurrently-arriving fresh SNAPSHOT_START
+     * on the data-plane thread may have already started, or even completed, a newer attempt.
      */
-    public void resumeSnapshotApply() {
+    public synchronized void resumeSnapshotApply() {
+        long startedTimestamp = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
+        long transferredTimestamp = logReplicationMetadataManager.getLastTransferredSnapshotTimestamp();
+        long appliedTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
+
+        // Re-verify under the lock: the caller's check is stale by construction (computed before
+        // acquiring this monitor), and ongoingApply itself can only be trusted authoritatively once
+        // we hold this lock, since startSnapshotApplyAsync()/startSnapshotApply() also require it.
+        if (ongoingApply.get() || startedTimestamp != transferredTimestamp || transferredTimestamp <= appliedTimestamp) {
+            log.info("Skipping resumeSnapshotApply(): no longer pending (or already ongoing) by the " +
+                            "time the lock was acquired. started={}, transferred={}, applied={}, ongoingApply={}",
+                    startedTimestamp, transferredTimestamp, appliedTimestamp, ongoingApply.get());
+            return;
+        }
+
+        // Rate-limit: back off exponentially between resume attempts for the SAME stuck attempt
+        // (identified by startedTimestamp), mirroring the source side's INITIAL_RETRY_BACKOFF_MS..
+        // MAX_RETRY_BACKOFF_MS policy, rather than retrying a possibly-permanently-doomed apply on
+        // every ~2s metadata poll forever. A genuinely new attempt (different startedTimestamp)
+        // starts its own fresh backoff instead of inheriting a stuck prior attempt's.
+        if (startedTimestamp != resumeBackoffForStartedTimestamp) {
+            resumeBackoffForStartedTimestamp = startedTimestamp;
+            resumeBackoffMs = 0;
+            nextResumeAttemptTimeMs = 0;
+        }
+        long now = System.currentTimeMillis();
+        if (now < nextResumeAttemptTimeMs) {
+            log.debug("Deferring resumeSnapshotApply() for started={}; next attempt allowed in {} ms",
+                    startedTimestamp, nextResumeAttemptTimeMs - now);
+            return;
+        }
+        resumeBackoffMs = (resumeBackoffMs == 0)
+                ? LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS
+                : Math.min(resumeBackoffMs * 2, LogReplicationConfig.MAX_RETRY_BACKOFF_MS);
+        nextResumeAttemptTimeMs = now + resumeBackoffMs;
+
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastStartedSnapshotTimestamp());
-        long snapshotTransferTs = logReplicationMetadataManager.getLastTransferredSnapshotTimestamp();
+        snapshotWriter.reset(topologyConfigId, startedTimestamp);
         UUID snapshotSyncId = new UUID(logReplicationMetadataManager.getCurrentSnapshotSyncCycleId(), Long.MAX_VALUE);
-        log.info("Resume Snapshot Sync Apply, snapshot_transfer_ts={}, id={}", snapshotTransferTs, snapshotSyncId);
+        log.info("Resume Snapshot Sync Apply, snapshot_transfer_ts={}, id={}, backoff={}ms", transferredTimestamp,
+                snapshotSyncId, resumeBackoffMs);
         // Construct Log Replication Entry message used to complete the Snapshot Sync with info in the metadata manager
         LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
                 .setTopologyConfigID(logReplicationMetadataManager.getTopologyConfigId())
                 .setTimestamp(-1L)
-                .setSnapshotTimestamp(snapshotTransferTs)
+                .setSnapshotTimestamp(transferredTimestamp)
                 .setSyncRequestId(getUuidMsg(snapshotSyncId)).build();
         startSnapshotApplyAsync(getLrEntryAckMsg(metadata));
     }
