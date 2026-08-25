@@ -46,7 +46,6 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
@@ -59,6 +58,8 @@ import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -171,6 +172,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      * Thread pool for this channel to use
      */
     private final EventLoopGroup eventLoopGroup;
+
+    /**
+     * A handle on the reconnection attempt that is currently scheduled, if any, so that it can be
+     * cancelled when the router is stopped.
+     */
+    private volatile ScheduledFuture<?> pendingReconnect;
 
     @Data
     @Builder
@@ -356,10 +363,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             });
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
-                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.debug("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
-                // Asynchronously connect again.
-                connectAsync(bootstrap);
+                log.debug("addReconnectionOnCloseFuture[{}]: reconnecting in {}ms...",
+                        node, timeoutRetry);
+                // Asynchronously connect again, once the retry interval has elapsed.
+                scheduleReconnect(bootstrap);
             }
         });
     }
@@ -394,15 +401,33 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             log.debug("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
-            // a sleep period.
+            // the retry interval.
             if (!shutdown) {
-                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.debug("connectAsync[{}]: Channel connection failed, reconnecting...", node);
-                // Call connect, which will retry the call again.
-                // Note that this is not recursive, because it is called in the
-                // context of the handler future.
-                connectAsync(bootstrap);
+                log.debug("connectAsync[{}]: Channel connection failed, reconnecting in {}ms...",
+                        node, timeoutRetry);
+                // Schedule connect, which will retry the call again.
+                scheduleReconnect(bootstrap);
             }
+        }
+    }
+
+    /**
+     * Schedule a reconnection attempt once the retry interval has elapsed.
+     *
+     * <p>This is invoked from Netty channel future listeners, which run on the event loop thread
+     * that owns the channel. Sleeping on that thread would stall every other channel registered
+     * to it - including channels to healthy nodes - so the retry is scheduled instead of blocking.
+     *
+     * @param bootstrap The channel bootstrap to use
+     */
+    private void scheduleReconnect(@Nonnull Bootstrap bootstrap) {
+        try {
+            // connectAsync re-checks the shutdown flag, so a retry that is scheduled concurrently
+            // with stop() is a no-op rather than a resurrected connection.
+            pendingReconnect = eventLoopGroup.schedule(() -> connectAsync(bootstrap),
+                    timeoutRetry, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException ree) {
+            log.debug("scheduleReconnect[{}]: event loop is shutting down, not reconnecting", node);
         }
     }
 
@@ -413,6 +438,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     public void stop() {
         log.debug("stop: Shutting down router for {}", node);
         shutdown = true;
+        ScheduledFuture<?> scheduledReconnect = pendingReconnect;
+        if (scheduledReconnect != null) {
+            scheduledReconnect.cancel(false);
+        }
         connectionFuture.completeExceptionally(new NetworkException("Router stopped", node));
         if (channel != null && channel.isOpen()) {
             channel.close().syncUninterruptibly();

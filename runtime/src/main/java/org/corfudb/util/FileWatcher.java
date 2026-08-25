@@ -2,6 +2,7 @@ package org.corfudb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Closeable;
@@ -23,10 +24,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class FileWatcher implements Closeable {
+
+    // Default backoff between retries when reloadNewWatchService() fails, e.g. because the
+    // watched file's parent directory does not exist yet (this can legitimately happen for a
+    // couple of seconds during first-boot provisioning). This value only bounds log volume
+    // during the race, not whether it resolves: start()'s retry loop retries indefinitely
+    // regardless of how long provisioning takes. Package-visible/settable so tests can shorten
+    // it rather than waiting on the production delay.
+    private static final long DEFAULT_RETRY_BACKOFF_MILLIS = 1000;
 
     private final File file;
 
@@ -43,6 +54,15 @@ public class FileWatcher implements Closeable {
 
     @Getter
     private final AtomicBoolean isRegistered = new AtomicBoolean(false);
+
+    @Setter
+    private long retryBackoffMillis = DEFAULT_RETRY_BACKOFF_MILLIS;
+
+    // Counts calls to backoffBeforeRetry(), i.e. how many times reloadNewWatchService() has
+    // failed and backed off. Exposed for tests to verify the retry loop is actually throttled,
+    // rather than just observing that registration eventually succeeds.
+    @Getter
+    private final AtomicInteger retryCount = new AtomicInteger(0);
 
     public FileWatcher(String filePath, Runnable onChange, ExecutorService executorService){
         this.file = Paths.get(filePath).toFile();
@@ -155,7 +175,22 @@ public class FileWatcher implements Closeable {
             isRegistered.set(true);
             log.info("FileWatcher: parent dir {} for file {} registered.", path, file.getAbsoluteFile());
         } catch (IOException ioe) {
+            // The parent directory (e.g. a keystore's private/ dir) can legitimately not exist
+            // yet for a brief window during appliance/cluster bootstrap, before it is
+            // provisioned. Without a backoff here, start()'s retry loop spins on this failure
+            // with no throttling, flooding the log with hundreds of identical exceptions in a
+            // fraction of a second until the directory appears.
+            backoffBeforeRetry();
             throw new IllegalStateException("Failed to start a new watch service!", ioe);
+        }
+    }
+
+    private void backoffBeforeRetry() {
+        retryCount.incrementAndGet();
+        try {
+            TimeUnit.MILLISECONDS.sleep(retryBackoffMillis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 

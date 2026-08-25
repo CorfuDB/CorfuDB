@@ -176,8 +176,12 @@ public class DiskBackedCorfuTable<K, V> implements
             }
             this.rocksDbOptions.setTableFormatConfig(tableConfig);
             this.reportingFrequency = persistenceOptions.getReportingFrequency();
-            rocksDbOptions.setStatistics(statistics);
-            persistenceOptions.getWriteBufferSize().map(rocksDbOptions::setWriteBufferSize);
+            // NOTE: do not configure `rocksDbOptions` (the parameter) here. Every caller passes
+            // the shared static `defaultOptions`, so writing to it mutates process-global state:
+            // it races with the `new Options(defaultOptions)` copy made by other threads opening
+            // tables concurrently, and bleeds one table's settings into the template that later
+            // tables are built from. The per-table copy `this.rocksDbOptions` is configured above
+            // and is the instance actually handed to RocksDB.
 
             final RocksDbStore<DiskBackedCorfuTable<K, V>> rocksDbStore = new RocksDbStore<>(
                     persistenceOptions.getDataPath(), this.rocksDbOptions, writeOptions);
