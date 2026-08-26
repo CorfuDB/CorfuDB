@@ -149,7 +149,7 @@ public class CorfuServerCmdLine {
                     + " -z <tls-protocols>, --tls-protocols=<tls-protocols>                      "
                     + "              Comma separated list of TLS protocols to use.\n"
                     + "                                                                          "
-                    + "              [default: TLSv1.1,TLSv1.2].\n"
+                    + "              [default: " + ConfigParamsHelper.DEFAULT_TLS_PROTOCOLS_CSV + "].\n"
                     + " --disable-cert-expiry-check-file=<file_path>                             "
                     + "              Path to Disable Cert Expiry Check File. If this file is     "
                     + "              present, the certificate expiry checks are disabled.\n      "

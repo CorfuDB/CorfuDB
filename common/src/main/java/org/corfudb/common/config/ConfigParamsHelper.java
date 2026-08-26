@@ -13,6 +13,12 @@ public final class ConfigParamsHelper {
     }
 
     /**
+     * Default TLS protocols when --tls-protocols is not specified.
+     * Restricts to TLS 1.2 and 1.3 only (avoids TLSv1.1 and older).
+     */
+    public static final String DEFAULT_TLS_PROTOCOLS_CSV = "TLSv1.2,TLSv1.3";
+
+    /**
      * @return CSV values enabled TLS Ciphers from the enum
      */
     public static String getTlsCiphersCSV() {
