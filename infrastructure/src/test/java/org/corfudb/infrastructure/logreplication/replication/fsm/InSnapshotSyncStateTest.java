@@ -36,12 +36,13 @@ public class InSnapshotSyncStateTest {
     private SnapshotSender snapshotSender;
     private InSnapshotSyncState state;
     private ExecutorService workers;
+    private LogReplicationAckReader ackReader;
 
     @Before
     public void setup() {
         LogReplicationFSM fsm = mock(LogReplicationFSM.class);
         snapshotSender = mock(SnapshotSender.class);
-        LogReplicationAckReader ackReader = mock(LogReplicationAckReader.class);
+        ackReader = mock(LogReplicationAckReader.class);
         SenderBufferManager bufferManager = mock(SenderBufferManager.class);
         SenderPendingMessageQueue pendingMessages = new SenderPendingMessageQueue(10);
 
@@ -86,6 +87,54 @@ public class InSnapshotSyncStateTest {
             expected = Math.min(expected * 2, LogReplicationConfig.MAX_RETRY_BACKOFF_MS);
         }
         Assert.assertEquals(LogReplicationConfig.MAX_RETRY_BACKOFF_MS, state.retryBackoffMs);
+    }
+
+    @Test
+    public void minBackoffFloorOverridesNormalBackoffAndIsNotCappedByMaxRetryBackoff() throws IllegalTransitionException {
+        // checkpointerGracePeriodMs (see LogReplicationSinkManager) can legitimately exceed
+        // MAX_RETRY_BACKOFF_MS for a large-dataset deployment -- the floor exists for a different
+        // purpose (checkpointer breathing room) than the general restart-storm throttling
+        // MAX_RETRY_BACKOFF_MS is tuned for, so it deliberately is not capped by it.
+        long largeFloor = LogReplicationConfig.MAX_RETRY_BACKOFF_MS * 10;
+
+        state.registerCancellationAndComputeBackoff(largeFloor);
+
+        Assert.assertEquals(largeFloor, state.retryBackoffMs);
+        Assert.assertEquals(1, state.consecutiveCancellations);
+    }
+
+    @Test
+    public void minBackoffFloorIsANoOpWhenSmallerThanTheNormalComputedBackoff() throws IllegalTransitionException {
+        state.registerCancellationAndComputeBackoff(1);
+        state.registerCancellationAndComputeBackoff(1);
+
+        // Normal doubling (INITIAL_RETRY_BACKOFF_MS * 2) already exceeds the floor of 1, which must
+        // not override or shrink it.
+        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS * 2, state.retryBackoffMs);
+    }
+
+    @Test
+    public void zeroMinBackoffBehavesExactlyLikeTheNoArgOverload() throws IllegalTransitionException {
+        state.registerCancellationAndComputeBackoff(0);
+
+        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS, state.retryBackoffMs);
+        Assert.assertEquals(1, state.consecutiveCancellations);
+    }
+
+    @Test
+    public void consecutiveCancellationsIsSurfacedToTheReplicationStatusTable() throws IllegalTransitionException {
+        // status alone stays ONGOING throughout a restart loop, indistinguishable from one long
+        // healthy transfer -- consecutiveFailures on SnapshotSyncInfo is what actually lets an
+        // external caller (dashboard, alerting) tell the two apart. Verifies InSnapshotSyncState
+        // passes its own up-to-date counter on every markSnapshotSyncInfoOngoing() call site, not
+        // just some of them.
+        state.processEvent(cancelEvent());
+        verify(ackReader).markSnapshotSyncInfoOngoing(org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1));
+
+        state.processEvent(cancelEvent());
+        verify(ackReader).markSnapshotSyncInfoOngoing(org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(2));
     }
 
     @Test

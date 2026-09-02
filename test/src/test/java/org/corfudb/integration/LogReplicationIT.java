@@ -1139,6 +1139,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * ongoingApply is true) -- a silent, total, unrecoverable deadlock of the whole replication
      * session, with the source's WaitSnapshotApplyState polling forever for a completion that could
      * never come.
+     *
+     * Also verifies checkpointing deliberately stays frozen across the failure itself, unlike the
+     * very first version of this fix: unfreezing on every individual failed attempt let a
+     * compaction cycle both start and complete in the gap before the next retry, and its global,
+     * address-based trim would discard this attempt's (unregistered, unprotected) shadow-stream
+     * data as collateral -- see LogReplicationSinkManager.applyRetrySequenceActive's Javadoc. The
+     * deliberate unfreeze now happens only once resumeSnapshotApply() truly gives up.
      */
     @Test
     public void testSinkRecoversFromApplyFailureInsteadOfPermanentlyStalling() throws Exception {
@@ -1147,6 +1154,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
                 DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+        // A cap of 0 means the very first call to resumeSnapshotApply() after a failure already
+        // finds the sequence exhausted, so this test doesn't have to wait out real retry backoff.
+        sinkManager.setMaxSnapshotApplyResumeRetries(0);
 
         try {
             // There's no way to force a real concurrent trim deterministically in a test, so this
@@ -1157,6 +1167,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             doThrow(new TrimmedException("shadow stream data trimmed concurrently"))
                     .when(failingWriter).startSnapshotSyncApply();
             sinkManager.setSnapshotWriter(failingWriter);
+
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
+                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
+                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
+                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
+                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
+                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
+                    .build();
 
             UUID firstAttemptId = UUID.randomUUID();
             LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
@@ -1170,6 +1189,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     .build();
             log.debug("****** Deliver SNAPSHOT_START for the doomed first attempt");
             sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
 
             LogReplication.LogReplicationEntryMetadataMsg endMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
                     .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
@@ -1190,19 +1210,25 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             }
             assertThat(sinkManager.getOngoingApply().get()).isFalse();
 
-            log.debug("****** Confirm checkpointing is explicitly unfrozen on apply failure, rather than " +
-                    "staying frozen indefinitely since phase is stuck at APPLY_PHASE (checkSnapshotSyncLiveness()'s " +
-                    "self-unfreeze only fires in TRANSFER phase, so without an explicit unfreeze here nothing " +
-                    "would ever lift this attempt's freeze)");
-            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
-                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
-                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
-                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
-            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
-                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
-                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
-                    .build();
+            log.debug("****** Confirm checkpointing is still frozen despite the failure -- this attempt's " +
+                    "shadow-stream data may still be retried in place, so nothing should have unfrozen yet");
+            try (TxnContext txn = dstCorfuStore.txn(DefaultSnapshotSyncPlugin.NAMESPACE)) {
+                CorfuStoreEntry<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> entry =
+                        txn.getRecord(pluginTable, pluginKey);
+                txn.commit();
+                assertThat(entry.getPayload().getValue()).isEqualTo(DefaultSnapshotSyncPlugin.ON_START_VALUE);
+            }
+            assertThat(sinkManager.isApplyRetriesExhausted()).isFalse();
+
+            log.debug("****** Simulate the source's metadata poll driving the auto-retry, which (with the " +
+                    "cap set to 0) immediately finds the sequence exhausted");
+            sinkManager.resumeSnapshotApply();
+
+            log.debug("****** Confirm checkpointing is now explicitly unfrozen, now that the sequence is truly " +
+                    "abandoned, rather than staying frozen indefinitely since phase is stuck at APPLY_PHASE " +
+                    "(checkSnapshotSyncLiveness()'s self-unfreeze only fires in TRANSFER phase)");
             waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE, 10_000);
+            assertThat(sinkManager.isApplyRetriesExhausted()).isTrue();
 
             log.debug("****** Confirm a fresh snapshot sync attempt is accepted instead of dropped");
             UUID secondAttemptId = UUID.randomUUID();

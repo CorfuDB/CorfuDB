@@ -271,12 +271,36 @@ public class SnapshotSender {
      * Actively poll the sink for whether it is still working on the current snapshot sync. Used only
      * to extend patience on an otherwise-unexplained ack timeout, so any failure to determine this
      * (including the poll itself timing out) is conservatively treated as "not processing".
+     *
+     * isProcessing alone is sink-wide, not attempt-scoped: it's true whenever the sink is busy on
+     * *any* snapshot-sync work, including a stale attempt this source has already canceled and
+     * moved past (e.g. the sink is still resuming an old, abandoned apply after its own restart --
+     * see LogReplicationSinkManager.resumeSnapshotApply()). Trusting it blindly in that case would
+     * let this source wait indefinitely on someone else's progress for an attempt it isn't even
+     * asking about, compounding the (separately tracked, deliberately unrecoverable-without-an-
+     * operator) risk of a genuinely hung apply: instead of that hang bounding just the one stuck
+     * attempt, it would also stall every subsequent attempt's transfer phase forever, since
+     * genuineTimeouts/consecutiveGenuineStallChecks never advance while isProcessing reports true.
+     * A sink new enough to report processingSnapshotTimestamp lets this be resolved: only honor the
+     * busy signal when it names *this* attempt's baseSnapshotTimestamp. An old sink (field absent)
+     * is trusted at face value, matching the pre-existing behavior -- not a regression, just not
+     * yet able to make the distinction.
      */
     private boolean isSinkStillProcessing() {
         try {
             LogReplicationMetadataResponseMsg response = dataSender.sendMetadataRequest()
                     .get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            return response.getIsProcessing();
+            if (!response.getIsProcessing()) {
+                return false;
+            }
+            if (response.hasProcessingSnapshotTimestamp()
+                    && response.getProcessingSnapshotTimestamp() != baseSnapshotTimestamp) {
+                log.warn("Sink reports busy, but on a different attempt (its baseSnapshot={}, ours={}); " +
+                                "treating as not processing our attempt.",
+                        response.getProcessingSnapshotTimestamp(), baseSnapshotTimestamp);
+                return false;
+            }
+            return true;
         } catch (Exception e) {
             log.warn("Failed to query sink status while waiting for snapshot sync ack.", e);
             return false;

@@ -255,6 +255,69 @@ public class LogReplicationMetadataManager {
      *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
      */
     public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing) {
+        return getMetadataResponse(header, isProcessing, Address.NON_ADDRESS);
+    }
+
+    /**
+     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
+     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
+     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
+     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
+     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
+     *                      so a source new enough to check can tell "the sink is busy on the
+     *                      attempt I'm asking about" apart from "the sink is busy on a different,
+     *                      already-abandoned attempt" -- both look identical as a bare boolean.
+     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
+     *                      when isProcessing is false, where it's simply unused by the source.
+     */
+    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp) {
+        return getMetadataResponse(header, isProcessing, processingSnapshotTimestamp, false);
+    }
+
+    /**
+     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
+     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
+     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
+     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
+     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
+     *                      so a source new enough to check can tell "the sink is busy on the
+     *                      attempt I'm asking about" apart from "the sink is busy on a different,
+     *                      already-abandoned attempt" -- both look identical as a bare boolean.
+     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
+     *                      when isProcessing is false, where it's simply unused by the source.
+     * @param applyRetriesExhausted whether the sink has given up automatically retrying the
+     *                      pending apply reflected in snapshotStart/snapshotTransferred (see
+     *                      LogReplicationSinkManager.isApplyRetriesExhausted()), so the source can
+     *                      cancel and restart immediately instead of waiting out the much longer
+     *                      SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound meant to catch a generic hang.
+     */
+    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp,
+                                           boolean applyRetriesExhausted) {
+        return getMetadataResponse(header, isProcessing, processingSnapshotTimestamp, applyRetriesExhausted, 0);
+    }
+
+    /**
+     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
+     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
+     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
+     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
+     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
+     *                      so a source new enough to check can tell "the sink is busy on the
+     *                      attempt I'm asking about" apart from "the sink is busy on a different,
+     *                      already-abandoned attempt" -- both look identical as a bare boolean.
+     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
+     *                      when isProcessing is false, where it's simply unused by the source.
+     * @param applyRetriesExhausted whether the sink has given up automatically retrying the
+     *                      pending apply reflected in snapshotStart/snapshotTransferred (see
+     *                      LogReplicationSinkManager.isApplyRetriesExhausted()), so the source can
+     *                      cancel and restart immediately instead of waiting out the much longer
+     *                      SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound meant to catch a generic hang.
+     * @param checkpointerGracePeriodMs meaningful only when applyRetriesExhausted is true: the
+     *                      minimum time (ms) the sink wants before the source's next SNAPSHOT_START
+     *                      (see LogReplicationSinkManager.getCheckpointerGracePeriodMs()).
+     */
+    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp,
+                                           boolean applyRetriesExhausted, long checkpointerGracePeriodMs) {
         LogReplication.LogReplicationMetadataResponseMsg metadataMsg = LogReplication.LogReplicationMetadataResponseMsg
                 .newBuilder()
                 .setTopologyConfigID(getTopologyConfigId())
@@ -263,7 +326,11 @@ public class LogReplicationMetadataManager {
                 .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
                 .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
                 .setLastLogEntryTimestamp(getLastProcessedLogEntryBatchTimestamp())
-                .setIsProcessing(isProcessing).build();
+                .setIsProcessing(isProcessing)
+                .setProcessingSnapshotTimestamp(processingSnapshotTimestamp)
+                .setApplyRetriesExhausted(applyRetriesExhausted)
+                .setCheckpointerGracePeriodMs(checkpointerGracePeriodMs)
+                .build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
                 .setLrMetadataResponse(metadataMsg).build();
         return getResponseMsg(header, payload);
@@ -472,9 +539,15 @@ public class LogReplicationMetadataManager {
      * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
+     * @param consecutiveFailures number of consecutive cancellations/restarts of this snapshot
+     *                             sync session with no fresh externally-requested attempt or full
+     *                             completion in between (see InSnapshotSyncState.
+     *                             consecutiveCancellations), so an external caller can tell a
+     *                             restart loop apart from one long healthy transfer -- status
+     *                             alone stays ONGOING throughout either.
      */
     public void updateSnapshotSyncStatusOngoing(String clusterId, boolean forced, UUID eventId,
-                                                long baseVersion, long remainingEntries) {
+                                                long baseVersion, long remainingEntries, int consecutiveFailures) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
 
         SnapshotSyncInfo.SnapshotSyncType syncType = forced ?
@@ -486,6 +559,7 @@ public class LogReplicationMetadataManager {
                 .setStatus(SyncStatus.ONGOING)
                 .setSnapshotRequestId(eventId.toString())
                 .setBaseSnapshot(baseVersion)
+                .setConsecutiveFailures(consecutiveFailures)
                 .build();
 
         ReplicationStatusVal status = ReplicationStatusVal.newBuilder()

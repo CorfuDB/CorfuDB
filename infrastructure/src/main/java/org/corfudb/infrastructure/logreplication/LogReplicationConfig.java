@@ -62,6 +62,35 @@ public class LogReplicationConfig {
     // costs time, not correctness.
     public static final long SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
 
+    // Default cap on consecutive automatic resumeSnapshotApply() attempts for the SAME stuck
+    // attempt (see LogReplicationSinkManager.resumeSnapshotApply()) before the sink stops
+    // retrying and escalates to a loud, repeated alert instead. Without a cap, an apply that fails
+    // deterministically on every attempt (e.g. the shadow-stream data it needs was genuinely
+    // trimmed) would otherwise be retried forever at the MAX_RETRY_BACKOFF_MS-capped cadence, with
+    // no distinct operator-facing signal beyond the same per-attempt log.error() repeating
+    // indefinitely. Configurable (see LogReplicationSinkManager.readConfig()) since the right
+    // value depends on how much retry latency vs. alert noise a given deployment prefers.
+    public static final int DEFAULT_MAX_SNAPSHOT_APPLY_RESUME_RETRIES = 10;
+
+    // Default minimum time (ms) the sink asks the source to wait, once resumeSnapshotApply() has
+    // exhausted its retries and genuinely unfrozen checkpointing, before sending the next
+    // SNAPSHOT_START (which re-freezes it). Reported to the source via
+    // LogReplicationMetadataResponseMsg.checkpointerGracePeriodMs; see resumeSnapshotApply()'s
+    // Javadoc for why this specific point -- not the individual failed-attempt-then-retry gaps
+    // within the sequence, which now deliberately stay frozen -- is the safe and useful place to
+    // give the checkpointer a real, sized window: this is the point at which the abandoned
+    // attempt's shadow-stream data is genuinely safe to let a compaction cycle reclaim, rather than
+    // still being needed by a pending retry.
+    //
+    // Defaults to 0 (no additional wait beyond the source's own restart-storm backoff) so recovery
+    // stays fast for the common case. isCheckpointFrozen() is consulted when a cycle would start
+    // (DynamicTriggerPolicy.shouldTrigger()) and again by each checkpoint worker JVM before it
+    // begins (DistributedCheckpointerHelper.hasCompactionStarted()) -- a deployment with large
+    // tables, where checkpointing takes meaningfully longer, can raise this so a cycle is more
+    // likely to actually get to start (and, once started, run to completion; freeze reasserting
+    // later does not abort an in-progress checkpoint pass) before this window closes.
+    public static final long DEFAULT_CHECKPOINTER_GRACE_PERIOD_MS = 0;
+
     // Window within which the sink still reports itself as "processing" even after the specific
     // write/apply flag flips back to false, to smooth over the natural gap between two discrete
     // write bursts (e.g. message N finishes, message N+1 arrives 50ms later -- during that gap the

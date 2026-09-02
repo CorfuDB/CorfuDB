@@ -203,6 +203,55 @@ public class WaitSnapshotApplyStateTest {
     }
 
     @Test
+    public void sinkReportingApplyRetriesExhaustedCancelsImmediatelyWithoutWaitingOutTheFullBound() {
+        // The sink has already given up automatically retrying this apply (see
+        // LogReplicationSinkManager.isApplyRetriesExhausted()) -- must cancel right away instead of
+        // waiting out the much longer SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound, which exists to catch a
+        // generic hang and has no way, on its own, of knowing the sink already concluded this one is
+        // doomed. applyWaitStartTimeMs is deliberately left at "just started" to prove this doesn't
+        // depend on the elapsed-time bound at all.
+        setup();
+        UUID syncId = UUID.randomUUID();
+        state.setTransitionSyncId(syncId);
+        state.setBaseSnapshotTimestamp(100L);
+        state.applyWaitStartTimeMs = System.currentTimeMillis();
+        final long checkpointerGracePeriodMs = 900_000L;
+        LogReplicationMetadataResponseMsg exhaustedResponse = LogReplicationMetadataResponseMsg.newBuilder()
+                .setSnapshotApplied(0L)
+                .setLastLogEntryTimestamp(0L)
+                .setApplyRetriesExhausted(true)
+                .setCheckpointerGracePeriodMs(checkpointerGracePeriodMs)
+                .build();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(exhaustedResponse));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        ArgumentCaptor<LogReplicationEvent> captor = ArgumentCaptor.forClass(LogReplicationEvent.class);
+        verify(fsm).input(captor.capture());
+        Assert.assertEquals(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, captor.getValue().getType());
+        // The sink's requested checkpointer grace period must be carried through on the event so
+        // InSnapshotSyncState.registerCancellationAndComputeBackoff(long) can apply it as a floor.
+        Assert.assertEquals(checkpointerGracePeriodMs, captor.getValue().getMetadata().getMinBackoffMs());
+    }
+
+    @Test
+    public void oldSinkNotSettingApplyRetriesExhaustedIsUnaffected() {
+        // Backward compatibility: proto3 decodes an old sink's response (which never sets this
+        // field) as false, so this must be indistinguishable from the pre-existing "still in
+        // progress, keep waiting" behavior -- not misread as "exhausted".
+        setup();
+        UUID syncId = UUID.randomUUID();
+        state.setTransitionSyncId(syncId);
+        state.setBaseSnapshotTimestamp(100L);
+        state.applyWaitStartTimeMs = System.currentTimeMillis();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
+
+        state.verifyStatusOfSnapshotSyncApply();
+
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
     public void selfLoopReEntryDoesNotRestampApplyWaitStartTime() {
         setup();
         state.applyWaitStartTimeMs = 12345L;

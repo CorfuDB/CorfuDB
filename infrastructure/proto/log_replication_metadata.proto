@@ -73,6 +73,15 @@ message SnapshotSyncInfo {
   string snapshotRequestId = 3;
   google.protobuf.Timestamp completedTime = 4;
   uint64 baseSnapshot = 5;
+  // Number of consecutive cancellations/restarts of the current snapshot sync session, with no
+  // fresh externally-requested attempt or full completion in between (see InSnapshotSyncState.
+  // consecutiveCancellations, which this mirrors -- also what drives that state's own retry
+  // backoff). status alone stays ONGOING throughout a restart loop exactly as it would for one
+  // long healthy transfer, so this field is what actually lets an external caller (dashboard,
+  // alerting) tell the two apart instead of only being able to infer it after the fact from log
+  // lines. Reset to 0 on the next genuinely fresh attempt or full completion, same as the
+  // in-memory counter it mirrors.
+  uint32 consecutiveFailures = 6;
 }
 
 /*

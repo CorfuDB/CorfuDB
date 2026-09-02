@@ -2,6 +2,9 @@ package org.corfudb.infrastructure;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
@@ -14,6 +17,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.AddressSpaceView;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -64,6 +68,18 @@ public class CompactorLeaderServicesUnitTest {
         doNothing().when(txn).delete(anyString(), any(Message.class));
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());
         when(corfuStore.openTable(any(), any(), any(), any(), any(), any())).thenReturn(mock(Table.class));
+
+        // Mirror production startup (ManagementAgent reports the COMPACTOR init issue,
+        // CompactorService resolves it once started) so COMPACTOR reaches INITIALIZED and
+        // runtime issues (e.g. CHECKPOINT_STALLED) can be reported/resolved in tests below.
+        HealthMonitor.init();
+        HealthMonitor.reportIssue(Issue.createInitIssue(Component.COMPACTOR));
+        HealthMonitor.resolveIssue(Issue.createInitIssue(Component.COMPACTOR));
+    }
+
+    @After
+    public void tearDown() {
+        HealthMonitor.shutdown();
     }
 
     @Test
@@ -108,6 +124,86 @@ public class CompactorLeaderServicesUnitTest {
         Assert.assertEquals(StatusType.COMPLETED, captor.getAllValues().get(0).getStatus());
         Assert.assertEquals(StatusType.FAILED, captor.getAllValues().get(1).getStatus());
         Assert.assertEquals(StatusType.FAILED, captor.getValue().getStatus());
+    }
+
+    @Test
+    public void checkForStalledCheckpointsTest() {
+        doNothing().when(livenessValidator).clearLivenessValidator();
+        doNothing().when(livenessValidator).clearLivenessMap();
+        // No tables are "active" (started), so validateLiveness() takes the isEmpty() branch
+        // and falls through to the new stalled-checkpoint check.
+        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.Status.NONE);
+
+        final long staleCycleStartTime = System.currentTimeMillis() - Duration.ofMinutes(6).toMillis();
+
+        // 1st keySet() call is getAllActiveCheckpointsTables() (none active),
+        // 2nd is checkForStalledCheckpoints() reading CheckpointStatusTable (one table, still IDLE).
+        when(txn.keySet(nullable(Table.class)))
+                .thenReturn(Collections.emptySet())
+                .thenReturn(Collections.singleton(tableName));
+        // 1st getRecord() is the CompactionManagerTable (cycle STARTED 6 minutes ago, i.e. beyond
+        // the 5 minute STALLED_CHECKPOINT_THRESHOLD), 2nd is the table's own status (still IDLE).
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED)
+                        .setTimeTaken(staleCycleStartTime).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build());
+
+        compactorLeaderServices.validateLiveness();
+
+        Issue stalledIssue = HealthMonitor.getHealthStatusSnapshot().get(Component.COMPACTOR)
+                .getRuntimeHealthIssues().stream()
+                .filter(issue -> issue.getIssueId() == Issue.IssueId.CHECKPOINT_STALLED)
+                .findFirst().orElse(null);
+        Assert.assertNotNull("Expected a CHECKPOINT_STALLED issue to be reported", stalledIssue);
+    }
+
+    @Test
+    public void checkForStalledCheckpointsResolvesOnceTableStartsTest() {
+        doNothing().when(livenessValidator).clearLivenessValidator();
+        doNothing().when(livenessValidator).clearLivenessMap();
+        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.Status.NONE);
+
+        // First pass: report the issue exactly as above.
+        final long staleCycleStartTime = System.currentTimeMillis() - Duration.ofMinutes(6).toMillis();
+        when(txn.keySet(nullable(Table.class)))
+                .thenReturn(Collections.emptySet())
+                .thenReturn(Collections.singleton(tableName))
+                // Second pass: the table has moved on (no longer IDLE), nothing left stalled.
+                .thenReturn(Collections.emptySet())
+                .thenReturn(Collections.singleton(tableName));
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED)
+                        .setTimeTaken(staleCycleStartTime).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.IDLE).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED)
+                        .setTimeTaken(staleCycleStartTime).build())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.COMPLETED).build());
+
+        compactorLeaderServices.validateLiveness();
+        Assert.assertFalse(HealthMonitor.getHealthStatusSnapshot().get(Component.COMPACTOR).isRuntimeHealthy());
+
+        compactorLeaderServices.validateLiveness();
+        Assert.assertTrue("Issue should be resolved once no table remains IDLE",
+                HealthMonitor.getHealthStatusSnapshot().get(Component.COMPACTOR).isRuntimeHealthy());
+    }
+
+    @Test
+    public void checkForStalledCheckpointsNotYetPastThresholdTest() {
+        doNothing().when(livenessValidator).clearLivenessValidator();
+        doNothing().when(livenessValidator).clearLivenessMap();
+        when(livenessValidator.shouldChangeManagerStatus(any(Duration.class))).thenReturn(LivenessValidator.Status.NONE);
+
+        // Cycle started only 1 minute ago: well within the 5 minute threshold, so even though a
+        // table is IDLE, it should not (yet) be reported as stalled.
+        final long recentCycleStartTime = System.currentTimeMillis() - Duration.ofMinutes(1).toMillis();
+        when(txn.keySet(nullable(Table.class))).thenReturn(Collections.emptySet());
+        when(corfuStoreEntry.getPayload())
+                .thenReturn(CheckpointingStatus.newBuilder().setStatus(StatusType.STARTED)
+                        .setTimeTaken(recentCycleStartTime).build());
+
+        compactorLeaderServices.validateLiveness();
+
+        Assert.assertTrue(HealthMonitor.getHealthStatusSnapshot().get(Component.COMPACTOR).isRuntimeHealthy());
     }
 
     @Test

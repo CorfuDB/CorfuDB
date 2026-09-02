@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doReturn;
@@ -78,13 +79,13 @@ public class LogReplicationServerTest {
 
         doReturn(true).when(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any(), anyBoolean());
+        doReturn(response).when(metadataManager).getMetadataResponse(any(), anyBoolean(), anyLong(), anyBoolean(), anyLong());
 
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
 
         verify(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any(), anyBoolean());
+        verify(metadataManager).getMetadataResponse(any(), anyBoolean(), anyLong(), anyBoolean(), anyLong());
     }
 
     /**

@@ -67,6 +67,14 @@ public class SnapshotSenderTest {
         return LogReplicationMetadataResponseMsg.newBuilder().setIsProcessing(isProcessing).build();
     }
 
+    private LogReplicationMetadataResponseMsg metadataResponseForAttempt(boolean isProcessing,
+                                                                          long processingSnapshotTimestamp) {
+        return LogReplicationMetadataResponseMsg.newBuilder()
+                .setIsProcessing(isProcessing)
+                .setProcessingSnapshotTimestamp(processingSnapshotTimestamp)
+                .build();
+    }
+
     private LogReplicationEntryMsg snapshotDataMessage() {
         LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
@@ -243,6 +251,60 @@ public class SnapshotSenderTest {
         Assert.assertEquals("the second call landed within the pacing window and must not have " +
                         "incremented the counter again", 1, snapshotSender.consecutiveGenuineStallChecks);
         verify(dataSender, times(1)).sendMetadataRequest();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // isSinkStillProcessing()'s attempt-scoping: isProcessing alone is sink-wide, not scoped to
+    // the specific attempt this source is asking about (e.g. the sink could be busy resuming an
+    // old, already-abandoned apply after its own restart while this source has since moved on to a
+    // fresh attempt). Trusting it blindly would let a stale-attempt busy signal extend patience
+    // for an attempt it says nothing about, indefinitely. A sink new enough to report
+    // processingSnapshotTimestamp lets the source tell the two apart.
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    public void busySinkOnADifferentAttemptDoesNotExtendPatienceForOurs() {
+        makeBufferStalledFor(SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS + 1000);
+        // Busy, but on some other attempt's baseSnapshotTimestamp -- e.g. still resuming an old,
+        // already-abandoned apply. snapshotSender's own baseSnapshotTimestamp defaults to 0 here
+        // (reset() was never called in this unit-test fixture), so 999 is guaranteed to differ.
+        when(dataSender.sendMetadataRequest())
+                .thenReturn(CompletableFuture.completedFuture(metadataResponseForAttempt(true, 999L)));
+        // Simulate the prior (SNAPSHOT_SYNC_ACK_MAX_RETRIES - 1) genuine checks having already
+        // happened, mirroring midTransferStallCancelsAfterMaxRetries() above.
+        snapshotSender.consecutiveGenuineStallChecks = SNAPSHOT_SYNC_ACK_MAX_RETRIES - 1;
+        snapshotSender.lastStallCheckTimeMs = 0;
+
+        boolean canceled = snapshotSender.checkForGenuineMidTransferStall(UUID.randomUUID(), false);
+
+        Assert.assertTrue("a busy signal for a different attempt must not be trusted as busy on ours",
+                canceled);
+    }
+
+    @Test
+    public void busySinkOnOurOwnAttemptStillExtendsPatience() {
+        makeBufferStalledFor(SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS + 1000);
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                metadataResponseForAttempt(true, snapshotSender.getBaseSnapshotTimestamp())));
+
+        boolean canceled = snapshotSender.checkForGenuineMidTransferStall(UUID.randomUUID(), false);
+
+        Assert.assertFalse(canceled);
+        Assert.assertEquals(0, snapshotSender.consecutiveGenuineStallChecks);
+    }
+
+    @Test
+    public void oldSinkWithoutProcessingTimestampIsStillTrustedAtFaceValue() {
+        // Rolling-upgrade safety: an old sink's response never sets processingSnapshotTimestamp at
+        // all (hasProcessingSnapshotTimestamp() == false) -- must fall back to trusting isProcessing
+        // exactly as before this attempt-scoping existed, not be misread as "different attempt".
+        makeBufferStalledFor(SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS + 1000);
+        when(dataSender.sendMetadataRequest())
+                .thenReturn(CompletableFuture.completedFuture(metadataResponse(true)));
+
+        boolean canceled = snapshotSender.checkForGenuineMidTransferStall(UUID.randomUUID(), false);
+
+        Assert.assertFalse(canceled);
     }
 
     // ------------------------------------------------------------------------------------------

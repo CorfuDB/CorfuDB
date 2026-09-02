@@ -127,7 +127,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // This will be taken onEntry of this state to initiate a snapshot send for this given request.
                 this.setTransitionSyncId(event.getMetadata().getSyncId());
                 snapshotSender.reset();
-                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId, consecutiveCancellations);
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*
@@ -175,7 +175,8 @@ public class InSnapshotSyncState implements LogReplicationState {
                     ((InSnapshotSyncState)inSnapshotSyncState).registerCancellationAndComputeBackoff();
                     ((InSnapshotSyncState)inSnapshotSyncState).lastEntryTimeMs = System.currentTimeMillis();
                     snapshotSender.reset();
-                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
+                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId,
+                            ((InSnapshotSyncState) inSnapshotSyncState).consecutiveCancellations);
                     return inSnapshotSyncState;
                 }
 
@@ -214,7 +215,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
                 snapshotSender.reset();
-                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId, consecutiveCancellations);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
                 // Only a genuine new entry marks "the current attempt just started". A
                 // SNAPSHOT_SYNC_CONTINUE self-loop re-enters via onEntry(this) every
@@ -270,10 +271,24 @@ public class InSnapshotSyncState implements LogReplicationState {
      * subsequent one.
      */
     void registerCancellationAndComputeBackoff() {
+        registerCancellationAndComputeBackoff(0);
+    }
+
+    /**
+     * As above, but the resulting backoff is floored at minBackoffMs -- deliberately *not* itself
+     * capped at MAX_RETRY_BACKOFF_MS, unlike the normal exponential computation, since this floor
+     * exists for a different purpose (letting the sink's checkpointer, just unfrozen because
+     * isApplyRetriesExhausted() -- see LogReplicationSinkManager's Javadoc -- actually get a sized
+     * window) than the general restart-storm throttling MAX_RETRY_BACKOFF_MS is tuned for, and the
+     * two aren't necessarily meant to have the same ceiling. Zero (the default from every other
+     * call site) is a no-op: the normal computed backoff always wins over a zero floor.
+     */
+    void registerCancellationAndComputeBackoff(long minBackoffMs) {
         consecutiveCancellations++;
-        retryBackoffMs = consecutiveCancellations == 1
+        long computed = consecutiveCancellations == 1
                 ? LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS
                 : Math.min(retryBackoffMs * 2, LogReplicationConfig.MAX_RETRY_BACKOFF_MS);
+        retryBackoffMs = Math.max(computed, minBackoffMs);
     }
 
     /**

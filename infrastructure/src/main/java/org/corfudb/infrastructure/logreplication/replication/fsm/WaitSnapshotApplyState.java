@@ -119,7 +119,12 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
-                    ((InSnapshotSyncState) inSnapshotSyncState).registerCancellationAndComputeBackoff();
+                    // minBackoffMs is 0 (a no-op) unless this cancel came from the
+                    // applyRetriesExhausted branch above, in which case it's the sink's requested
+                    // checkpointer grace period -- see LogReplicationEventMetadata.minBackoffMs's
+                    // Javadoc.
+                    ((InSnapshotSyncState) inSnapshotSyncState)
+                            .registerCancellationAndComputeBackoff(event.getMetadata().getMinBackoffMs());
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
@@ -248,6 +253,27 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                         baseSnapshotTimestamp);
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
                         new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)));
+                return;
+            } else if (metadataResponse.getApplyRetriesExhausted()) {
+                // The sink has already given up automatically retrying this specific apply (see
+                // LogReplicationSinkManager.isApplyRetriesExhausted()) -- it is not going to
+                // complete on its own no matter how much longer we wait. Cancel and restart now
+                // instead of waiting out the full SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound below,
+                // which exists to catch a generic hang and has no way, on its own, of knowing the
+                // sink already concluded this one is doomed. An old sink that doesn't set this
+                // field always reports it as false (proto3 default), so this is a no-op against a
+                // peer that doesn't support it -- safe during a rolling upgrade in either direction.
+                log.error("Sink reports its automatic apply-resume retries are exhausted for {}; " +
+                                "canceling and restarting a fresh snapshot sync instead of waiting " +
+                                "out the full apply-wait bound. Sink requests at least {} ms before " +
+                                "the next attempt, to give its checkpointer a real window to run.",
+                        transitionSyncId, metadataResponse.getCheckpointerGracePeriodMs());
+                // The floor below is what actually delays the next SNAPSHOT_START -- see
+                // InSnapshotSyncState.registerCancellationAndComputeBackoff(long) and
+                // LogReplicationEventMetadata.minBackoffMs's Javadoc for how it's applied.
+                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                        new LogReplicationEventMetadata(transitionSyncId)
+                                .setMinBackoffMs(metadataResponse.getCheckpointerGracePeriodMs())));
                 return;
             } else {
                 log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
