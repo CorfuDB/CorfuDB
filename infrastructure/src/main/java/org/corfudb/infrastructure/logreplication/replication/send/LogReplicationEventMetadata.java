@@ -32,6 +32,16 @@ public class LogReplicationEventMetadata {
 
     private boolean forceSnapshotSync = false;
 
+    /*
+     * Floor applied to the backoff computed for a SYNC_CANCEL caused by the sink reporting
+     * isApplyRetriesExhausted() (see WaitSnapshotApplyState.verifyStatusOfSnapshotSyncApply() and
+     * InSnapshotSyncState.registerCancellationAndComputeBackoff(long)) -- the sink's requested
+     * checkpointerGracePeriodMs, so its local checkpointer gets that much time before the next
+     * SNAPSHOT_START re-freezes it. Zero (the default) for every other event/cause, where it's a
+     * no-op: the normal exponential backoff always wins over a zero floor.
+     */
+    private long minBackoffMs = 0;
+
     /**
      * Constructor
      *
@@ -88,5 +98,12 @@ public class LogReplicationEventMetadata {
     }
 
     public boolean isForcedSnapshotSync() { return this.forceSnapshotSync; }
+
+    public long getMinBackoffMs() { return this.minBackoffMs; }
+
+    public LogReplicationEventMetadata setMinBackoffMs(long minBackoffMs) {
+        this.minBackoffMs = minBackoffMs;
+        return this;
+    }
 }
 

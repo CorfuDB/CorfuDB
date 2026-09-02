@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
@@ -74,6 +75,15 @@ public abstract class SenderBufferManager {
      * When used by snapshot sync, it represents the max snapshot sequence number replicated.
      */
     public long maxAckTimestamp = Address.NON_ADDRESS;
+
+    /*
+     * Wall-clock time maxAckTimestamp last actually advanced, i.e. the last time any real forward
+     * progress was made -- as opposed to msgTimer-driven resends, which happen on a fixed cadence
+     * regardless of whether the recipient is making any progress at all. Used to detect a
+     * genuinely-stalled recipient (see isGenuinelyStalled()).
+     */
+    @VisibleForTesting
+    volatile long lastAckAdvancedTimeMs = System.currentTimeMillis();
 
     /*
      * The snapshot sync sequence number
@@ -241,8 +251,9 @@ public abstract class SenderBufferManager {
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
             LogReplicationPendingEntry entry = pendingMessages.getPendingEntries().get(i);
-            if (entry.timeout(msgTimer) || force) {
+            if (entry.timeout(msgTimer) || force || entry.isExpedited()) {
                 entry.retry();
+                entry.setExpedited(false);
                 // Update metadata as topologyConfigId could have changed in between resend cycles
                 LogReplicationEntryMsg dataEntry = entry.getData();
                 LogReplicationEntryMetadataMsg metadata = overrideTopologyConfigId(
@@ -271,6 +282,27 @@ public abstract class SenderBufferManager {
         maxAckTimestamp = lastAckedTimestamp;
         pendingMessages.clear();
         pendingCompletableFutureForAcks.clear();
+        lastAckAdvancedTimeMs = System.currentTimeMillis();
+    }
+
+    /**
+     * Record that maxAckTimestamp just genuinely advanced. Called by subclasses' updateAck()
+     * implementations, not derived generically here, since what counts as "advancing" differs
+     * (snapshotSyncSeqNum vs. log entry timestamp).
+     */
+    protected void markAckAdvanced() {
+        lastAckAdvancedTimeMs = System.currentTimeMillis();
+    }
+
+    /**
+     * How long it's been, in real wall-clock time, since maxAckTimestamp last genuinely advanced.
+     * Unlike LogReplicationPendingEntry's resend timer (which resets on every resend regardless of
+     * whether the recipient is making progress), this reflects actual forward progress -- used to
+     * detect a genuinely-stalled recipient rather than merely a slow one still being resent to on
+     * cadence. Returns 0 if there's nothing pending (no stall is possible with an empty buffer).
+     */
+    public long getMillisSinceLastAckAdvance() {
+        return pendingMessages.isEmpty() ? 0 : System.currentTimeMillis() - lastAckAdvancedTimeMs;
     }
 
     public abstract void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf);

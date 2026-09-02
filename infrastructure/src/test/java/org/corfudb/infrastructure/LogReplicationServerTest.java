@@ -16,14 +16,19 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -74,13 +79,13 @@ public class LogReplicationServerTest {
 
         doReturn(true).when(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         doReturn(metadataManager).when(sinkManager).getLogReplicationMetadataManager();
-        doReturn(response).when(metadataManager).getMetadataResponse(any());
+        doReturn(response).when(metadataManager).getMetadataResponse(any(), anyBoolean(), anyLong(), anyBoolean(), anyLong());
 
         lrServer.createHandlerMethods().handle(request, mockHandlerContext, mockServerRouter);
-        
+
         verify(lrServer).isLeader(same(request), any(), any(), anyBoolean());
         verify(sinkManager).getLogReplicationMetadataManager();
-        verify(metadataManager).getMetadataResponse(any());
+        verify(metadataManager).getMetadataResponse(any(), anyBoolean(), anyLong(), anyBoolean(), anyLong());
     }
 
     /**
@@ -142,5 +147,50 @@ public class LogReplicationServerTest {
         ArgumentCaptor<ResponseMsg> argument = ArgumentCaptor.forClass(ResponseMsg.class);
         verify(mockServerRouter).sendResponse(argument.capture(), any());
         Assertions.assertThat(argument.getValue().getPayload().getLrEntryAck()).isNotNull();
+    }
+
+    /**
+     * Verifies that processRequest() -- the actual dispatch entry point, which none of the tests
+     * above exercise (they all call createHandlerMethods().handle(...) directly, bypassing
+     * processRequest() and its executor selection entirely) -- routes LR_METADATA_REQUEST and
+     * LR_LEADERSHIP_QUERY to a control-plane executor distinct from the one LR_ENTRY uses. Before
+     * this, all three request types shared a single-threaded executor with LR_ENTRY's handler
+     * (sinkManager.receive(), which runs synchronously all the way down to the actual disk
+     * write/fsync with no offload), so a metadata/heartbeat poll used specifically to distinguish
+     * "sink busy" from "sink dead" could get queued behind (or dropped alongside) a slow write on
+     * the very thread it needed a timely answer from.
+     */
+    @Test
+    public void metadataAndLeadershipRequestsUseControlPlaneExecutorNotDataPlaneExecutor() throws Exception {
+        ServerContext freshContext = mock(ServerContext.class);
+        ThreadPoolExecutor dataPlaneExecutor = spy((ThreadPoolExecutor) Executors.newFixedThreadPool(1));
+        ThreadPoolExecutor controlPlaneExecutor = spy((ThreadPoolExecutor) Executors.newFixedThreadPool(1));
+        doReturn(dataPlaneExecutor).when(freshContext).getExecutorService(1, "LogReplicationServer-");
+        doReturn(controlPlaneExecutor).when(freshContext).getExecutorService(1, "LogReplicationServer-control-");
+
+        LogReplicationServer server = new LogReplicationServer(freshContext, metadataManager, sinkManager, "nodeId");
+        try {
+            RequestMsg metadataRequest = getRequestMsg(HeaderMsg.newBuilder().build(),
+                    CorfuMessage.RequestPayloadMsg.newBuilder()
+                            .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder().build()).build());
+            RequestMsg leadershipRequest = getRequestMsg(HeaderMsg.newBuilder().build(),
+                    CorfuMessage.RequestPayloadMsg.newBuilder()
+                            .setLrLeadershipQuery(LogReplicationLeadershipRequestMsg.newBuilder().build()).build());
+            RequestMsg entryRequest = getRequestMsg(HeaderMsg.newBuilder().build(),
+                    CorfuMessage.RequestPayloadMsg.newBuilder()
+                            .setLrEntry(LogReplicationEntryMsg.newBuilder().build()).build());
+
+            server.processRequest(metadataRequest, mockHandlerContext, mockServerRouter);
+            server.processRequest(leadershipRequest, mockHandlerContext, mockServerRouter);
+            server.processRequest(entryRequest, mockHandlerContext, mockServerRouter);
+
+            // Exactly 2 submissions (metadata + leadership) on the control-plane executor and
+            // exactly 1 (the entry request) on the data-plane one, fully accounts for all three
+            // calls above -- proving the routing, not just that submission happened somewhere.
+            verify(controlPlaneExecutor, times(2)).submit(any(Runnable.class));
+            verify(dataPlaneExecutor, times(1)).submit(any(Runnable.class));
+        } finally {
+            server.shutdown();
+        }
     }
 }

@@ -15,6 +15,21 @@ message LogReplicationEntryMetadataMsg {
   UuidMsg syncRequestId = 5;
   int64 snapshotTimestamp = 6;
   int64 snapshotSyncSeqNum = 7;
+  // Set by the sink on every ack to explicitly state the next snapshotSyncSeqNum it is still
+  // waiting for, so the source can target retransmission precisely instead of blindly resending
+  // on a fixed cadence. A real value (including 0, legitimate at the very start of a transfer)
+  // is indistinguishable on the wire from an absent field once decoded as a plain scalar -- proto3
+  // always decodes an unset scalar as its zero value, so a sentinel constant doesn't work here.
+  // Wrapped in a oneof (proto3's presence-tracking primitive predating the `optional` keyword) to
+  // get an explicit has-method instead, so a source new enough to read this can tell "peer doesn't
+  // support this yet" apart from a genuine value of 0 -- required for safe rolling-upgrade
+  // behavior. (`optional` would express this more directly and generates the identical
+  // presence-tracking under the hood, but it crashes this repo's protoc toolchain when combined
+  // with the existing custom-options extension setup -- confirmed by testing in isolation; this
+  // explicit oneof form does not hit that path.)
+  oneof expected_seq_num_oneof {
+    int64 expectedSeqNum = 8;
+  }
 }
 
 message LogReplicationEntryMsg {
@@ -32,6 +47,44 @@ message LogReplicationMetadataResponseMsg {
   uint64 snapshotTransferred = 4;
   uint64 snapshotApplied = 5;
   uint64 lastLogEntryTimestamp = 6;
+  // Set by the sink to indicate it is still actively processing (writing/applying) the current
+  // snapshot sync, so the source should not treat a slow response as a dead/stalled sink.
+  bool isProcessing = 7;
+  // The baseSnapshotTimestamp of the specific snapshot-sync attempt isProcessing above refers to.
+  // isProcessing alone cannot distinguish "busy on the attempt you're asking about" from "busy on
+  // a different, already-abandoned attempt" (e.g. a stale apply the sink is still resuming after
+  // the source has already canceled and restarted with a new SNAPSHOT_START) -- both look
+  // identical as a bare boolean, but only the former should extend a source's patience for its
+  // *current* attempt. A source new enough to read this compares it against its own
+  // baseSnapshotTimestamp before trusting isProcessing; absent on an old sink's response (or an
+  // old source simply not looking at it), so this is safe during a rolling upgrade in either
+  // direction. See the same presence-tracking rationale on expectedSeqNum above for why this is a
+  // oneof rather than a plain scalar.
+  oneof processing_snapshot_timestamp_oneof {
+    int64 processingSnapshotTimestamp = 8;
+  }
+  // Set by the sink when it has given up automatically retrying the pending snapshot-sync apply
+  // for the attempt reflected in snapshotStart/snapshotTransferred above (see
+  // LogReplicationSinkManager.resumeSnapshotApply()'s maxSnapshotApplyResumeRetries cap) -- i.e.
+  // this specific apply is not going to complete on its own; only a fresh snapshot sync (a new
+  // SNAPSHOT_START) will make progress again. Lets WaitSnapshotApplyState cancel and restart
+  // immediately instead of waiting out the full, much longer SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound
+  // (30 minutes), which exists to catch a hung apply in general and has no way of knowing the sink
+  // has already, itself, concluded this one is doomed. No presence-tracking needed here (unlike
+  // expectedSeqNum/processingSnapshotTimestamp above): false is both proto3's default for an unset
+  // field and exactly the safe fallback for an old sink that doesn't know about this cap at all --
+  // there's no ambiguous "legitimate false" value the way there is for those.
+  bool applyRetriesExhausted = 9;
+  // Set alongside applyRetriesExhausted (and only meaningful when that is true): the minimum time
+  // (ms) the sink wants the source to wait before its next SNAPSHOT_START, so the checkpointer that
+  // was just unfrozen -- see LogReplicationSinkManager.resumeSnapshotApply()'s Javadoc -- gets a
+  // real, sized window to start (and, once started, run to completion) a full cycle before
+  // checkpointing is paused again. Configurable per LogReplicationConfig.
+  // DEFAULT_CHECKPOINTER_GRACE_PERIOD_MS's Javadoc; 0 (the default) asks for no additional wait
+  // beyond the source's own restart-storm backoff, which is also exactly what an old sink not
+  // supporting this reports (proto3's default for an unset field), so this is safe during a
+  // rolling upgrade in either direction without needing presence-tracking.
+  int64 checkpointerGracePeriodMs = 10;
 }
 
 message LogReplicationLeadershipLossResponseMsg {

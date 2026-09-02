@@ -26,6 +26,10 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -99,6 +103,18 @@ public class SourceForwardingDataSender implements DataSender {
 
     private int numStartMsgsDropped;
 
+    private int delayTransferCompleteAckMs;
+
+    private boolean reportSinkBusyOnMetadataPoll;
+
+    private boolean dropAllAfterSnapshotStart;
+
+    @VisibleForTesting
+    @Getter
+    private final AtomicInteger metadataRequestCount = new AtomicInteger(0);
+
+    private final ScheduledExecutorService delayedAckExecutor = Executors.newSingleThreadScheduledExecutor();
+
     @SneakyThrows
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
@@ -114,6 +130,9 @@ public class SourceForwardingDataSender implements DataSender {
         this.metadataResponseObservable = new ObservableValue<>(null);
         this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
         this.dropACKLevel = testConfig.getDropAckLevel();
+        this.delayTransferCompleteAckMs = testConfig.getDelayTransferCompleteAckMs();
+        this.reportSinkBusyOnMetadataPoll = testConfig.isReportSinkBusyOnMetadataPoll();
+        this.dropAllAfterSnapshotStart = testConfig.isDropAllAfterSnapshotStart();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
         this.standbyCorfuStore = new CorfuStore(runtime);
@@ -129,6 +148,12 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
+        // Simulate a source that has gone silent (network partition, crash) right after starting a
+        // snapshot sync: nothing past SNAPSHOT_START ever reaches the sink.
+        if (dropAllAfterSnapshotStart && message.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_START) {
+            return new CompletableFuture<>();
+        }
+
         // Check if the SNAPSHOT_START message must be dropped
         if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
                 LogReplicationEntryType.SNAPSHOT_START) {
@@ -181,6 +206,20 @@ public class SourceForwardingDataSender implements DataSender {
             return cf;
         }
 
+        if (delayTransferCompleteAckMs > 0 && ack != null
+                && ack.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE) {
+            // Sink has already processed the message; only delay delivery of the ack back to the
+            // source, to simulate a slow-but-alive sink without actually slowing down processing.
+            log.info("Delaying delivery of SNAPSHOT_TRANSFER_COMPLETE ack by {} ms", delayTransferCompleteAckMs);
+            LogReplicationEntryMsg delayedAck = ack;
+            delayedAckExecutor.schedule(() -> {
+                ackMessages.setValue(delayedAck);
+                cf.complete(delayedAck);
+            }, delayTransferCompleteAckMs, TimeUnit.MILLISECONDS);
+            msgCnt++;
+            return cf;
+        }
+
         if (ack != null) {
             cf.complete(ack);
         }
@@ -216,6 +255,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
+        metadataRequestCount.incrementAndGet();
         CompletableFuture<LogReplicationMetadataResponseMsg> completableFuture = new CompletableFuture<>();
         long baseSnapshotTimestamp = destinationDataSender.getSourceManager().getLogReplicationFSM().getBaseSnapshot();
         LogReplicationMetadataResponseMsg response;
@@ -249,6 +289,10 @@ public class SourceForwardingDataSender implements DataSender {
                     .setSnapshotApplied(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp())
                     .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryBatchTimestamp())
                     .build();
+        }
+
+        if (reportSinkBusyOnMetadataPoll) {
+            response = response.toBuilder().setIsProcessing(true).build();
         }
 
         metadataResponseObservable.setValue(response);
@@ -288,6 +332,8 @@ public class SourceForwardingDataSender implements DataSender {
         if (runtime != null) {
             runtime.shutdown();
         }
+
+        delayedAckExecutor.shutdownNow();
     }
 
     public ObservableValue<LogReplicationMetadataResponseMsg> getMetadataResponses() {
@@ -355,5 +401,8 @@ public class SourceForwardingDataSender implements DataSender {
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
         this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
         this.dropACKLevel = testConfig.getDropAckLevel();
+        this.delayTransferCompleteAckMs = testConfig.getDelayTransferCompleteAckMs();
+        this.reportSinkBusyOnMetadataPoll = testConfig.isReportSinkBusyOnMetadataPoll();
+        this.dropAllAfterSnapshotStart = testConfig.isDropAllAfterSnapshotStart();
     }
 }

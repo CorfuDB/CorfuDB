@@ -19,6 +19,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
@@ -27,11 +28,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SNAPSHOT_SYNC_ACK_MAX_RETRIES;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
@@ -56,6 +59,7 @@ public class SnapshotSender {
     @Getter
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
+    private final DataSender dataSender;
 
     @Getter
     private long baseSnapshotTimestamp;
@@ -79,11 +83,23 @@ public class SnapshotSender {
 
     private boolean snapshotCompleted = false;  // Flag indicating the snapshot sync is completed
 
+    // Consecutive genuine (non-busy) mid-transfer stall checks, mirroring the genuineTimeouts counter
+    // in waitForSnapshotSyncAck -- reset as soon as either progress resumes or the sink reports busy.
+    @VisibleForTesting
+    int consecutiveGenuineStallChecks = 0;
+
+    // Wall-clock time of the last mid-transfer stall check, so a tight SNAPSHOT_SYNC_CONTINUE
+    // self-loop (pending buffer permanently full) can't hammer the sink with metadata-poll requests
+    // more often than the final-ack path already does.
+    @VisibleForTesting
+    long lastStallCheckTimeMs = 0;
+
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        this.dataSender = dataSender;
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
@@ -154,8 +170,7 @@ public class SnapshotSender {
             if (snapshotCompleted) {
                 // Block until ACK from last sent message is received
                 try {
-                    // TODO V2: the fix to retry for the last msg incase of ack timeout is present in PR 3750
-                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    LogReplicationEntryMsg ack = waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
                             ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
@@ -178,6 +193,11 @@ public class SnapshotSender {
                     snapshotSyncAck = null;
                 }
             } else if (!cancel && !stopSnapshotSync.get()) {
+                if (checkForGenuineMidTransferStall(snapshotSyncEventId, forcedSnapshotSync)) {
+                    // Cancellation already triggered for this attempt; do not also continue it.
+                    return;
+                }
+
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
                 // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
@@ -193,13 +213,151 @@ public class SnapshotSender {
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
                 snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
             } catch (Exception e) {
                 log.warn("Caught exception while sending data to sink.", e);
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
             }
         }
+    }
+
+    /**
+     * Wait for the ack of the final snapshot sync message, tolerating a busy-but-alive sink instead
+     * of giving up on the first timeout. On each timeout with no ack, poll the sink directly: if it
+     * reports it's still actively processing this snapshot sync, keep waiting without counting it
+     * against the retry budget; a sink that stays genuinely silent (no ack, and either no response
+     * or a not-busy response to the poll) for SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts is
+     * treated as stalled and the caller cancels the sync.
+     *
+     * @param snapshotSyncEventId identifier of the snapshot sync being waited on, for logging only
+     * @param ackFuture completes with the ack for the last message sent for this attempt
+     * @return the received ack
+     * @throws Exception if the ack does not arrive and the sink is not reporting activity for
+     *                    SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts, or some other failure occurs
+     */
+    LogReplicationEntryMsg waitForSnapshotSyncAck(UUID snapshotSyncEventId,
+                                                  CompletableFuture<LogReplicationEntryMsg> ackFuture) throws Exception {
+        int genuineTimeouts = 0;
+        while (true) {
+            if (stopSnapshotSync.get()) {
+                // A stop was requested (e.g. a new cancellation/request) while waiting on this
+                // attempt's ack. Without this check, a sink that always reports busy=true would keep
+                // this loop (and, transitively, cancelSnapshotSync()'s blocking wait on
+                // transmitFuture) alive indefinitely, since genuineTimeouts only advances on a
+                // non-busy timeout.
+                throw new InterruptedException("Snapshot sync " + snapshotSyncEventId
+                        + " stopped while waiting for ack.");
+            }
+            try {
+                return ackFuture.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException te) {
+                if (isSinkStillProcessing()) {
+                    log.info("Sink reported busy while waiting for ack for snapshot sync {}; extending wait.",
+                            snapshotSyncEventId);
+                    continue;
+                }
+                genuineTimeouts++;
+                log.warn("Ack timeout {}/{} waiting for snapshot sync {} to be acked; sink not reporting activity.",
+                        genuineTimeouts, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
+                if (genuineTimeouts >= SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
+                    throw te;
+                }
+            }
+        }
+    }
+
+    /**
+     * Actively poll the sink for whether it is still working on the current snapshot sync. Used only
+     * to extend patience on an otherwise-unexplained ack timeout, so any failure to determine this
+     * (including the poll itself timing out) is conservatively treated as "not processing".
+     *
+     * isProcessing alone is sink-wide, not attempt-scoped: it's true whenever the sink is busy on
+     * *any* snapshot-sync work, including a stale attempt this source has already canceled and
+     * moved past (e.g. the sink is still resuming an old, abandoned apply after its own restart --
+     * see LogReplicationSinkManager.resumeSnapshotApply()). Trusting it blindly in that case would
+     * let this source wait indefinitely on someone else's progress for an attempt it isn't even
+     * asking about, compounding the (separately tracked, deliberately unrecoverable-without-an-
+     * operator) risk of a genuinely hung apply: instead of that hang bounding just the one stuck
+     * attempt, it would also stall every subsequent attempt's transfer phase forever, since
+     * genuineTimeouts/consecutiveGenuineStallChecks never advance while isProcessing reports true.
+     * A sink new enough to report processingSnapshotTimestamp lets this be resolved: only honor the
+     * busy signal when it names *this* attempt's baseSnapshotTimestamp. An old sink (field absent)
+     * is trusted at face value, matching the pre-existing behavior -- not a regression, just not
+     * yet able to make the distinction.
+     */
+    private boolean isSinkStillProcessing() {
+        try {
+            LogReplicationMetadataResponseMsg response = dataSender.sendMetadataRequest()
+                    .get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!response.getIsProcessing()) {
+                return false;
+            }
+            if (response.hasProcessingSnapshotTimestamp()
+                    && response.getProcessingSnapshotTimestamp() != baseSnapshotTimestamp) {
+                log.warn("Sink reports busy, but on a different attempt (its baseSnapshot={}, ours={}); " +
+                                "treating as not processing our attempt.",
+                        response.getProcessingSnapshotTimestamp(), baseSnapshotTimestamp);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to query sink status while waiting for snapshot sync ack.", e);
+            return false;
+        }
+    }
+
+    /**
+     * If the pending buffer has been genuinely stalled (no ack has advanced maxAckTimestamp) for at
+     * least as long as the final-ack path's own genuine-silence bound, and the sink isn't reporting
+     * activity on a paced busy-signal poll, treat this as a stalled mid-transfer attempt and cancel
+     * it -- the same busy-aware give-up waitForSnapshotSyncAck applies to the final ack, just
+     * triggered from the buffer-full self-loop instead of the tail-end blocking wait. Without this,
+     * a sink that stops acking before the source finishes reading all data never reaches
+     * waitForSnapshotSyncAck at all (snapshotCompleted never becomes true), so the final-ack fix
+     * never engages and SenderBufferManager.resend() -- which has no retry cap of its own -- would
+     * retry forever with no path to cancellation.
+     *
+     * Paces its own busy-signal polls at DEFAULT_TIMEOUT_MS so a tight SNAPSHOT_SYNC_CONTINUE
+     * self-loop (buffer permanently full) can't hammer the sink with metadata requests every
+     * iteration.
+     *
+     * @return true if a cancellation was triggered this cycle (caller must not also fire
+     *         SNAPSHOT_SYNC_CONTINUE)
+     */
+    @VisibleForTesting
+    boolean checkForGenuineMidTransferStall(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
+        if (dataSenderBufferManager.getMillisSinceLastAckAdvance()
+                < SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS) {
+            consecutiveGenuineStallChecks = 0;
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastStallCheckTimeMs < DEFAULT_TIMEOUT_MS) {
+            return false; // paced -- don't poll more often than the final-ack path does
+        }
+        lastStallCheckTimeMs = now;
+
+        if (isSinkStillProcessing()) {
+            log.info("Sink reported busy while its oldest pending snapshot entry is unacked for {}; extending patience.",
+                    snapshotSyncEventId);
+            consecutiveGenuineStallChecks = 0;
+            return false;
+        }
+
+        consecutiveGenuineStallChecks++;
+        log.warn("Mid-transfer stall {}/{} for snapshot sync {}: no ack has advanced and sink not reporting activity.",
+                consecutiveGenuineStallChecks, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
+        if (consecutiveGenuineStallChecks < SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
+            return false;
+        }
+
+        log.error("Canceling snapshot sync {}: mid-transfer stall persisted for {} genuine checks.",
+                snapshotSyncEventId, consecutiveGenuineStallChecks);
+        consecutiveGenuineStallChecks = 0;
+        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
+        return true;
     }
 
     private int processReads(List<LogReplicationEntryMsg> logReplicationEntries,
@@ -310,6 +468,8 @@ public class SnapshotSender {
         stopSnapshotSync.set(false);
         startSnapshotSync = true;
         snapshotCompleted = false;
+        consecutiveGenuineStallChecks = 0;
+        lastStallCheckTimeMs = 0;
     }
 
     /**
