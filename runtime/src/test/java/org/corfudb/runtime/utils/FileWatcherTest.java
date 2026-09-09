@@ -46,6 +46,8 @@ public class FileWatcherTest {
     private ExecutorService executorService;
     private static final int SLEEP_TIMER_1S = 1;
     private static final int MAX_RETRY_LIMIT = 20;
+    private static final long TEST_RETRY_BACKOFF_MS = 200;
+    private static final long BACKOFF_TEST_WINDOW_MS = 600;
 
     @Before
     public void setup() throws IOException {
@@ -189,5 +191,46 @@ public class FileWatcherTest {
         assertThat(executorService.isShutdown()).isTrue();
         assertThat(fileWatcher.getIsStopped()).isTrue();
         assertThat(fileWatcher.getIsRegistered()).isFalse();
+    }
+
+    /**
+     * Test that when the watched file's parent directory does not exist yet, the FileWatcher's
+     * retry loop backs off between attempts instead of spinning unthrottled. Regression test for
+     * a bug where hundreds of NoSuchFileException/IllegalStateException were logged within a
+     * fraction of a second while the directory was still being provisioned.
+     */
+    @Test
+    public void testFileWatcherBacksOffWhenParentDirMissing() throws IOException, InterruptedException {
+        // Point the watcher at a file whose parent directory does not exist.
+        Path missingParentDir = Paths.get(PATH, "not-yet-provisioned");
+        Path missingFilePath = missingParentDir.resolve("keystore.jks");
+
+        AtomicInteger onChangeCounter = new AtomicInteger(0);
+        fileWatcher = new FileWatcher(missingFilePath.toFile().getAbsolutePath(), onChangeCounter::incrementAndGet);
+        fileWatcher.setRetryBackoffMillis(TEST_RETRY_BACKOFF_MS);
+
+        // Let the retry loop run for a bounded window, then assert the actual retry count is
+        // capped to roughly window/backoff, not the thousands of attempts an unthrottled spin
+        // would produce in the same window.
+        TimeUnit.MILLISECONDS.sleep(BACKOFF_TEST_WINDOW_MS);
+
+        assertThat(fileWatcher.getIsRegistered()).isFalse();
+        long maxExpectedRetries = (BACKOFF_TEST_WINDOW_MS / TEST_RETRY_BACKOFF_MS) + 2;
+        assertThat(fileWatcher.getRetryCount().get())
+                .isPositive()
+                .isLessThanOrEqualTo((int) maxExpectedRetries);
+
+        // Now provision the directory; the watcher should pick it up on a subsequent retry
+        // without needing an unbounded number of attempts.
+        Files.createDirectories(missingParentDir);
+        Files.createFile(missingFilePath);
+
+        for (int i = 0; i < MAX_RETRY_LIMIT; i += 1) {
+            if (fileWatcher.getIsRegistered().get()) {
+                break;
+            }
+            TimeUnit.MILLISECONDS.sleep(TEST_RETRY_BACKOFF_MS);
+        }
+        assertThat(fileWatcher.getIsRegistered()).isTrue();
     }
 }
