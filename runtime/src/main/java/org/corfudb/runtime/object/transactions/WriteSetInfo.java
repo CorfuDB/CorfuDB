@@ -1,10 +1,12 @@
 package org.corfudb.runtime.object.transactions;
 
+import com.google.common.base.Preconditions;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.object.MVOCorfuCompileProxy;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +26,33 @@ public class WriteSetInfo extends ConflictSetInfo {
 
     // The actual updates to mutated objects.
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
+
+    /**
+     * Register a conflict on an object without writing anything to it. Used by no-op writes such
+     * as TxnContext.touch(), which need to create a write-write conflict on a key but must not
+     * write a payload or generate a stream tag notification.
+     * <p>
+     * The stream is registered with an empty update list rather than skipped entirely, for two
+     * reasons: the commit path treats an empty write set as a read-only transaction and never
+     * reaches the sequencer, and the stream's tail must still advance so that other transactions
+     * performing coarse, whole-stream conflict checks against it are still resolved correctly.
+     *
+     * @param proxy           the SMR object the conflict is registered on.
+     * @param conflictObjects the fine-grained conflict information, which must be present.
+     */
+    public void addConflictOnly(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
+        // A null or empty conflict set is interpreted by the sequencer as a conflict against
+        // every update on the stream, which would abort on any concurrent write to the table.
+        Preconditions.checkArgument(conflictObjects != null && conflictObjects.length > 0,
+                "addConflictOnly requires fine-grained conflict objects");
+
+        synchronized (getRootContext().getTransactionID()) {
+            // Register the stream carrying no updates, so no payload is written.
+            writeSet.addTo(proxy.getStreamID(), Collections.emptyList());
+            // Deliberately no streamTags.addAll(): a conflict-only update notifies no one.
+            super.add(proxy, conflictObjects);
+        }
+    }
 
     public long add(MVOCorfuCompileProxy<?> proxy,
                     SMREntry updateEntry, Object[] conflictObjects) {
