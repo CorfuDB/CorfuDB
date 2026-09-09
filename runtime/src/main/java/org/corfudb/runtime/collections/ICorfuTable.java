@@ -27,6 +27,14 @@ public interface ICorfuTable<K, V> {
     void delete(K key);
 
     /**
+     * Register a conflict on the given key without modifying the table. The enclosing
+     * transaction is resolved against concurrent updates to that key, but nothing is written.
+     *
+     * @param key The key to register a conflict on
+     */
+    void addConflictOnly(K key);
+
+    /**
      * Get a mapping using the specified index function.
      *
      * @param indexName Name of the secondary index to query.

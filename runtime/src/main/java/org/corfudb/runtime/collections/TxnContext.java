@@ -287,6 +287,34 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Controls whether a {@link #touch} is visible to stream tag subscribers.
+     * <p>
+     * touch() creates the conflict by re-writing the record with its own unchanged payload and
+     * metadata, which is indistinguishable from a real mutation to the streaming layer. This
+     * option lets a caller keep the conflict without waking up the table's tag subscribers.
+     */
+    public enum TouchOption {
+        /**
+         * Default, and the historical behavior of touch(). The touch is written to the touched
+         * table's stream tags, so subscribers of those tags observe it as an update.
+         */
+        GENERATE_STREAM_NOTIFICATION,
+
+        /**
+         * The touch registers a write-write conflict on the key without writing anything: no
+         * payload is serialized or logged, the in-memory object is left untouched, and none of the
+         * table's stream tags are contributed, so tag subscribers do not observe it. On a
+         * federated table this also drops the Log Replication tag; since nothing about the record
+         * changes, no data is lost by not replicating it.
+         * <p>
+         * Because the touch produces no update, the touched key does not appear in any
+         * notification even when the same transaction performs a real write on a tagged table.
+         * That real write still notifies its own subscribers, as it should.
+         */
+        SUPPRESS_STREAM_NOTIFICATION
+    }
+
+    /**
      * touch() is a call to create a conflict on a read in a write-only transaction
      *
      * @param table Table object to perform the create/update on.
@@ -298,18 +326,55 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull Table<K, V, M> table,
                @Nonnull final K key) {
+        this.touch(table, key, TouchOption.GENERATE_STREAM_NOTIFICATION);
+    }
+
+    /**
+     * touch() is a call to create a conflict on a read in a write-only transaction
+     *
+     * @param table       Table object to perform the create/update on.
+     * @param key         Key of the record to touch.
+     * @param touchOption Whether this touch should generate a stream tag notification.
+     * @param <K>         Type of Key.
+     * @param <V>         Type of Value.
+     * @param <M>         Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull Table<K, V, M> table,
+               @Nonnull final K key,
+               @Nonnull final TouchOption touchOption) {
         validateWrite(table, key);
-        CorfuRecord<V, M> touchedObject = table.get(key);
-        if (touchedObject != null) {
+        if (touchOption == TouchOption.SUPPRESS_STREAM_NOTIFICATION) {
+            // Only the conflict on the key is needed, so avoid materializing the record.
+            if (!table.containsKey(key)) {
+                throw abortTouchOnNonExistingObject(table);
+            }
+            table.touchKey(key);
+        } else {
+            CorfuRecord<V, M> touchedObject = table.get(key);
+            if (touchedObject == null) {
+                throw abortTouchOnNonExistingObject(table);
+            }
             table.put(key, touchedObject.getPayload(), touchedObject.getMetadata());
-            tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
-        } else { // TODO: add support for touch()ing an object that hasn't been created.
-            txAbort(); // explicitly abort this transaction and then throw the abort manually
-            log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
-            throw new UnsupportedOperationException(
-                    "Attempt to touch() a non-existing object in "
-                            + table.getFullyQualifiedTableName());
         }
+        tablesUpdated.putIfAbsent(table.getStreamUUID(), table);
+    }
+
+    /**
+     * Abort the transaction on an attempt to touch() an object that does not exist, and return
+     * the exception for the caller to throw.
+     *
+     * @param table table the touch() was attempted on.
+     * @return the exception describing the failed touch().
+     */
+    // TODO: add support for touch()ing an object that hasn't been created.
+    private <K extends Message, V extends Message, M extends Message>
+    UnsupportedOperationException abortTouchOnNonExistingObject(@Nonnull Table<K, V, M> table) {
+        txAbort(); // explicitly abort this transaction and then throw the abort manually
+        log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
+        return new UnsupportedOperationException(
+                "Attempt to touch() a non-existing object in "
+                        + table.getFullyQualifiedTableName());
     }
 
     /**
@@ -324,6 +389,22 @@ public class TxnContext implements AutoCloseable {
     void touch(@Nonnull String tableName,
                @Nonnull final K key) {
         this.touch(getTable(tableName), key);
+    }
+
+    /**
+     * touch() a key to generate a conflict on it given tableName.
+     *
+     * @param tableName   Table object to perform the touch() in.
+     * @param key         Key of the record.
+     * @param touchOption Whether this touch should generate a stream tag notification.
+     * @param <K>         Type of Key.
+     * @throws UnsupportedOperationException if attempted on a non-existing object.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull String tableName,
+               @Nonnull final K key,
+               @Nonnull final TouchOption touchOption) {
+        this.touch(getTable(tableName), key, touchOption);
     }
 
     /**
