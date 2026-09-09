@@ -6,6 +6,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -30,6 +31,7 @@ import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.ObjectsView.ObjectID;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -48,7 +50,9 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -59,6 +63,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -423,17 +428,26 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      *
      * This test runs the above 2 transactions concurrently for 100 iterations and verifies that
      * TransactionAbortedException gets thrown at least once if the key is touched.
-     * Additionally, it verifies that the exception is not thrown if the key is not touched.
+     * Additionally, it verifies that the exception is not thrown if the key is not touched, and
+     * that suppressing the touch's stream notification does not weaken conflict detection.
      * @throws Exception
      */
     @Test
     public void testTouchReqdForReadTxWriteTxConflict() throws Exception {
         final int numIterations = 100;
-        Assert.assertFalse(runReadAndWriteTxConcurrently(true, numIterations));
-        Assert.assertTrue(runReadAndWriteTxConcurrently(false, numIterations));
+        Assert.assertFalse(runReadAndWriteTxConcurrently(
+                TxnContext.TouchOption.GENERATE_STREAM_NOTIFICATION, numIterations));
+        Assert.assertFalse(runReadAndWriteTxConcurrently(
+                TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION, numIterations));
+        Assert.assertTrue(runReadAndWriteTxConcurrently(null, numIterations));
     }
 
-    private boolean runReadAndWriteTxConcurrently(boolean touch, int numIterations) throws Exception {
+    /**
+     * @param touchOption if null, TX1 does not touch() the conflict key at all. Otherwise the
+     *                    conflict key is touched using the given option.
+     */
+    private boolean runReadAndWriteTxConcurrently(TxnContext.TouchOption touchOption,
+                                                  int numIterations) throws Exception {
         final String namespace = "test_namespace";
         final String tableName1 = "EventInfo1";
         final String tableName2 = "EventInfo2";
@@ -458,8 +472,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         SampleSchema.Uuid conflictKey = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
 
         // In each iteration, write 3 records in table1.  Then start 2 transactions concurrently.  TX1 reads the
-        // conflict key from table1, touches it(touch == true) and writes it to table2.  TX2 updates the conflict key
-        // in table1.
+        // conflict key from table1, touches it(touchOption != null) and writes it to table2.  TX2 updates the
+        // conflict key in table1.
         // The expected behavior is that TX1 should hit a TransactionAbortedException in at least 1 iteration if the
         // conflict key is touched.
         for (int i = 0; i < numIterations; i++) {
@@ -478,8 +492,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 try (TxnContext txnContext = corfuStore.txn(namespace)) {
                     SampleSchema.EventInfo value =
                         (SampleSchema.EventInfo) txnContext.getRecord(tableName1, conflictKey).getPayload();
-                    if (touch) {
-                        txnContext.touch(tableName1, conflictKey);
+                    if (touchOption != null) {
+                        txnContext.touch(tableName1, conflictKey, touchOption);
                     }
                     txnContext.putRecord(table2, conflictKey, value, null);
                     txnContext.commit();
@@ -522,6 +536,462 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             table2.clearAll();
         }
         return success.get();
+    }
+
+    /**
+     * The stream tags accumulated so far by the transaction running on this thread. These are the
+     * tags that the commit will append the transaction's log entry to, and hence the tags whose
+     * subscribers get notified.
+     */
+    private Set<UUID> writeSetStreamTags() {
+        return TransactionalContext.getCurrentContext().getWriteSetInfo().getStreamTags();
+    }
+
+    /** The SMR updates (i.e. the actual payload) queued so far for the given table. */
+    private List<SMREntry> writeSetSmrUpdates(Table<?, ?, ?> table) {
+        return TransactionalContext.getCurrentContext().getWriteSetInfo()
+                .getWriteSet().getSMRUpdates(table.getStreamUUID());
+    }
+
+    /**
+     * The conflict hashes the sequencer will resolve this transaction against, for one table.
+     * Rendered as strings because the underlying Set<byte[]> compares by array identity.
+     */
+    private Set<String> writeSetConflictHashes(Table<?, ?, ?> table) {
+        return TransactionalContext.getCurrentContext().getWriteSetInfo()
+                .getHashedConflictSet()
+                .getOrDefault(table.getStreamUUID(), Collections.emptySet())
+                .stream()
+                .map(Arrays::toString)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * A suppressed touch() must still reach the sequencer for conflict resolution even when it is
+     * the transaction's only operation. The commit path treats an empty write set as a read-only
+     * transaction and short-circuits without contacting the sequencer, so the touch registers its
+     * stream with an empty update list to stay on the write path. Without that, commit() would
+     * return the snapshot address and the touch would silently resolve nothing.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchOnlyTransactionStillCommitsToSequencer() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        long putAddress;
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, key,
+                    SampleSchema.SampleTableAMsg.newBuilder().setPayload("payload").build(), key);
+            putAddress = txn.commit().getSequence();
+        }
+
+        // A transaction whose only operation is a suppressed touch must still be sequenced,
+        // i.e. it must advance the log beyond the write that preceded it.
+        long touchAddress;
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            // The write set carries the stream with no updates: enough to stay on the write path.
+            assertThat(writeSetSmrUpdates(table)).isEmpty();
+            touchAddress = txn.commit().getSequence();
+        }
+
+        assertThat(touchAddress).isGreaterThan(putAddress);
+    }
+
+    /**
+     * A suppressed touch() writes no payload, but it must still bump the touched stream's tail so
+     * that another transaction holding a coarse, whole-stream conflict on that table is still
+     * resolved against it.
+     * <p>
+     * clear() is what produces such a conflict: it logs its update with a null conflict field
+     * (PersistentCorfuTable.clear), which the sequencer treats as a conflict against every update
+     * on the stream, resolved via its stream tail rather than a per-key hash. That tail is only
+     * advanced for streams present in the token request, which is why the payload-free touch
+     * registers its stream with an empty update list. Remove that registration and this test fails.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchConflictsWithWholeStreamConflict() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, key,
+                    SampleSchema.SampleTableAMsg.newBuilder().setPayload("payload").build(), key);
+            txn.commit();
+        }
+
+        // TX1 takes a whole-stream conflict on the table and stays open on this thread.
+        TxnContext clearTxn = corfuStore.txn(namespace);
+        try {
+            clearTxn.clear(table);
+
+            // TX2 touches a key in that table on another thread, writing nothing, and commits.
+            // A separate thread is required because transactional contexts are thread-local and
+            // TxnContext forbids nesting.
+            AtomicReference<Throwable> touchFailure = new AtomicReference<>();
+            Thread toucher = new Thread(() -> {
+                try (TxnContext touchTxn = corfuStore.txn(namespace)) {
+                    touchTxn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+                    touchTxn.commit();
+                } catch (Throwable t) {
+                    touchFailure.set(t);
+                }
+            });
+            toucher.start();
+            toucher.join();
+            assertThat(touchFailure.get()).isNull();
+
+            // TX1 must now abort: the payload-free touch still advanced the stream tail.
+            assertThatThrownBy(clearTxn::commit)
+                    .isInstanceOf(TransactionAbortedException.class);
+        } finally {
+            clearTxn.close();
+        }
+    }
+
+    /**
+     * The empty per-stream entry a suppressed touch() appends must survive a serialization round
+     * trip and replay as a no-op, leaving the record intact for a runtime that reads the log from
+     * scratch.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchRoundTripsAsNoOp() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        CorfuRuntime writerRuntime = getDefaultRuntime();
+        CorfuStore corfuStore = new CorfuStore(writerRuntime);
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(7).setMsb(7).build();
+        SampleSchema.SampleTableAMsg value =
+                SampleSchema.SampleTableAMsg.newBuilder().setPayload("payload").build();
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, key, value, key);
+            txn.commit();
+        }
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.commit();
+        }
+
+        // Replay the log from scratch on a separate runtime.
+        CorfuRuntime readerRuntime = getNewRuntime(getDefaultNode()).connect();
+        try {
+            CorfuStore readerStore = new CorfuStore(readerRuntime);
+            Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> readerTable =
+                    readerStore.openTable(namespace, tableName,
+                            SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                            SampleSchema.Uuid.class,
+                            TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+            try (TxnContext txn = readerStore.txn(namespace)) {
+                CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>
+                        entry = txn.getRecord(readerTable, key);
+                assertThat(entry.getPayload()).isEqualTo(value);
+                assertThat(entry.getMetadata()).isEqualTo(key);
+                assertThat(txn.count(readerTable)).isEqualTo(1);
+                txn.commit();
+            }
+        } finally {
+            readerRuntime.shutdown();
+        }
+    }
+
+    /**
+     * touch() re-writes a record with its own unchanged payload, which by default makes the
+     * transaction land on the table's stream tags and wake up their subscribers.
+     * Verify that TouchOption.SUPPRESS_STREAM_NOTIFICATION contributes no stream tags at all,
+     * that the default option still contributes all of them, and that the record is unchanged
+     * either way.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchStreamTagSuppression() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        // SampleTableAMsg declares sample_streamer_1 and sample_streamer_2 and is_federated,
+        // so it also carries the Log Replication tag. Assert the fixture to keep the test honest.
+        assertThat(table.getStreamTags()).hasSize(3)
+                .contains(ObjectsView.getLogReplicatorStreamId());
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                .setPayload("payload").build();
+        // Capture the conflict hashes a real write on this key registers, to compare against.
+        Set<String> putConflictHashes;
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, key, value, key);
+            putConflictHashes = writeSetConflictHashes(table);
+            txn.commit();
+        }
+        assertThat(putConflictHashes).hasSize(1);
+
+        // A suppressed touch() contributes no stream tags, so no tag subscriber is notified, and
+        // writes no payload at all - just the same conflict hash a real write would have produced,
+        // which is what makes it indistinguishable to the sequencer's conflict resolution.
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            assertThat(writeSetStreamTags()).isEmpty();
+            assertThat(writeSetSmrUpdates(table)).isEmpty();
+            assertThat(writeSetConflictHashes(table)).isEqualTo(putConflictHashes);
+            txn.commit();
+        }
+
+        // The default touch() still contributes all of the table's tags, and still writes a payload.
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, key);
+            assertThat(writeSetStreamTags())
+                    .containsExactlyInAnyOrderElementsOf(table.getStreamTags());
+            assertThat(writeSetSmrUpdates(table)).hasSize(1);
+            txn.commit();
+        }
+
+        // Neither touch() changed the record or the table size.
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid>
+                    entry = txn.getRecord(table, key);
+            assertThat(entry.getPayload()).isEqualTo(value);
+            assertThat(entry.getMetadata()).isEqualTo(key);
+            assertThat(txn.count(table)).isEqualTo(1);
+            txn.commit();
+        }
+    }
+
+    /**
+     * Stream tags are a per-transaction union, so a suppressed touch() must not stop any other
+     * mutation in the same transaction from contributing its own tags. Verify this for a
+     * putRecord() in either order relative to the touch(), and for an enqueue() on a separate
+     * tagged table.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchSuppressionKeepsTagsOfOtherMutations() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+        final String queueName = "SampleQueue";
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        SampleSchema.Uuid touchedKey = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        SampleSchema.Uuid otherKey = SampleSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+        SampleSchema.SampleTableAMsg value = SampleSchema.SampleTableAMsg.newBuilder()
+                .setPayload("payload").build();
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, touchedKey, value, touchedKey);
+            txn.commit();
+        }
+
+        // Suppressed touch() before a real putRecord(): the putRecord() brings all the tags in.
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, touchedKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.putRecord(table, otherKey, value, otherKey);
+            assertThat(writeSetStreamTags())
+                    .containsExactlyInAnyOrderElementsOf(table.getStreamTags());
+            txn.commit();
+        }
+
+        // Same, with the two operations in the opposite order.
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, otherKey, value, otherKey);
+            txn.touch(table, touchedKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            assertThat(writeSetStreamTags())
+                    .containsExactlyInAnyOrderElementsOf(table.getStreamTags());
+            txn.commit();
+        }
+
+        // An enqueue() on a differently tagged table keeps its own tags, and the suppressed
+        // touch() still contributes none of the touched table's own tags.
+        Table<Queue.CorfuGuidMsg, SampleSchema.ValueFieldTagOne, Queue.CorfuQueueMetadataMsg> queue =
+                corfuStore.openQueue(namespace, queueName, SampleSchema.ValueFieldTagOne.class,
+                        TableOptions.fromProtoSchema(SampleSchema.ValueFieldTagOne.class));
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, touchedKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.enqueue(queue, SampleSchema.ValueFieldTagOne.newBuilder()
+                    .setPayload("queued").build());
+            assertThat(writeSetStreamTags())
+                    .containsExactlyInAnyOrderElementsOf(queue.getStreamTags())
+                    .doesNotContain(
+                            TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_1"),
+                            TableRegistry.getStreamIdForStreamTag(namespace, "sample_streamer_2"));
+            txn.commit();
+        }
+    }
+
+    /**
+     * touch() must abort the transaction with an UnsupportedOperationException when the key does
+     * not exist, for both TouchOptions: the SUPPRESS_STREAM_NOTIFICATION branch checks
+     * table.containsKey() directly instead of materializing the record, while the default branch
+     * still relies on table.get() returning null. Both delegate to the shared
+     * abortTouchOnNonExistingObject() helper.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchOnNonExistingObjectAborts() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table =
+                corfuStore.openTable(namespace, tableName,
+                        SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class,
+                        SampleSchema.Uuid.class,
+                        TableOptions.fromProtoSchema(SampleSchema.SampleTableAMsg.class));
+
+        SampleSchema.Uuid missingKey = SampleSchema.Uuid.newBuilder().setLsb(9).setMsb(9).build();
+
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            assertThatThrownBy(() ->
+                    txn.touch(table, missingKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION))
+                    .isExactlyInstanceOf(UnsupportedOperationException.class)
+                    .hasMessageContaining(table.getFullyQualifiedTableName());
+        }
+
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            assertThatThrownBy(() ->
+                    txn.touch(table, missingKey, TxnContext.TouchOption.GENERATE_STREAM_NOTIFICATION))
+                    .isExactlyInstanceOf(UnsupportedOperationException.class)
+                    .hasMessageContaining(table.getFullyQualifiedTableName());
+        }
+
+        assertThat(table.count()).isZero();
+    }
+
+    /**
+     * ManagedTxnContext (the CorfuStoreShim wrapper around TxnContext) exposes its own touch()
+     * overloads that take a TouchOption. ManagedTxnContext composes a TxnContext rather than
+     * extending it (see the class javadoc), so these wrapper methods need their own coverage:
+     * calling through TxnContext directly, as every other touch() test in this file does, never
+     * exercises them.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testManagedTxnContextTouchWithTouchOption() throws Exception {
+        CorfuStoreShim shimStore = new CorfuStoreShim(getDefaultRuntime());
+
+        final String namespace = "test_namespace";
+        final String tableName = "SampleTableA";
+
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> table = shimStore.openTable(
+                namespace, tableName,
+                SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class, SampleSchema.Uuid.class,
+                TableOptions.builder().build());
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        SampleSchema.SampleTableAMsg value =
+                SampleSchema.SampleTableAMsg.newBuilder().setPayload("payload").build();
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
+            txn.putRecord(table, key, value, key);
+            txn.commit();
+        }
+
+        // ManagedTxnContext.touch(Table, key, touchOption)
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
+            txn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.commit();
+        }
+
+        // ManagedTxnContext.touch(tableName, key, touchOption)
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
+            txn.touch(tableName, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.commit();
+        }
+
+        try (ManagedTxnContext txn = shimStore.tx(namespace)) {
+            CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, SampleSchema.Uuid> entry =
+                    txn.getRecord(table, key);
+            assertThat(entry.getPayload()).isEqualTo(value);
+            txn.commit();
+        }
+    }
+
+    /**
+     * TouchOption.SUPPRESS_STREAM_NOTIFICATION must also work for disk-backed tables, whose
+     * ICorfuTable implementation (PersistedCorfuTable) has its own addConflictOnly() override,
+     * distinct from the in-memory PersistentCorfuTable exercised by the other touch() tests above.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchSuppressionOnDiskBackedTable() throws Exception {
+        final String namespace = "test_namespace";
+        final String tableName = "DiskTable";
+        final String dataPath = Files.createTempDirectory(tableName).toString();
+
+        PersistenceOptions persistenceOptions = PersistenceOptions.newBuilder()
+                .setDataPath(dataPath)
+                .build();
+
+        CorfuStore corfuStore = new CorfuStore(getDefaultRuntime());
+        Table<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> table = corfuStore.openTable(
+                namespace, tableName,
+                SampleSchema.Uuid.class, SampleSchema.SampleTableAMsg.class, ManagedResources.class,
+                TableOptions.builder().persistenceOptions(persistenceOptions).build());
+        assertThat(table.getUnderlyingType()).isEqualTo(PersistedCorfuTable.class);
+
+        SampleSchema.Uuid key = SampleSchema.Uuid.newBuilder().setLsb(0).setMsb(0).build();
+        SampleSchema.SampleTableAMsg value =
+                SampleSchema.SampleTableAMsg.newBuilder().setPayload("payload").build();
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.putRecord(table, key, value, null);
+            txn.commit();
+        }
+
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            txn.touch(table, key, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            txn.commit();
+        }
+
+        try (TxnContext txn = corfuStore.txn(namespace)) {
+            CorfuStoreEntry<SampleSchema.Uuid, SampleSchema.SampleTableAMsg, ManagedResources> entry =
+                    txn.getRecord(table, key);
+            assertThat(entry.getPayload()).isEqualTo(value);
+            txn.commit();
+        }
+
+        table.close();
     }
 
     /**

@@ -136,6 +136,21 @@ public class MVOCorfuCompileProxy<
     }
 
     @Override
+    public void addConflictOnly(Object[] conflictObject) {
+        // Outside of a transaction there is no conflict set to register against.
+        if (!TransactionalContext.isInTransaction()) {
+            return;
+        }
+
+        try {
+            TransactionalContext.getCurrentContext().addConflictOnly(this, conflictObject);
+        } catch (Exception e) {
+            log.warn("AddConflictOnly[{}]", this, e);
+            this.abortTransaction(e);
+        }
+    }
+
+    @Override
     public UUID getStreamID() {
         return streamID;
     }

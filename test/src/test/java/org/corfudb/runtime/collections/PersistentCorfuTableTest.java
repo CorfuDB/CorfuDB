@@ -47,6 +47,7 @@ import java.util.stream.LongStream;
 import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -355,6 +356,65 @@ public class PersistentCorfuTableTest extends AbstractViewTest {
         assertThat(voIds).containsExactlyInAnyOrder(
                 new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), -1L),
                 new VersionedObjectIdentifier(corfuTable.getCorfuSMRProxy().getStreamID(), 0L));
+    }
+
+    /**
+     * addConflictOnly() must be a no-op outside of a transaction: there is no conflict set to
+     * register the key against, so MVOCorfuCompileProxy.addConflictOnly() should return without
+     * writing anything or throwing.
+     */
+    @Test
+    public void testAddConflictOnlyOutsideTransactionIsNoOp() {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(1).setMsb(1).build();
+
+        corfuTable.addConflictOnly(key);
+
+        assertThat(corfuTable.size()).isZero();
+    }
+
+    /**
+     * addConflictOnly() must abort with a TransactionAbortedException (AbortCause.UNSUPPORTED)
+     * when invoked in a read-only snapshot transaction: SnapshotTransactionalContext rejects it
+     * the same way it rejects every other write, and MVOCorfuCompileProxy's catch block
+     * translates that UnsupportedOperationException into the abort.
+     */
+    @Test
+    public void testAddConflictOnlyInSnapshotTransactionAborts() {
+        addSingleServer(SERVERS.PORT_0);
+        rt = getNewRuntime(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .maxCacheEntries(LARGE_CACHE_SIZE)
+                .build())
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+        setupSerializer();
+        openTable();
+
+        TestSchema.Uuid key = TestSchema.Uuid.newBuilder().setLsb(2).setMsb(2).build();
+        CorfuRecord value = new CorfuRecord(key, key);
+
+        rt.getObjectsView().TXBegin();
+        corfuTable.insert(key, value);
+        rt.getObjectsView().TXEnd();
+
+        rt.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        try {
+            assertThatThrownBy(() -> corfuTable.addConflictOnly(key))
+                    .isInstanceOf(TransactionAbortedException.class);
+        } finally {
+            rt.getObjectsView().TXAbort();
+        }
     }
 
     @Test

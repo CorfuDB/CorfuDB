@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1382,6 +1383,152 @@ public class StreamingIT extends AbstractIT {
         // Verify number of actual entries is not modified due to the 'touch' API
         assertThat(tableA.count()).isEqualTo(numUpdates);
 
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Validate that touch() with TouchOption.SUPPRESS_STREAM_NOTIFICATION does not regenerate a
+     * DCN/stream update, i.e. the counterpart of testRegenarationOfStreamingUpdates().
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSuppressedStreamingUpdatesOnTouch() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final String namespace = "test_namespace";
+        final String tableName = "table_test";
+        final int numUpdates = 5;
+
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
+        );
+
+        // Only the real updates are expected, the touch must not produce one.
+        CountDownLatch updateCountLatch = new CountDownLatch(numUpdates);
+
+        // Subscribe to streaming updates, while table has not been yet updated
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener_test", updateCountLatch);
+        store.subscribeListener(listener, namespace, defaultTag);
+
+        // Make some updates to the table
+        for (int index = 0; index < numUpdates; index++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableA, uuid, msgA, uuid);
+                tx.commit();
+            }
+        }
+
+        final int randomIndex = 2;
+        Uuid touchedKey = Uuid.newBuilder().setMsb(randomIndex).setLsb(randomIndex).build();
+        // Touch one of the updated keys, asking for no stream notification
+        try (TxnContext tx = store.txn(namespace)) {
+            tx.touch(tableA, touchedKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            tx.commit();
+        }
+
+        // Wait for the listener to receive the real updates, then give the suppressed touch a
+        // chance to show up before asserting that it did not.
+        updateCountLatch.await();
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+
+        // Verify only the real updates were delivered, the touch generated no notification
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates).hasSize(numUpdates);
+
+        for (int index = 0; index < numUpdates; index++) {
+            assertThat(updates.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid) entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg) entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+        }
+
+        // Verify the touched record and the table itself are unchanged by the 'touch' API
+        assertThat(tableA.count()).isEqualTo(numUpdates);
+        try (TxnContext tx = store.txn(namespace)) {
+            CorfuStoreEntry<Uuid, SampleTableAMsg, Uuid> entry = tx.getRecord(tableA, touchedKey);
+            assertThat(entry.getPayload().getPayload()).isEqualTo(String.valueOf(randomIndex));
+            assertThat(entry.getMetadata().getMsb()).isEqualTo(randomIndex);
+            tx.commit();
+        }
+
+        store.unsubscribeListener(listener);
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Validate that a suppressed touch() does not silence the other updates of the same
+     * transaction: a transaction that also performs a real update must still notify. Because a
+     * suppressed touch() writes no update at all, the touched record must NOT appear in that
+     * notification.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testTouchSuppressionDoesNotSilenceOtherUpdates() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        CorfuRuntime runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        final String namespace = "test_namespace";
+        final String tableName = "table_test";
+
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.fromProtoSchema(SampleTableAMsg.class)
+        );
+
+        Uuid touchedKey = Uuid.newBuilder().setMsb(0).setLsb(0).build();
+        Uuid updatedKey = Uuid.newBuilder().setMsb(1).setLsb(1).build();
+        SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload("payload").build();
+
+        // Seed the record that will be touched, before subscribing.
+        try (TxnContext tx = store.txn(namespace)) {
+            tx.putRecord(tableA, touchedKey, msgA, touchedKey);
+            tx.commit();
+        }
+
+        CountDownLatch updateCountLatch = new CountDownLatch(1);
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener_test", updateCountLatch);
+        store.subscribeListener(listener, namespace, defaultTag);
+
+        // One transaction with a suppressed touch() and a real putRecord(). The putRecord()
+        // contributes the table's stream tags, so this transaction must still notify.
+        try (TxnContext tx = store.txn(namespace)) {
+            tx.touch(tableA, touchedKey, TxnContext.TouchOption.SUPPRESS_STREAM_NOTIFICATION);
+            tx.putRecord(tableA, updatedKey, msgA, updatedKey);
+            tx.commit();
+        }
+
+        updateCountLatch.await();
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+
+        // Exactly one notification, carrying only the real update: the suppressed touch()
+        // contributed no SMR entry, so the touched key is absent.
+        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
+        assertThat(updates).hasSize(1);
+        List<CorfuStreamEntry> entries = updates.getFirst().getEntries().values().stream().findFirst().get();
+        assertThat(entries.stream()
+                .map(entry -> ((Uuid) entry.getKey()).getMsb())
+                .collect(Collectors.toList()))
+                .containsExactly(updatedKey.getMsb())
+                .doesNotContain(touchedKey.getMsb());
+
+        store.unsubscribeListener(listener);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 

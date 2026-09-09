@@ -340,6 +340,17 @@ public abstract class AbstractTransactionalContext implements
     }
 
     /**
+     * Register a conflict on an object without writing to it, so that this transaction is
+     * resolved against concurrent updates to the given conflict objects.
+     *
+     * @param proxy           The proxy the conflict is registered on.
+     * @param conflictObjects The fine-grained conflict information, which must be present.
+     */
+    public void addConflictOnly(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
+        getWriteSetInfo().addConflictOnly(proxy, conflictObjects);
+    }
+
+    /**
      * Add an update to the transaction optimistic write-set.
      *
      * @param proxy           the SMR object for this update

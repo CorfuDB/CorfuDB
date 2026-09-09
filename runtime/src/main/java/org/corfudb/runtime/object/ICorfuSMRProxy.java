@@ -36,6 +36,15 @@ public interface ICorfuSMRProxy<S extends SnapshotGenerator<S> & ConsistencyView
                    Object[] conflictObject, Object... args);
 
     /**
+     * Register a conflict on this object without logging any update to it. The transaction will
+     * be resolved against concurrent updates to the given conflict objects, but no payload is
+     * written and no stream tag notification is generated.
+     *
+     * @param conflictObject Fine-grained conflict information, which must be present.
+     */
+    void addConflictOnly(Object[] conflictObject);
+
+    /**
      * Get the ID of the stream this proxy is subscribed to.
      *
      * @return The UUID of the stream this proxy is subscribed to.
