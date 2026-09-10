@@ -13,12 +13,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 @Data
 @Slf4j
 public class LogReplicationPendingEntry {
-    /*
-     * For internal timer increasing for each message in milliseconds
-     */
-    private final static long TIME_INCREMENT = 100;
-
-    private long currentTime = 0;
+    private final java.util.function.LongSupplier clock;
 
     @Getter
     private LogReplicationEntryMsg data;
@@ -31,15 +26,18 @@ public class LogReplicationPendingEntry {
 
     // Set to force this entry to be resent on the very next resend() call, bypassing timeout()'s
     // cadence check entirely -- used when the receiver has explicitly confirmed it's still waiting
-    // for this entry (see SnapshotSenderBufferManager.expediteResendFrom()), rather than relying on
-    // this class's internal simulated clock (which advances a fixed amount per call, not per real
-    // elapsed time, so there is no wall-clock value that reliably forces an "immediate" timeout).
+    // for this entry (see SnapshotSenderBufferManager.expediteResendFrom()). Ordinary retries
+    // measure monotonic elapsed time and are independent of how often the source polls.
     private boolean expedited = false;
 
     public LogReplicationPendingEntry(LogReplicationEntryMsg data) {
+        this(data, () -> java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+    }
+
+    LogReplicationPendingEntry(LogReplicationEntryMsg data, java.util.function.LongSupplier clock) {
         this.data = data;
-        this.time = getCurrentTime();
-        this.retry = 0;
+        this.clock = clock;
+        this.time = clock.getAsLong();
     }
 
     public boolean timeout(long timer) {
@@ -57,7 +55,6 @@ public class LogReplicationPendingEntry {
     }
 
     private long getCurrentTime() {
-        currentTime += TIME_INCREMENT;
-        return currentTime;
+        return clock.getAsLong();
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
@@ -30,6 +31,9 @@ public class TestDataSender implements DataSender {
     // Flag which prevents this sender from replying with ACKs so that the test can wait in IN_SNAPSHOT_SYNC state
     // for any operation or validation
     private boolean waitInSnapshotSync;
+
+    @Setter
+    private boolean waitInSnapshotApply;
 
     public TestDataSender(boolean waitInSnapshotSync) {
         this.waitInSnapshotSync = waitInSnapshotSync;
@@ -102,7 +106,7 @@ public class TestDataSender implements DataSender {
                 .setVersion("version")
                 .setSnapshotStart(snapshotSyncBaseSnapshot)
                 .setSnapshotTransferred(snapshotSyncBaseSnapshot)
-                .setSnapshotApplied(snapshotSyncBaseSnapshot)
+                .setSnapshotApplied(waitInSnapshotApply ? -1 : snapshotSyncBaseSnapshot)
                 .setLastLogEntryTimestamp(snapshotSyncBaseSnapshot)
                 .build();
         completableFuture.complete(response);

@@ -98,6 +98,15 @@ public class CompactorLeaderServices {
         log.info("=============Initiating Distributed Compaction============");
 
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            // CorfuStore is WRITE_AFTER_WRITE: include the shared guard in the write set,
+            // not just the read set, to serialize this cycle with snapshot admission.
+            org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease =
+                    org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn);
+            if (lease.getProtectionHeld()) {
+                txn.commit();
+                return LeaderInitStatus.FAIL;
+            }
+            org.corfudb.runtime.SnapshotSyncLeaseStore.write(txn, lease);
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();

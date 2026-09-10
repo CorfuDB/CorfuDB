@@ -42,6 +42,22 @@ public class LogReplicationEventMetadata {
      */
     private long minBackoffMs = 0;
 
+    @Getter
+    private UUID snapshotAttemptId;
+    @Getter
+    private long snapshotAttemptGeneration;
+
+    public LogReplicationEventMetadata setSnapshotAttempt(UUID id, long generation) {
+        snapshotAttemptId = id;
+        snapshotAttemptGeneration = generation;
+        return this;
+    }
+
+    public boolean matchesSnapshotAttempt(SnapshotSender source) {
+        return snapshotAttemptId == null || (snapshotAttemptId.equals(source.getWireAttemptId())
+                && snapshotAttemptGeneration == source.getWireAttemptGeneration());
+    }
+
     /**
      * Constructor
      *
@@ -106,4 +122,3 @@ public class LogReplicationEventMetadata {
         return this;
     }
 }
-

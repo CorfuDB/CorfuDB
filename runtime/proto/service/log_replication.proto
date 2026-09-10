@@ -30,6 +30,11 @@ message LogReplicationEntryMetadataMsg {
   oneof expected_seq_num_oneof {
     int64 expectedSeqNum = 8;
   }
+  // Version 1 peers must obtain admission before sending snapshot data.
+  uint32 snapshotLifecycleVersion = 9;
+  uint64 admissionEpoch = 10;
+  uint64 attemptGeneration = 11;
+  UuidMsg externalRequestId = 12;
 }
 
 message LogReplicationEntryMsg {
@@ -38,6 +43,7 @@ message LogReplicationEntryMsg {
 }
 
 message LogReplicationMetadataRequestMsg {
+  bool supportsSnapshotLifecycle = 1;
 }
 
 message LogReplicationMetadataResponseMsg {
@@ -85,6 +91,67 @@ message LogReplicationMetadataResponseMsg {
   // supporting this reports (proto3's default for an unset field), so this is safe during a
   // rolling upgrade in either direction without needing presence-tracking.
   int64 checkpointerGracePeriodMs = 10;
+  SnapshotSyncLeaseRecord snapshotLease = 11;
+}
+
+// Persisted independently of legacy LR metadata, which topology changes reset.
+// The single record is also the admission/retention guard for a sink's freeze domain.
+message SnapshotSyncLeaseRecord {
+  enum Phase {
+    NOT_READY = 0;
+    READY = 1;
+    PREPARING = 2;
+    TRANSFERRING = 3;
+    APPLYING = 4;
+    ABORTING = 5;
+    RELEASING = 6;
+    RECOVERING = 7;
+    FAULTED = 8;
+  }
+  enum Outcome {
+    NONE = 0;
+    COMPLETED = 1;
+    ABORTED = 2;
+  }
+  uint32 schemaVersion = 1;
+  Phase phase = 2;
+  Outcome outcome = 3;
+  uint64 revision = 4;
+  uint64 generation = 5;
+  string ownerId = 6;
+  UuidMsg attemptId = 7;
+  UuidMsg externalRequestId = 8;
+  int64 sourceSnapshot = 9;
+  int64 topologyConfigId = 10;
+  uint64 admissionEpoch = 11;
+  int64 admittedAtMs = 12;
+  int64 deadlineMs = 13;
+  // All writes belonging to this reservation are strictly after this sink address.
+  int64 protectedAfter = 14;
+  bool protectionHeld = 15;
+  string protectionId = 16;
+  int64 firstShadowAddress = 17;
+  int64 transferredSequence = 18;
+  int64 recoveryCut = 19;
+  int64 releasedAtMs = 20;
+  int64 abortedAtMs = 21;
+  uint32 applyRetries = 22;
+  int64 retryAtMs = 23;
+  string failure = 24;
+  int64 endSequence = 25;
+  int64 cleanupStartedAtMs = 26;
+}
+
+message LogReplicationBusyResponseMsg {
+  enum Reason {
+    OVERLOADED = 0;
+    ADMISSION_CLOSED = 1;
+    STALE_ATTEMPT = 2;
+    UNSUPPORTED_PROTOCOL = 3;
+  }
+  Reason reason = 1;
+  SnapshotSyncLeaseRecord snapshotLease = 2;
+  int64 retryAfterMs = 3;
 }
 
 message LogReplicationLeadershipLossResponseMsg {
@@ -107,6 +174,8 @@ enum LogReplicationEntryType {
   SNAPSHOT_REPLICATED = 4;
   SNAPSHOT_END = 5;
   SNAPSHOT_TRANSFER_COMPLETE = 6;
+  SNAPSHOT_START_ACCEPTED = 7;
+  SNAPSHOT_CANCEL = 8;
 }
 
 enum ReplicationModel {

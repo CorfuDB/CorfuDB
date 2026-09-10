@@ -20,6 +20,10 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
@@ -109,6 +113,32 @@ public class SnapshotSender {
     }
 
     private CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
+    private volatile Boolean lifecycleMode;
+    @Getter
+    private volatile UUID wireAttemptId;
+    @Getter
+    private volatile long wireAttemptGeneration;
+    private boolean admitted;
+    private boolean ownedTransferFinished;
+    private CompletableFuture<LogReplicationMetadataResponseMsg> statusFuture;
+    private CompletableFuture<LogReplicationEntryMsg> admissionFuture;
+    private SnapshotSyncLeaseRecord remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
+    private LogReplicationEntryMsg admissionRequest;
+    private long lastStatusPollNanos;
+    private long runGeneration;
+    private java.util.concurrent.ScheduledFuture<?> continuation;
+    private static final java.util.concurrent.ScheduledExecutorService CONTINUATIONS =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new com.google.common.util.concurrent.ThreadFactoryBuilder()
+                    .setDaemon(true).setNameFormat("snapshot-admission-poll-%d").build());
+
+    public boolean usesSnapshotLifecycle() {
+        return Boolean.TRUE.equals(lifecycleMode);
+    }
+
+    @VisibleForTesting
+    void pollStatusNow() {
+        lastStatusPollNanos = 0;
+    }
 
     /**
      * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
@@ -116,6 +146,16 @@ public class SnapshotSender {
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
+        if (stopSnapshotSync.get()) { return; }
+        if (!Boolean.FALSE.equals(lifecycleMode)) {
+            try {
+                if (transmitWithLifecycle(snapshotSyncEventId, forcedSnapshotSync)) { return; }
+            } catch (RuntimeException e) {
+                log.warn("Snapshot transport operation failed; reconcile without renewing the sink lease", e);
+                scheduleContinuation(snapshotSyncEventId, 2000);
+                return;
+            }
+        }
         if (snapshotCompleted) {
             // Since FSM is a perpetually running machine, InSnapshotSync.onEntry() is called even when an incoming
             // event is ignored for any reason.
@@ -220,6 +260,133 @@ public class SnapshotSender {
                 snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
             }
         }
+    }
+
+    /** Returns false only after negotiating a legacy sink. Every wait yields the FSM worker. */
+    private boolean transmitWithLifecycle(UUID eventId, boolean forced) {
+        if (ownedTransferFinished) { return true; }
+        long now = System.nanoTime();
+        if (statusFuture == null && (lastStatusPollNanos == 0
+                || now - lastStatusPollNanos >= TimeUnit.SECONDS.toNanos(2))) {
+            lastStatusPollNanos = now;
+            statusFuture = dataSender.sendMetadataRequest();
+        }
+        if (statusFuture != null && statusFuture.isDone()) {
+            try {
+                LogReplicationMetadataResponseMsg response = statusFuture.join();
+                if (!Boolean.TRUE.equals(lifecycleMode)) { lifecycleMode = response.hasSnapshotLease(); }
+                remoteLease = response.getSnapshotLease();
+            } catch (java.util.concurrent.CompletionException e) {
+                log.debug("Snapshot status unavailable; retry after transport recovery", e);
+            } finally {
+                statusFuture = null;
+            }
+        }
+        if (Boolean.FALSE.equals(lifecycleMode)) { return false; }
+        if (lifecycleMode == null || remoteLease.getSchemaVersion() != SnapshotSyncLease.VERSION) {
+            scheduleContinuation(eventId, 2000);
+            return true;
+        }
+        boolean sameTopology = remoteLease.getTopologyConfigId() == fsm.getTopologyConfigId();
+        boolean ours = remoteLease.hasAttemptId() && remoteLease.getAttemptId().equals(getUuidMsg(wireAttemptId))
+                && sameTopology && remoteLease.getSourceSnapshot() == baseSnapshotTimestamp
+                && (!admitted || remoteLease.getGeneration() == wireAttemptGeneration);
+        if ((ours && remoteLease.getOutcome() == Outcome.COMPLETED)
+                || (remoteLease.getPhase() == Phase.APPLYING && (ours || (sameTopology && !forced && !admitted)))) {
+            wireAttemptId = org.corfudb.protocols.CorfuProtocolCommon.getUUID(remoteLease.getAttemptId());
+            wireAttemptGeneration = remoteLease.getGeneration();
+            baseSnapshotTimestamp = remoteLease.getSourceSnapshot();
+            fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
+            ownedTransferFinished = true;
+            snapshotSyncTransferComplete(eventId, forced);
+            return true;
+        }
+        if ((ours && remoteLease.getOutcome() == Outcome.ABORTED)
+                || (admitted && remoteLease.getGeneration() > wireAttemptGeneration)) {
+            snapshotSyncCancel(eventId, LogReplicationError.UNKNOWN, forced);
+            return true;
+        }
+        if (!admitted) {
+            if (admissionFuture != null && admissionFuture.isDone()) {
+                try {
+                    LogReplicationEntryMsg accepted = admissionFuture.join();
+                    if (accepted.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START_ACCEPTED
+                            && accepted.getMetadata().getSyncRequestId().equals(getUuidMsg(wireAttemptId))
+                            && accepted.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp
+                            && accepted.getMetadata().getTopologyConfigID() == fsm.getTopologyConfigId()
+                            && accepted.getMetadata().getAttemptGeneration() > 0) {
+                        wireAttemptGeneration = accepted.getMetadata().getAttemptGeneration();
+                        ((SnapshotSenderBufferManager) dataSenderBufferManager).beginLease(wireAttemptId, wireAttemptGeneration);
+                        admitted = true;
+                        startSnapshotSync = false;
+                    }
+                } catch (java.util.concurrent.CompletionException e) {
+                    log.debug("START not yet accepted; reconcile and retry the same proposal", e);
+                } finally {
+                    admissionFuture = null;
+                }
+            }
+            if (!admitted) {
+                if (remoteLease.getPhase() == Phase.READY) {
+                    if (admissionRequest == null || admissionRequest.getMetadata().getAdmissionEpoch() != remoteLease.getAdmissionEpoch()) {
+                        // Choose a usable source cut after sink recovery, not at the beginning of its cooldown.
+                        baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+                        snapshotReader.reset(baseSnapshotTimestamp);
+                        fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
+                        admissionRequest = getSnapshotSyncStartMarker(wireAttemptId).toBuilder().setMetadata(
+                                getSnapshotSyncStartMarker(wireAttemptId).getMetadata().toBuilder()
+                                        .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
+                                        .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
+                    }
+                }
+                if (admissionFuture == null && admissionRequest != null
+                        && (remoteLease.getPhase() == Phase.READY || ours)) {
+                    admissionFuture = dataSender.send(admissionRequest);
+                }
+                scheduleContinuation(eventId, 2000);
+                return true;
+            }
+        }
+        try {
+            LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
+            if (ack != null && ack.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE
+                    && ack.getMetadata().getSyncRequestId().equals(getUuidMsg(wireAttemptId))
+                    && ack.getMetadata().getAttemptGeneration() == wireAttemptGeneration) {
+                ownedTransferFinished = true;
+                snapshotSyncTransferComplete(eventId, forced);
+                return true;
+            }
+            int sent = 0;
+            while (!snapshotCompleted && !stopSnapshotSync.get() && sent < maxNumSnapshotMsgPerBatch
+                    && !dataSenderBufferManager.getPendingMessages().isFull()) {
+                if (!Address.isAddress(baseSnapshotTimestamp)) {
+                    snapshotCompleted = true;
+                    dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(wireAttemptId));
+                    break;
+                }
+                SnapshotReadMessage batch = snapshotReader.read(wireAttemptId);
+                snapshotCompleted = batch.isEndRead();
+                sent += processReads(batch.getMessages(), wireAttemptId, snapshotCompleted);
+            }
+            scheduleContinuation(eventId, snapshotCompleted || dataSenderBufferManager.getPendingMessages().isFull() ? 2000 : 0);
+        } catch (Exception e) {
+            log.warn("Source snapshot cut became unusable", e);
+            snapshotSyncCancel(eventId, e instanceof TrimmedException ? LogReplicationError.TRIM_SNAPSHOT_SYNC : LogReplicationError.UNKNOWN, forced);
+        }
+        return true;
+    }
+
+    private synchronized void scheduleContinuation(UUID eventId, long delayMs) {
+        if (stopSnapshotSync.get() || (continuation != null && !continuation.isDone())) { return; }
+        long captured = runGeneration;
+        continuation = CONTINUATIONS.schedule(() -> {
+            synchronized (SnapshotSender.this) {
+                if (captured != runGeneration || stopSnapshotSync.get()) { return; }
+                continuation = null;
+            }
+            fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(eventId)));
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -429,10 +596,16 @@ public class SnapshotSender {
      * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
      */
     private void snapshotSyncTransferComplete(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
+        if (stopSnapshotSync.get()) { return; }
+        synchronized (this) {
+            runGeneration++;
+            if (continuation != null) { continuation.cancel(false); continuation = null; }
+        }
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
-                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)));
+                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)
+                        .setSnapshotAttempt(usesSnapshotLifecycle() ? wireAttemptId : null, wireAttemptGeneration)));
     }
 
     /**
@@ -442,6 +615,18 @@ public class SnapshotSender {
      * @param error               specific error cause
      */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error, boolean forcedSnapshotSync) {
+        if (stopSnapshotSync.get()) { return; }
+        if (usesSnapshotLifecycle() && admitted) {
+            LogReplicationEntryMsg cancel = getSnapshotSyncEndMarker(wireAttemptId).toBuilder().setMetadata(
+                    getSnapshotSyncEndMarker(wireAttemptId).getMetadata().toBuilder()
+                            .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)
+                            .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION).setAttemptGeneration(wireAttemptGeneration)).build();
+            try {
+                dataSender.send(cancel).exceptionally(failure -> null);
+            } catch (RuntimeException e) {
+                log.debug("Cancellation delivery failed; the sink deadline still applies", e);
+            }
+        }
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
@@ -449,13 +634,28 @@ public class SnapshotSender {
 
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
-                new LogReplicationEventMetadata(snapshotSyncEventId, forcedSnapshotSync)));
+                new LogReplicationEventMetadata(snapshotSyncEventId, forcedSnapshotSync)
+                        .setSnapshotAttempt(usesSnapshotLifecycle() ? wireAttemptId : null, wireAttemptGeneration)));
     }
 
     /**
      * Reset due to the start of a new snapshot sync.
      */
     public void reset() {
+        synchronized (this) {
+            runGeneration++;
+            if (continuation != null) { continuation.cancel(false); continuation = null; }
+        }
+        lifecycleMode = null;
+        wireAttemptId = UUID.randomUUID();
+        wireAttemptGeneration = 0;
+        admitted = false;
+        ownedTransferFinished = false;
+        statusFuture = null;
+        admissionFuture = null;
+        admissionRequest = null;
+        lastStatusPollNanos = 0;
+        remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
         // TODO: Do we need to persist the lastTransferDone in the event of failover?
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
@@ -477,6 +677,10 @@ public class SnapshotSender {
      */
     public void stop() {
         stopSnapshotSync.set(true);
+        synchronized (this) {
+            runGeneration++;
+            if (continuation != null) { continuation.cancel(false); continuation = null; }
+        }
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {

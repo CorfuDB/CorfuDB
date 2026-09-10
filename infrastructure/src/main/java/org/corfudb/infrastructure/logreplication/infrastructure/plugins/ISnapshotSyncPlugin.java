@@ -23,4 +23,20 @@ public interface ISnapshotSyncPlugin {
      *
      */
     void onSnapshotSyncEnd(CorfuRuntime runtime);
+
+    /** Opt in only if acquire/release are idempotent and fence delayed generations at the effect target. */
+    default boolean supportsOwnedSnapshotLifecycle() {
+        return false;
+    }
+
+    default void acquireSnapshot(CorfuRuntime runtime,
+                                 org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease) {
+        throw new UnsupportedOperationException("Plugin does not implement owned snapshot protection");
+    }
+
+    /** Releasing an older protectionId must never release or resurrect a newer generation. */
+    default void releaseSnapshot(CorfuRuntime runtime,
+                                 org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease) {
+        throw new UnsupportedOperationException("Plugin does not implement owned snapshot protection");
+    }
 }

@@ -134,7 +134,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
-                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
+                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder()
+                                        .setSupportsSnapshotLifecycle(true).build()).build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
                         .sendRequestAndGetCompletable(payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =
@@ -173,7 +174,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             throws LogReplicationNegotiationException {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
-
         /*
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
@@ -192,6 +192,16 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             log.error("The active site configID {} is smaller than the standby configID {} ",
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        if (negotiationResponse.hasSnapshotLease()
+                && negotiationResponse.getSnapshotLease().getOutcome()
+                    != LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
+            // The source snapshot state negotiates admission or follows a durable pending apply.
+            // Legacy timestamp triples cannot identify an abandoned attempt or recovery debt.
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
+                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+            return;
         }
 
         /*

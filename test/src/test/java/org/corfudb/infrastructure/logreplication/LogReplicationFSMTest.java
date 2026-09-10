@@ -103,7 +103,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     // can be delivered with a delay, validating based on non-terminal states can cause intermittent failures(FSM may
     // have moved to the next state by the time the update callback is received).  So tests can set this flag to
     // avoid observing such non-terminal transitions.
-    private boolean observeTransitions = true;
+    private volatile boolean observeTransitions = true;
 
     // Flag indicating if we should observer a snapshot sync, this is to interrupt it at any given stage
     private boolean observeSnapshotSync = false;
@@ -126,7 +126,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     @After
     public void stopAckReader() {
-        ackReader.shutdown();
+        observeTransitions = false;
+        if (transitionObservable != null) { transitionObservable.deleteObserver(this); }
+        if (fsm != null) { fsm.shutdown(); }
+        if (ackReader != null) { ackReader.shutdown(); }
     }
 
     /**
@@ -146,6 +149,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void testLogReplicationFSMTransitions() throws Exception {
 
         initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        // This test supplies APPLY_COMPLETE explicitly. A fabricated completed metadata response
+        // must not race those manual state assertions on the asynchronous verification worker.
+        ((TestDataSender) dataSender).setWaitInSnapshotApply(true);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -1069,7 +1075,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Wait until the expected state
         while (waitUntilExpected) {
             if (fsm.getState().getType() == expectedState) {
-                return event.getEventId();
+                return event.getMetadata().getSyncId();
             } else {
                 transitionAvailable.acquire();
             }
@@ -1111,8 +1117,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             return;
         }
         if (obs.equals(transitionObservable)) {
-            while (!transitionAvailable.hasQueuedThreads()) {
+            while (observeTransitions && !transitionAvailable.hasQueuedThreads()) {
                 // Wait until some thread is waiting to acquire...
+                Thread.onSpinWait();
             }
             transitionAvailable.release();
             // log.debug("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());

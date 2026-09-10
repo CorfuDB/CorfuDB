@@ -17,6 +17,9 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.SnapshotSyncLease;
+import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -72,6 +75,34 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
+    private SnapshotSyncLeaseRecord leaseContext;
+    private long deadlineNanos;
+
+    public void setLeaseContext(SnapshotSyncLeaseRecord attempt) {
+        long remaining = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
+                Math.max(0, attempt.getDeadlineMs() - System.currentTimeMillis()));
+        long candidate = System.nanoTime() + remaining;
+        boolean same = leaseContext != null && leaseContext.getGeneration() == attempt.getGeneration()
+                && leaseContext.getOwnerId().equals(attempt.getOwnerId());
+        deadlineNanos = same ? Math.min(deadlineNanos, candidate) : candidate;
+        leaseContext = attempt;
+        phase = attempt.getPhase() == SnapshotSyncLeaseRecord.Phase.APPLYING ? Phase.APPLY_PHASE : Phase.TRANSFER_PHASE;
+    }
+
+    private void checkLease() {
+        if (leaseContext != null && (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadlineNanos)) {
+            throw new SnapshotSyncLease.LeaseRejectedException("Snapshot worker cancelled or expired");
+        }
+    }
+
+    private SnapshotSyncLeaseRecord fence(TxnContext txn) {
+        checkLease();
+        if (leaseContext == null) {
+            return null;
+        }
+        return SnapshotSyncLeaseStore.fence(txn, leaseContext, System.currentTimeMillis(),
+                phase == Phase.APPLY_PHASE ? SnapshotSyncLeaseRecord.Phase.APPLYING : SnapshotSyncLeaseRecord.Phase.TRANSFERRING);
+    }
 
     // Represents the actual replicated streams from active. This is a subset of all regular streams in
     // regularToShadowStreamId map
@@ -159,14 +190,22 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             updateLog(txn, smrEntries, shadowStreamUuid);
             logReplicationMetadataManager.appendUpdate(txn,
                     LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
+            if (leaseContext != null) {
+                SnapshotSyncLeaseRecord state = fence(txn);
+                SnapshotSyncLeaseStore.write(txn, SnapshotSyncLease.next(state).setTransferredSequence(currentSeqNum).build());
+            }
             timestamp = txn.commit();
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
             try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
+                SnapshotSyncLeaseRecord state = fence(txn);
                 logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
+                if (state != null) {
+                    SnapshotSyncLeaseStore.write(txn, SnapshotSyncLease.next(state).setFirstShadowAddress(timestamp.getSequence()).build());
+                }
                 txn.commit();
+                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
             }
         }
 
@@ -180,6 +219,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * @param streamId
      */
     private void updateLog(TxnContext txnContext, List<SMREntry> smrEntries, UUID streamId) {
+        fence(txnContext);
         Map<LogReplicationMetadataType, Long> metadataMap = logReplicationMetadataManager.queryMetadata(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
                 LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
         long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -187,6 +227,9 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         long persistedSequenceNum = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
 
         if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart) {
+            if (leaseContext != null) {
+                throw new SnapshotSyncLease.LeaseRejectedException("Snapshot metadata changed while writing");
+            }
             log.warn("Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
                             "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}", topologyConfigId,
                     srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
@@ -213,6 +256,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     @Override
     public void apply(LogReplicationEntryMsg message) {
+
+        checkLease();
+        if (leaseContext != null && (!SnapshotSyncLease.matches(leaseContext, message.getMetadata())
+                || leaseContext.getGeneration() != message.getMetadata().getAttemptGeneration())) {
+            throw new SnapshotSyncLease.LeaseRejectedException("Snapshot message belongs to another attempt");
+        }
 
         verifyMetadata(message.getMetadata());
 
@@ -316,6 +365,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
 
         boolean shouldAddClearRecord = !MERGE_ONLY_STREAMS.contains(streamId);
         while (iterator.hasNext()) {
+            checkLease();
             // append a clear record at the beginning of every non-merge-only streams
             if(shouldAddClearRecord) {
                 smrEntries.add(CLEAR_ENTRY);
@@ -341,6 +391,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         int numBatches = 1;
 
         for (SMREntry smrEntry : smrEntries) {
+            checkLease();
             // Apply all SMR entries in a single transaction as long as it does not exceed the max write size(25MB).
             // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
             // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
@@ -397,6 +448,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         config.syncWithRegistry();
 
         for (UUID regularStreamId : config.getStreamsIdToNameMap().keySet()) {
+            checkLease();
             if (regularStreamId.equals(REGISTRY_TABLE_ID)) {
                 // Skip registry table as it has been applied in advance
                 continue;
@@ -414,6 +466,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Start Snapshot Sync Apply, i.e., move data from shadow streams to actual streams
      */
     public void startSnapshotSyncApply() {
+        checkLease();
         phase = Phase.APPLY_PHASE;
 
         // Get the number of entries to apply
@@ -434,6 +487,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      * Note: streams could be locally written while this node had no assigned role.
      */
     public void clearLocalStreams() {
+        checkLease();
         // Iterate over all streams to replicate (as obtained from configuration) and accumulate
         // those for which no data came from Source and were not merge-only, to
         // make a single call to the sequencer for log tails and discover
@@ -471,6 +525,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                    fence(txnContext);
                     logReplicationMetadataManager.appendUpdate(txnContext, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
                     streamsToClear.forEach(streamId -> {
                         clearStream(streamId, txnContext);

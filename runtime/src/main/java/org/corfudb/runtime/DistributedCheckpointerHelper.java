@@ -162,6 +162,20 @@ public class DistributedCheckpointerHelper {
     }
 
     public boolean isCheckpointFrozen(TxnContext txn) {
+        // Owned protection has no independent expiry. Only the LR lifecycle can release it.
+        // An older running cycle may still complete using its pre-reservation safe cutoff.
+        LogReplication.SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.read(txn);
+        if (lease.getProtectionHeld()) {
+            CheckpointingStatus manager = (CheckpointingStatus) txn.getRecord(
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+            RpcCommon.TokenMsg cutoff = (RpcCommon.TokenMsg) txn.getRecord(
+                    CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
+            if (manager == null || manager.getStatus() != StatusType.STARTED || cutoff == null
+                    || !SnapshotSyncLeaseStore.permitsTrim(lease, cutoff.getSequence())) {
+                return true;
+            }
+        }
         RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                 CompactorMetadataTables.FREEZE_TOKEN).getPayload();
         final long patience = 2 * 60 * 60 * 1000;

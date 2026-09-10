@@ -38,6 +38,115 @@ import static org.mockito.Mockito.when;
 @Slf4j
 public class WaitSnapshotApplyStateTest {
 
+    private org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord ownedStatus() {
+        UUID wireId = new UUID(11, 22);
+        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptId()).thenReturn(wireId);
+        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptGeneration()).thenReturn(7L);
+        when(inSnapshotSyncState.getSnapshotSender().usesSnapshotLifecycle()).thenReturn(true);
+        state.setTransitionSyncId(UUID.randomUUID());
+        state.setBaseSnapshotTimestamp(100);
+        return org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
+                .setAttemptId(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(wireId)).setGeneration(7)
+                .setSourceSnapshot(100).setPhase(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.APPLYING).build();
+    }
+
+    @Test
+    public void delayedCompletionCannotFinishAnotherAttemptWithTheSameForcedRequestId() throws Exception {
+        setup();
+        ownedStatus();
+        LogReplicationEventMetadata oldAttempt = new LogReplicationEventMetadata(state.getTransitionSyncId(), 100, 100, true)
+                .setSnapshotAttempt(new UUID(11, 23), 7);
+        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, oldAttempt)));
+        oldAttempt.setSnapshotAttempt(new UUID(11, 22), 6);
+        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, oldAttempt)));
+        verify(fsm.getAckReader(), never()).markLogEntrySyncOngoing(org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @org.junit.After
+    public void cancelCallbacks() {
+        if (state != null) {
+            LogReplicationState stopped = mock(LogReplicationState.class);
+            when(stopped.getType()).thenReturn(LogReplicationStateType.INITIALIZED);
+            state.onExit(stopped);
+        }
+    }
+
+    @Test
+    public void ownedApplyDoesNotUseTheSourcesIndependentGiveUpTimer() {
+        setup();
+        var lease = ownedStatus();
+        state.applyWaitStartTimeMs = 0;
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
+    public void ownedCompletionSurvivesCleanupAndRecovery() {
+        setup();
+        var lease = ownedStatus().toBuilder().setPhase(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.RECOVERING)
+                .setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE));
+    }
+
+    @Test
+    public void fullUuidMismatchAndAbandonmentCancelEvenWhenTimestampsMatch() {
+        setup();
+        var lease = ownedStatus().toBuilder().setAttemptId(
+                org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(new UUID(11, 23))).build();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+        org.mockito.Mockito.clearInvocations(fsm);
+        lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.ABORTED).build();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+    }
+
+    @Test
+    public void notReadyAndTransportFailureDoNotTurnIntoLifecycleTimeouts() {
+        setup();
+        ownedStatus();
+        LogReplicationState initial = mock(LogReplicationState.class);
+        when(initial.getType()).thenReturn(LogReplicationStateType.INITIALIZED);
+        state.onEntry(initial);
+        state.applyWaitStartTimeMs = 0;
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("disconnected")));
+        state.verifyStatusOfSnapshotSyncApply();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(
+                        org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
+    public void replyAfterExitCannotCompleteAStoppedAttempt() throws Exception {
+        setup();
+        var lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
+        CompletableFuture<LogReplicationMetadataResponseMsg> reply = new CompletableFuture<>();
+        java.util.concurrent.CountDownLatch queried = new java.util.concurrent.CountDownLatch(1);
+        when(dataSender.sendMetadataRequest()).thenAnswer(call -> { queried.countDown(); return reply; });
+        CompletableFuture<Void> verifying = CompletableFuture.runAsync(state::verifyStatusOfSnapshotSyncApply);
+        Assert.assertTrue(queried.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        cancelCallbacks();
+        reply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build());
+        verifying.get(2, java.util.concurrent.TimeUnit.SECONDS);
+        verify(fsm, never()).input(any());
+    }
+
     private LogReplicationFSM fsm;
     private InSnapshotSyncState inSnapshotSyncState;
     private WaitSnapshotApplyState state;

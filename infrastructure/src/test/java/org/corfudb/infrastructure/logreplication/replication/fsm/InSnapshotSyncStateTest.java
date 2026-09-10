@@ -20,6 +20,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +35,23 @@ import static org.mockito.Mockito.when;
  */
 @Slf4j
 public class InSnapshotSyncStateTest {
+
+    @Test
+    public void supersededQueuedContinuationRetainsResetAndRecoveryDelay() throws Exception {
+        java.util.concurrent.CountDownLatch occupied = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        workers.submit(() -> { occupied.countDown(); release.await(); return null; });
+        Assert.assertTrue(occupied.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        org.mockito.Mockito.clearInvocations(snapshotSender);
+        state.processEvent(cancelEvent());
+        state.retryBackoffMs = 200;
+        state.onEntry(state);
+        state.onEntry(state); // A duplicate event must not consume/reset the delay.
+        verify(snapshotSender, org.mockito.Mockito.after(100).never()).transmit(any(), anyBoolean());
+        release.countDown();
+        verify(snapshotSender, timeout(2000)).transmit(any(), anyBoolean());
+        verify(snapshotSender, times(1)).reset();
+    }
 
     private SnapshotSender snapshotSender;
     private InSnapshotSyncState state;
@@ -68,7 +88,9 @@ public class InSnapshotSyncStateTest {
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws IllegalTransitionException {
+        state.processEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
+                new LogReplicationEventMetadata(state.getTransitionSyncId())));
         workers.shutdownNow();
     }
 
@@ -216,30 +238,40 @@ public class InSnapshotSyncStateTest {
     }
 
     @Test
-    public void backoffWaitIsInterruptedByStop() throws InterruptedException {
-        AtomicBoolean stop = new AtomicBoolean(false);
-        when(snapshotSender.getStopSnapshotSync()).thenReturn(stop);
-        state.retryBackoffMs = LogReplicationConfig.MAX_RETRY_BACKOFF_MS; // 60s, would time out the test if not interrupted
-
-        long start = System.currentTimeMillis();
+    public void stopCancelsDelayedTransmitWithoutOccupyingTheWorker() throws Exception {
+        state.retryBackoffMs = LogReplicationConfig.MAX_RETRY_BACKOFF_MS;
         state.onEntry(state);
-        // Flip the stop flag shortly after entry starts backing off, on a thread of its own -- workers
-        // is single-threaded and already busy running the backoff wait itself.
-        Thread stopSetter = new Thread(() -> {
-            try {
-                TimeUnit.MILLISECONDS.sleep(300);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-            }
-            stop.set(true);
-        });
-        stopSetter.start();
+        workers.submit(() -> { }).get(1, TimeUnit.SECONDS);
+        state.processEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
+                new LogReplicationEventMetadata(state.getTransitionSyncId())));
+        verify(snapshotSender, org.mockito.Mockito.times(1)).transmit(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
 
-        verify(snapshotSender, timeout(3000).times(2))
-                .transmit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
-        long elapsed = System.currentTimeMillis() - start;
-        Assert.assertTrue("expected the 60s backoff to be cut short by stopSnapshotSync, elapsed=" + elapsed,
-                elapsed < 3000);
-        stopSetter.join();
+    @Test
+    public void applyWaitTransitionHonorsGraceBeforeFirstTransmit() throws Exception {
+        state.retryBackoffMs = 300;
+        long start = System.nanoTime();
+        state.onEntry(mock(WaitSnapshotApplyState.class));
+        workers.submit(() -> { }).get(1, TimeUnit.SECONDS);
+        verify(snapshotSender, timeout(2000).times(2)).transmit(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+        Assert.assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) >= 250);
+    }
+
+    @Test
+    public void consumingTheDelayDoesNotResetExponentialHistory() throws Exception {
+        state.processEvent(cancelEvent());
+        state.onEntry(state);
+        Assert.assertEquals(0, state.retryBackoffMs);
+        state.processEvent(cancelEvent());
+        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS * 2, state.retryBackoffMs);
+    }
+
+    @Test
+    public void negotiatedSinkOwnsLifecycleTiming() {
+        when(snapshotSender.usesSnapshotLifecycle()).thenReturn(true);
+        state.registerCancellationAndComputeBackoff(60000);
+        Assert.assertEquals(0, state.retryBackoffMs);
     }
 }

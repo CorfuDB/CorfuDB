@@ -22,6 +22,33 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SnapshotSenderBufferManager extends SenderBufferManager {
     private LogReplicationAckReader ackReader;
+    private java.util.UUID leaseAttemptId;
+    private long leaseGeneration;
+
+    public void beginLease(java.util.UUID attemptId, long generation) {
+        leaseAttemptId = attemptId;
+        leaseGeneration = generation;
+        snapshotSyncSequenceNumber = 0; // START was explicitly accepted outside the data buffer.
+    }
+
+    private LogReplicationEntryMsg identify(LogReplicationEntryMsg message) {
+        if (leaseAttemptId == null) { return message; }
+        return message.toBuilder().setMetadata(message.getMetadata().toBuilder()
+                .setSyncRequestId(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(leaseAttemptId))
+                .setSnapshotLifecycleVersion(org.corfudb.runtime.SnapshotSyncLease.VERSION)
+                .setAttemptGeneration(leaseGeneration)).build();
+    }
+
+    @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message) {
+        return super.sendWithBuffering(identify(message));
+    }
+
+    @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message,
+            String metricName, io.micrometer.core.instrument.Tag tag) {
+        return super.sendWithBuffering(identify(message), metricName, tag);
+    }
 
     // The expectedSeqNum most recently reported by the sink, or Address.NON_ADDRESS if none has
     // been reported yet. expectedSeqNum is always lastProcessedSeq + 1 (see
@@ -60,6 +87,12 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      */
     @Override
     public void updateAck(LogReplicationEntryMsg entry) {
+        if (leaseAttemptId != null && (!entry.getMetadata().getSyncRequestId().equals(
+                org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(leaseAttemptId))
+                || entry.getMetadata().getAttemptGeneration() != leaseGeneration
+                || entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)) {
+            return;
+        }
         updateAck(entry.getMetadata().getSnapshotSyncSeqNum());
 
         // If only a given stream has been replicated, update with the sequence number
@@ -81,7 +114,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
         // resending the entire in-flight window each time. An old sink's acks simply never set this
         // field (hasExpectedSeqNum() == false), so this is a no-op against a peer that doesn't
         // support it -- safe during a rolling upgrade in either direction.
-        if (entry.getMetadata().hasExpectedSeqNum()) {
+        if (leaseAttemptId == null && entry.getMetadata().hasExpectedSeqNum()) {
             long reportedExpectedSeqNum = entry.getMetadata().getExpectedSeqNum();
             if (reportedExpectedSeqNum == lastReportedExpectedSeqNum) {
                 expediteResendFrom(reportedExpectedSeqNum);
@@ -125,6 +158,8 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      */
     @Override
     public void reset(long lastAckedTimestamp) {
+        leaseAttemptId = null;
+        leaseGeneration = 0;
         super.reset(lastAckedTimestamp);
         lastReportedExpectedSeqNum = Address.NON_ADDRESS;
     }

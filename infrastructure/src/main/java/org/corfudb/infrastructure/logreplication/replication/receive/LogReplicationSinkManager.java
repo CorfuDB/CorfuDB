@@ -15,6 +15,11 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason;
+import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -112,6 +117,13 @@ public class LogReplicationSinkManager implements DataReceiver {
     private final ObservableValue<Integer> rxMessageCount = new ObservableValue<>(rxMessageCounter);
 
     private ISnapshotSyncPlugin snapshotSyncPlugin;
+    private volatile SnapshotLeaseCoordinator lifecycle;
+    private boolean snapshotLifecycleEnabled;
+    private long snapshotDurationMs = TimeUnit.MINUTES.toMillis(90);
+    private long snapshotRecoveryMs = TimeUnit.MINUTES.toMillis(1);
+    private long snapshotRecoveryAlarmMs = TimeUnit.MINUTES.toMillis(30);
+    private SnapshotSyncLeaseRecord writerAttempt;
+    private volatile long installedCompletedGeneration = -1;
 
     private final String pluginConfigFilePath;
 
@@ -343,6 +355,81 @@ public class LogReplicationSinkManager implements DataReceiver {
                 TimeUnit.MILLISECONDS);
 
         initWriterAndBufferMgr();
+        if (metadataManager.getCorfuStore() != null) {
+            // Activation is sticky: disabling a config flag cannot bypass durable recovery debt.
+            try (org.corfudb.runtime.collections.TxnContext txn = metadataManager.getTxnContext()) {
+                snapshotLifecycleEnabled |= org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn).getSchemaVersion() != 0;
+                txn.commit();
+            }
+        }
+        if (snapshotLifecycleEnabled) {
+            enableSnapshotLifecycle(snapshotDurationMs, snapshotRecoveryMs, snapshotRecoveryAlarmMs);
+        }
+    }
+
+    @VisibleForTesting
+    public void enableSnapshotLifecycle(long durationMs, long recoveryMs, long alarmMs) {
+        if (lifecycle != null) {
+            throw new IllegalStateException("Snapshot lifecycle is already configured");
+        }
+        lifecycle = new SnapshotLeaseCoordinator(runtime, logReplicationMetadataManager, snapshotSyncPlugin,
+                new SnapshotLeaseCoordinator.Worker() {
+                    public void prepare(SnapshotSyncLeaseRecord attempt) { prepareOwnedSnapshot(attempt); }
+                    public void apply(SnapshotSyncLeaseRecord attempt) { applyOwnedSnapshot(attempt); }
+                    public void completed(SnapshotSyncLeaseRecord attempt) { installCompletedSnapshot(attempt); }
+                }, durationMs, recoveryMs, alarmMs, maxSnapshotApplyResumeRetries);
+    }
+
+    public boolean isSnapshotLifecycleEnabled() {
+        return lifecycle != null;
+    }
+
+    public void setLeadership(boolean leader) {
+        if (lifecycle != null) {
+            lifecycle.leadership(leader);
+        }
+    }
+
+    public SnapshotSyncLeaseRecord getSnapshotLease() {
+        return lifecycle == null ? SnapshotSyncLeaseRecord.getDefaultInstance() : lifecycle.status();
+    }
+
+    private void prepareOwnedSnapshot(SnapshotSyncLeaseRecord attempt) {
+        snapshotWriter.reset(attempt.getTopologyConfigId(), attempt.getSourceSnapshot());
+        snapshotWriter.setLeaseContext(attempt);
+        writerAttempt = attempt;
+        baseSnapshotTimestamp = attempt.getSourceSnapshot();
+        lastSnapshotSyncId = getUUID(attempt.getAttemptId());
+        snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                Address.NON_ADDRESS, lastSnapshotSyncId, this);
+        rxState = RxState.SNAPSHOT_SYNC;
+    }
+
+    private void applyOwnedSnapshot(SnapshotSyncLeaseRecord attempt) {
+        ongoingApply.set(true);
+        try {
+            snapshotWriter.setLeaseContext(attempt);
+            config.syncWithRegistry();
+            snapshotWriter.clearLocalStreams();
+            snapshotWriter.startSnapshotSyncApply();
+            LogReplication.LogReplicationEntryMsg end = getLrEntryAckMsg(LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_END).setSyncRequestId(attempt.getAttemptId())
+                    .setTopologyConfigID(attempt.getTopologyConfigId()).setSnapshotTimestamp(attempt.getSourceSnapshot())
+                    .setAttemptGeneration(attempt.getGeneration()).build());
+            logReplicationMetadataManager.setSnapshotAppliedComplete(end, attempt);
+        } finally {
+            ongoingApply.set(false);
+        }
+    }
+
+    private void installCompletedSnapshot(SnapshotSyncLeaseRecord attempt) {
+        long lastProcessed = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
+        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                lastProcessed, this);
+        logEntryWriter.reset(attempt.getSourceSnapshot(), lastProcessed);
+        logEntryWriter.setLeaseContext(attempt);
+        rxState = RxState.LOG_ENTRY_SYNC;
+        installedCompletedGeneration = attempt.getGeneration();
     }
 
     private void setDataConsistentWithRetry(boolean isDataConsistent) {
@@ -418,6 +505,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                     Integer.toString(maxSnapshotApplyResumeRetries)));
             checkpointerGracePeriodMs = Long.parseLong(props.getProperty("snapshot_apply_checkpointer_grace_period_ms",
                     Long.toString(checkpointerGracePeriodMs)));
+            snapshotLifecycleEnabled = Boolean.parseBoolean(props.getProperty("snapshot_lifecycle_enabled", "false"));
+            snapshotDurationMs = Long.parseLong(props.getProperty("snapshot_lifecycle_max_duration_ms", Long.toString(snapshotDurationMs)));
+            snapshotRecoveryMs = Long.parseLong(props.getProperty("snapshot_lifecycle_min_recovery_ms", Long.toString(snapshotRecoveryMs)));
+            snapshotRecoveryAlarmMs = Long.parseLong(props.getProperty("snapshot_lifecycle_recovery_alarm_ms", Long.toString(snapshotRecoveryAlarmMs)));
             reader.close();
         } catch (FileNotFoundException e) {
             log.warn("Config file {} does not exist.  Using default configs", CONFIG_FILE);
@@ -437,6 +528,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @Override
     public LogReplication.LogReplicationEntryMsg receive(LogReplication.LogReplicationEntryMsg message) {
+        if (lifecycle != null) {
+            return receiveOwnedSnapshot(message);
+        }
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
@@ -492,6 +586,61 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         return processReceivedMessage(message);
+    }
+
+    private LogReplication.LogReplicationEntryMsg receiveOwnedSnapshot(LogReplication.LogReplicationEntryMsg message) {
+        LogReplicationEntryMetadataMsg entry = message.getMetadata();
+        SnapshotSyncLeaseRecord state = lifecycle.status();
+        if (entry.getTopologyConfigID() != topologyConfigId) {
+            throw lifecycle.rejected(Reason.STALE_ATTEMPT);
+        }
+        if (entry.getEntryType() == LogReplicationEntryType.LOG_ENTRY_MESSAGE) {
+            if (state.getOutcome() != Outcome.COMPLETED || state.getPhase() == Phase.NOT_READY) {
+                throw lifecycle.rejected(Reason.ADMISSION_CLOSED);
+            }
+            if (state.getOutcome() == Outcome.COMPLETED && installedCompletedGeneration != state.getGeneration()) {
+                throw lifecycle.rejected(Reason.ADMISSION_CLOSED);
+            }
+            return logEntrySinkBufferManager.processMsgAndBuffer(message);
+        }
+        if (entry.getSnapshotLifecycleVersion() != SnapshotSyncLease.VERSION) {
+            throw lifecycle.rejected(Reason.UNSUPPORTED_PROTOCOL);
+        }
+        if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
+            state = lifecycle.start(entry);
+            if (state.getPhase() != Phase.TRANSFERRING && state.getPhase() != Phase.APPLYING) {
+                throw lifecycle.rejected(Reason.ADMISSION_CLOSED);
+            }
+            return getLrEntryAckMsg(entry.toBuilder().setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
+                    .setAttemptGeneration(state.getGeneration()).build());
+        }
+        if (!SnapshotSyncLease.matches(state, entry) || state.getGeneration() != entry.getAttemptGeneration()) {
+            throw lifecycle.rejected(Reason.STALE_ATTEMPT);
+        }
+        if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_CANCEL) {
+            lifecycle.abandon("Source cancelled its snapshot cut");
+            throw lifecycle.rejected(Reason.STALE_ATTEMPT);
+        }
+        if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_END
+                && (state.getPhase() == Phase.APPLYING || state.getOutcome() == Outcome.COMPLETED)) {
+            return getLrEntryAckMsg(entry.toBuilder().setEntryType(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)
+                    .setSnapshotSyncSeqNum(state.getEndSequence()).build());
+        }
+        lifecycle.enterTransfer(entry);
+        try {
+            if (entry.getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE
+                    && entry.getEntryType() != LogReplicationEntryType.SNAPSHOT_END) {
+                throw lifecycle.rejected(Reason.STALE_ATTEMPT);
+            }
+            return processReceivedMessage(message);
+        } catch (RuntimeException e) {
+            // A response failure can leave data committed but its first marker uncertain.
+            // Abandon instead of writing that batch a second time into the same shadow range.
+            lifecycle.abandon("Snapshot transfer failed: " + e.getClass().getSimpleName());
+            throw lifecycle.rejected(Reason.STALE_ATTEMPT);
+        } finally {
+            lifecycle.exitTransfer();
+        }
     }
 
     private boolean isMessageFromNewSnapshotSync(LogReplication.LogReplicationEntryMsg message) {
@@ -652,6 +801,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @VisibleForTesting
     void checkSnapshotSyncLiveness() {
+        if (lifecycle != null) { return; }
         try {
             if (rxState != RxState.SNAPSHOT_SYNC
                     || snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.TRANSFER_PHASE
@@ -869,6 +1019,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                 snapshotWriter.apply(entry);
                 break;
             case SNAPSHOT_END:
+                if (lifecycle != null) {
+                    lifecycle.transferComplete(writerAttempt, entry.getMetadata().getSnapshotSyncSeqNum());
+                    break;
+                }
                 if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
                     completeSnapshotTransfer(entry);
                     startSnapshotApplyAsync(entry);
@@ -911,6 +1065,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @VisibleForTesting
     void checkForStuckApply() {
+        if (lifecycle != null) { return; }
         try {
             if (!ongoingApply.get()) {
                 loggedStuckApplyForCurrentAttempt.set(false);
@@ -1059,6 +1214,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param topologyConfigId
      */
     public void updateTopologyConfigId(long topologyConfigId) {
+        if (lifecycle != null && this.topologyConfigId != topologyConfigId) {
+            lifecycle.abandon("Topology changed");
+        }
         this.topologyConfigId = topologyConfigId;
     }
 
@@ -1070,6 +1228,10 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * */
     public void reset() {
+        if (lifecycle != null) {
+            // The coordinator owns writer lifetime; resetting here can corrupt a running apply.
+            return;
+        }
         long lastAppliedSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         long lastProcessedLogEntryTimestamp = logReplicationMetadataManager.getLastProcessedLogEntryBatchTimestamp();
         log.debug("Reset Sink Manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", lastAppliedSnapshotTimestamp,
@@ -1081,6 +1243,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     public void shutdown() {
+        if (lifecycle != null) { lifecycle.close(); }
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
         this.snapshotSyncLivenessExecutor.shutdownNow();
@@ -1120,6 +1283,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * sets once it has given up.
      */
     public synchronized void resumeSnapshotApply() {
+        if (lifecycle != null) { return; }
         long startedTimestamp = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
         long transferredTimestamp = logReplicationMetadataManager.getLastTransferredSnapshotTimestamp();
         long appliedTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
@@ -1208,6 +1372,10 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Stop any functions on Sink Manager when leadership is lost
      */
     public void stopOnLeadershipLoss() {
+        if (lifecycle != null) {
+            lifecycle.leadership(false);
+            return;
+        }
         // If current sink/standby is in TRANSFER phase, trigger end of snapshot sync (unfreeze checkpoint) as we
         // don't know when snapshot sync might be started again.
         // If in APPLY phase do not unfreeze or shadow streams could be lost. This change was done near the release

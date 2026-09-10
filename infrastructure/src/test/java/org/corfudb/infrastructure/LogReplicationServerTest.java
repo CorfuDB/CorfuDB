@@ -38,6 +38,89 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @Slf4j
 public class LogReplicationServerTest {
 
+    @Test
+    public void ownedMetadataUsesCachedViewWithoutWorkerOrStorageAndRejectsLegacyProtocol() {
+        lrServer.setLeadership(true);
+        doReturn(true).when(sinkManager).isSnapshotLifecycleEnabled();
+        doReturn(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
+        doReturn(true).when(lrServer).isLeader(any(), any(), any(), anyBoolean());
+        org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg cached =
+                org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(
+                        org.corfudb.runtime.SnapshotSyncLease.initial("sink")).build();
+        doReturn(cached).when(metadataManager).getCachedSnapshotStatus();
+        RequestMsg request = getRequestMsg(HeaderMsg.getDefaultInstance(), CorfuMessage.RequestPayloadMsg.newBuilder()
+                .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder().setSupportsSnapshotLifecycle(true)).build());
+        lrServer.processRequest(request, mockHandlerContext, mockServerRouter);
+        verify(mockServerRouter).sendResponse(org.mockito.ArgumentMatchers.argThat(response ->
+                response.getPayload().getLrMetadataResponse().equals(cached)), any());
+        verify(metadataManager).getCachedSnapshotStatus();
+        verify(sinkManager, org.mockito.Mockito.never()).resumeSnapshotApply();
+        request = request.toBuilder().setPayload(CorfuMessage.RequestPayloadMsg.newBuilder()
+                .setLrMetadataRequest(LogReplicationMetadataRequestMsg.getDefaultInstance())).build();
+        lrServer.processRequest(request, mockHandlerContext, mockServerRouter);
+        verify(mockServerRouter).sendResponse(org.mockito.ArgumentMatchers.argThat(response -> response.getPayload().hasLrBusyResponse()
+                && response.getPayload().getLrBusyResponse().getReason()
+                == org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason.UNSUPPORTED_PROTOCOL), any());
+    }
+
+    @Test
+    public void saturatedDataQueueReturnsBusyWhileMetadataRemainsAvailable() {
+        ServerContext fresh = mock(ServerContext.class);
+        java.util.concurrent.ExecutorService parked = mock(java.util.concurrent.ExecutorService.class);
+        doReturn(parked).when(fresh).getExecutorService(1, "LogReplicationServer-");
+        doReturn(parked).when(fresh).getExecutorService(1, "LogReplicationServer-control-");
+        LogReplicationServer server = new LogReplicationServer(fresh, metadataManager, sinkManager, "sink");
+        doReturn(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
+        RequestMsg entry = getRequestMsg(HeaderMsg.getDefaultInstance(), CorfuMessage.RequestPayloadMsg.newBuilder()
+                .setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build());
+        for (int i = 0; i < 6; i++) { server.processRequest(entry, mockHandlerContext, mockServerRouter); }
+        verify(mockServerRouter, org.mockito.Mockito.atLeastOnce()).sendResponse(org.mockito.ArgumentMatchers.argThat(response ->
+                response.getPayload().hasLrBusyResponse()), any());
+        server.setLeadership(true);
+        doReturn(true).when(sinkManager).isSnapshotLifecycleEnabled();
+        doReturn(org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg.getDefaultInstance())
+                .when(metadataManager).getCachedSnapshotStatus();
+        server.processRequest(getRequestMsg(HeaderMsg.getDefaultInstance(), CorfuMessage.RequestPayloadMsg.newBuilder()
+                .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder().setSupportsSnapshotLifecycle(true)).build()),
+                mockHandlerContext, mockServerRouter);
+        verify(mockServerRouter).sendResponse(org.mockito.ArgumentMatchers.argThat(response ->
+                response.getPayload().hasLrMetadataResponse()), any());
+        server.shutdown();
+    }
+
+    @Test
+    public void executorRejectionReleasesCapacityAndReturnsBusy() {
+        ServerContext fresh = mock(ServerContext.class);
+        java.util.concurrent.ExecutorService rejecting = mock(java.util.concurrent.ExecutorService.class);
+        doReturn(rejecting).when(fresh).getExecutorService(org.mockito.ArgumentMatchers.eq(1), org.mockito.ArgumentMatchers.anyString());
+        org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException()).when(rejecting).execute(any());
+        LogReplicationServer server = new LogReplicationServer(fresh, metadataManager, sinkManager, "sink");
+        RequestMsg entry = getRequestMsg(HeaderMsg.getDefaultInstance(), CorfuMessage.RequestPayloadMsg.newBuilder()
+                .setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build());
+        for (int i = 0; i < 6; i++) { server.processRequest(entry, mockHandlerContext, mockServerRouter); }
+        verify(rejecting, times(6)).execute(any());
+        verify(mockServerRouter, times(6)).sendResponse(org.mockito.ArgumentMatchers.argThat(response ->
+                response.getPayload().hasLrBusyResponse()), any());
+        server.shutdown();
+    }
+
+    @Test
+    public void admissionRejectionPreservesTypedBusyResponse() {
+        lrServer.setStandby(true);
+        doReturn(true).when(lrServer).isLeader(any(), any(), any(), anyBoolean());
+        org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg busy =
+                org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.newBuilder()
+                        .setReason(org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason.STALE_ATTEMPT)
+                        .setRetryAfterMs(2000).build();
+        org.mockito.Mockito.doThrow(new org.corfudb.runtime.exceptions.LogReplicationBusyException(busy))
+                .when(sinkManager).receive(any());
+        lrServer.createHandlerMethods().handle(getRequestMsg(HeaderMsg.getDefaultInstance(),
+                CorfuMessage.RequestPayloadMsg.newBuilder().setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build()),
+                mockHandlerContext, mockServerRouter);
+        verify(mockServerRouter).sendResponse(org.mockito.ArgumentMatchers.argThat(response ->
+                response.getPayload().getLrBusyResponse().equals(busy)), any());
+    }
+
     private final static String SAMPLE_HOSTNAME = "localhost";
 
     ServerContext context;
@@ -161,7 +244,7 @@ public class LogReplicationServerTest {
      * the very thread it needed a timely answer from.
      */
     @Test
-    public void metadataAndLeadershipRequestsUseControlPlaneExecutorNotDataPlaneExecutor() throws Exception {
+    public void legacyMetadataUsesControlExecutorAndLeadershipRespondsInline() throws Exception {
         ServerContext freshContext = mock(ServerContext.class);
         ThreadPoolExecutor dataPlaneExecutor = spy((ThreadPoolExecutor) Executors.newFixedThreadPool(1));
         ThreadPoolExecutor controlPlaneExecutor = spy((ThreadPoolExecutor) Executors.newFixedThreadPool(1));
@@ -184,11 +267,8 @@ public class LogReplicationServerTest {
             server.processRequest(leadershipRequest, mockHandlerContext, mockServerRouter);
             server.processRequest(entryRequest, mockHandlerContext, mockServerRouter);
 
-            // Exactly 2 submissions (metadata + leadership) on the control-plane executor and
-            // exactly 1 (the entry request) on the data-plane one, fully accounts for all three
-            // calls above -- proving the routing, not just that submission happened somewhere.
-            verify(controlPlaneExecutor, times(2)).submit(any(Runnable.class));
-            verify(dataPlaneExecutor, times(1)).submit(any(Runnable.class));
+            verify(controlPlaneExecutor, times(1)).execute(any(Runnable.class));
+            verify(dataPlaneExecutor, times(1)).execute(any(Runnable.class));
         } finally {
             server.shutdown();
         }

@@ -68,6 +68,8 @@ public class LogReplicationServer extends AbstractServer {
      */
     private static final int CONTROL_PLANE_EXECUTOR_QUEUE_SIZE = 5;
     private final ExecutorService controlPlaneExecutor;
+    private final java.util.concurrent.Semaphore dataCapacity = new java.util.concurrent.Semaphore(MAX_EXECUTOR_QUEUE_SIZE);
+    private final java.util.concurrent.Semaphore controlCapacity = new java.util.concurrent.Semaphore(CONTROL_PLANE_EXECUTOR_QUEUE_SIZE);
 
     @Getter
     private final LogReplicationMetadataManager metadataManager;
@@ -110,16 +112,40 @@ public class LogReplicationServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        if (req.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_QUERY
+                || (req.getPayload().getPayloadCase() == PayloadCase.LR_METADATA_REQUEST
+                    && sinkManager.isSnapshotLifecycleEnabled())) {
+            getHandlerMethods().handle(req, ctx, r);
+            return;
+        }
         boolean isControlPlaneRequest = isControlPlaneRequest(req);
         ExecutorService targetExecutor = isControlPlaneRequest ? controlPlaneExecutor : executor;
-        int maxQueueSize = isControlPlaneRequest ? CONTROL_PLANE_EXECUTOR_QUEUE_SIZE : MAX_EXECUTOR_QUEUE_SIZE;
-
-        if (((ThreadPoolExecutor) targetExecutor).getQueue().size() < maxQueueSize) {
-            targetExecutor.submit(() -> getHandlerMethods().handle(req, ctx, r));
-        } else {
-            log.warn("Server request queue at capacity ({}), dropping message {}",
-                    maxQueueSize, req.getHeader().getRequestId());
+        java.util.concurrent.Semaphore capacity = isControlPlaneRequest ? controlCapacity : dataCapacity;
+        if (!capacity.tryAcquire()) {
+            sendBusy(req, ctx, r, org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.newBuilder()
+                    .setReason(org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason.OVERLOADED)
+                    .setSnapshotLease(sinkManager.getSnapshotLease()).setRetryAfterMs(2000).build());
+            return;
         }
+        try {
+            targetExecutor.execute(() -> {
+                try {
+                    getHandlerMethods().handle(req, ctx, r);
+                } finally {
+                    capacity.release();
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            capacity.release();
+            sendBusy(req, ctx, r, org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.newBuilder()
+                    .setRetryAfterMs(2000).build());
+        }
+    }
+
+    private void sendBusy(RequestMsg request, ChannelHandlerContext ctx, IServerRouter router,
+                          org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg busy) {
+        router.sendResponse(getResponseMsg(getHeaderMsg(request.getHeader()),
+                ResponsePayloadMsg.newBuilder().setLrBusyResponse(busy).build()), ctx);
     }
 
     private static boolean isControlPlaneRequest(RequestMsg req) {
@@ -153,8 +179,13 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isStandby.get() && isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
-            LogReplicationEntryMsg ack =
-                    sinkManager.receive(request.getPayload().getLrEntry());
+            LogReplicationEntryMsg ack;
+            try {
+                ack = sinkManager.receive(request.getPayload().getLrEntry());
+            } catch (org.corfudb.runtime.exceptions.LogReplicationBusyException e) {
+                sendBusy(request, ctx, router, e.getResponse());
+                return;
+            }
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
@@ -191,6 +222,17 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader(request, ctx, router, false)) {
+            if (sinkManager.isSnapshotLifecycleEnabled()) {
+                if (!request.getPayload().getLrMetadataRequest().getSupportsSnapshotLifecycle()) {
+                    sendBusy(request, ctx, router, org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.newBuilder()
+                            .setReason(org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason.UNSUPPORTED_PROTOCOL)
+                            .setSnapshotLease(sinkManager.getSnapshotLease()).setRetryAfterMs(2000).build());
+                    return;
+                }
+                router.sendResponse(getResponseMsg(getHeaderMsg(request.getHeader()), ResponsePayloadMsg.newBuilder()
+                        .setLrMetadataResponse(metadataManager.getCachedSnapshotStatus()).build()), ctx);
+                return;
+            }
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
             ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()),
                     sinkManager.isProcessingSnapshotSync(), sinkManager.getBaseSnapshotTimestamp(),
@@ -273,6 +315,7 @@ public class LogReplicationServer extends AbstractServer {
     /* ************ Public Methods ************ */
 
     public synchronized void setLeadership(boolean leader) {
+        sinkManager.setLeadership(leader);
         isLeader.set(leader);
     }
 

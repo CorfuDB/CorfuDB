@@ -148,6 +148,14 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
+        if (destinationLogReplicationManager.isSnapshotLifecycleEnabled()) {
+            try {
+                LogReplicationEntryMsg response = destinationLogReplicationManager.receive(message);
+                return response == null ? new CompletableFuture<>() : CompletableFuture.completedFuture(response);
+            } catch (org.corfudb.runtime.exceptions.LogReplicationBusyException e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        }
         // Simulate a source that has gone silent (network partition, crash) right after starting a
         // snapshot sync: nothing past SNAPSHOT_START ever reaches the sink.
         if (dropAllAfterSnapshotStart && message.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_START) {
@@ -256,6 +264,11 @@ public class SourceForwardingDataSender implements DataSender {
     @Override
     public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
         metadataRequestCount.incrementAndGet();
+        if (destinationLogReplicationManager.isSnapshotLifecycleEnabled()) {
+            // The sink driver publishes this transactional snapshot independently of source polls.
+            return CompletableFuture.completedFuture(destinationLogReplicationManager
+                    .getLogReplicationMetadataManager().getCachedSnapshotStatus());
+        }
         CompletableFuture<LogReplicationMetadataResponseMsg> completableFuture = new CompletableFuture<>();
         long baseSnapshotTimestamp = destinationDataSender.getSourceManager().getLogReplicationFSM().getBaseSnapshot();
         LogReplicationMetadataResponseMsg response;

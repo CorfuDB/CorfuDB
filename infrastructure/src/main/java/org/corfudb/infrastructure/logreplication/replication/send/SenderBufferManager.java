@@ -88,7 +88,7 @@ public abstract class SenderBufferManager {
     /*
      * The snapshot sync sequence number
      */
-    private long snapshotSyncSequenceNumber = Address.NON_ADDRESS;
+    protected long snapshotSyncSequenceNumber = Address.NON_ADDRESS;
 
     private DataSender dataSender;
 
@@ -170,6 +170,11 @@ public abstract class SenderBufferManager {
     public LogReplicationEntryMsg processAcks() throws InterruptedException, ExecutionException, TimeoutException {
         LogReplicationEntryMsg ack = null;
 
+        // A failed RPC is no longer a candidate ACK. Keep its buffered payload for a paced
+        // resend, but do not let a settled exceptional future poison every subsequent anyOf.
+        pendingCompletableFutureForAcks.entrySet().removeIf(entry ->
+                entry.getValue().isCompletedExceptionally() || entry.getValue().isCancelled());
+
         if (!pendingCompletableFutureForAcks.isEmpty()) {
             ack = (LogReplicationEntryMsg) CompletableFuture.anyOf(pendingCompletableFutureForAcks
                     .values().toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
@@ -192,7 +197,7 @@ public abstract class SenderBufferManager {
         LogReplicationEntryMsg newMessage = overrideMetadata(message, metadata);
         pendingMessages.append(newMessage);
         CompletableFuture<LogReplicationEntryMsg> cf = dataSender.send(newMessage);
-        addCFToAcked(message, cf);
+        addCFToAcked(newMessage, cf);
         return cf;
     }
 

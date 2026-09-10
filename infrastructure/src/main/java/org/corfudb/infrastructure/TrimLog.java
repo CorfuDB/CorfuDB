@@ -31,7 +31,10 @@ public class TrimLog {
             if (managerStatus.getStatus() == CheckpointingStatus.StatusType.COMPLETED) {
                 RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                         CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
-                trimAddress = Optional.of(trimToken.getSequence());
+                if (trimToken != null && org.corfudb.runtime.SnapshotSyncLeaseStore.permitsTrim(
+                        org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn), trimToken.getSequence())) {
+                    trimAddress = Optional.of(trimToken.getSequence());
+                }
             } else {
                 log.warn("Skip trimming since last checkpointing cycle did not complete successfully");
             }

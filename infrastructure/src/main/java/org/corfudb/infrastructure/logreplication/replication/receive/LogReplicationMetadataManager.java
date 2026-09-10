@@ -20,6 +20,9 @@ import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManag
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.SnapshotSyncLease;
+import org.corfudb.runtime.SnapshotSyncLeaseStore;
+import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -77,9 +80,84 @@ public class LogReplicationMetadataManager {
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
+    @lombok.Value
+    private static class CachedSnapshotStatus {
+        long readSequence;
+        LogReplication.LogReplicationMetadataResponseMsg response;
+    }
+    private final java.util.concurrent.atomic.AtomicReference<CachedSnapshotStatus> snapshotStatus =
+            new java.util.concurrent.atomic.AtomicReference<>(new CachedSnapshotStatus(-1,
+                    LogReplication.LogReplicationMetadataResponseMsg.newBuilder()
+                            .setSnapshotLease(SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
+
+    public LogReplication.LogReplicationMetadataResponseMsg getCachedSnapshotStatus() {
+        return snapshotStatus.get().getResponse();
+    }
+
+    /** One committed read snapshot, published in order. Transport callbacks only read this cache. */
+    public void refreshSnapshotStatus() {
+        try (TxnContext txn = getTxnContext()) {
+            Map<LogReplicationMetadataType, Long> values = queryMetadata(txn,
+                    LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
+                    LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED,
+                    LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED);
+            SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.read(txn);
+            LogReplicationMetadataVal version = (LogReplicationMetadataVal) txn.getRecord(metadataTableName,
+                    LogReplicationMetadataKey.newBuilder().setKey(LogReplicationMetadataType.VERSION.getVal()).build()).getPayload();
+            var response = LogReplication.LogReplicationMetadataResponseMsg.newBuilder()
+                    .setTopologyConfigID(values.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID))
+                    .setVersion(version == null ? "" : version.getVal())
+                    .setSnapshotStart(values.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED))
+                    .setSnapshotTransferred(values.get(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED))
+                    .setSnapshotApplied(values.get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED))
+                    .setLastLogEntryTimestamp(values.get(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED))
+                    .setSnapshotLease(lease).build();
+            long sequence = txn.getTxnSequence();
+            txn.commit();
+            snapshotStatus.updateAndGet(old -> sequence >= old.getReadSequence()
+                    ? new CachedSnapshotStatus(sequence, response) : old);
+        }
+    }
+
+    public boolean legacySnapshotPending(TxnContext txn) {
+        Map<LogReplicationMetadataType, Long> values = queryMetadata(txn,
+                LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+        return values.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED)
+                > values.get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+    }
+
+    public void initializeSnapshot(TxnContext txn, LogReplication.LogReplicationEntryMetadataMsg start) {
+        Map<LogReplicationMetadataType, Long> values = queryMetadata(txn,
+                LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        if (values.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) != start.getTopologyConfigID()
+                || values.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED) > start.getSnapshotTimestamp()) {
+            throw new SnapshotSyncLease.LeaseRejectedException("Snapshot topology or source cut is stale");
+        }
+        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, start.getSnapshotTimestamp());
+        for (LogReplicationMetadataType type : new LogReplicationMetadataType[]{
+                LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED,
+                LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER,
+                LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
+                LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS}) {
+            appendUpdate(txn, type, Address.NON_ADDRESS);
+        }
+        txn.putRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build(),
+                ReplicationStatusVal.newBuilder().setDataConsistent(false).setStatus(SyncStatus.UNAVAILABLE).build(), null);
+    }
+
+    public void transferSnapshot(TxnContext txn, long snapshot) {
+        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, snapshot);
+    }
+
+    public void abandonSnapshot(TxnContext txn) {
+        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
+        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, Address.NON_ADDRESS);
+    }
+
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
+        SnapshotSyncLeaseStore.open(corfuStore);
 
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
@@ -383,6 +461,11 @@ public class LogReplicationMetadataManager {
                             appendUpdate(txn, type, Address.NON_ADDRESS);
                         }
                     }
+                    SnapshotSyncLeaseRecord state = SnapshotSyncLeaseStore.read(txn);
+                    if (SnapshotSyncLease.active(state)) {
+                        SnapshotSyncLeaseStore.write(txn, SnapshotSyncLease.abandon(state,
+                                System.currentTimeMillis(), "Topology changed"));
+                    }
                     txn.commit();
                 } catch (TransactionAbortedException e) {
                     log.error("Exception when updating the topology config id",
@@ -496,7 +579,16 @@ public class LogReplicationMetadataManager {
     }
 
     public void setSnapshotAppliedComplete(LogReplication.LogReplicationEntryMsg entry) {
+        setSnapshotAppliedComplete(entry, null);
+    }
+
+    public void setSnapshotAppliedComplete(LogReplication.LogReplicationEntryMsg entry, SnapshotSyncLeaseRecord captured) {
         try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+            if (captured != null) {
+                SnapshotSyncLeaseRecord state = SnapshotSyncLeaseStore.read(txn);
+                SnapshotSyncLease.checkWriter(state, captured, System.currentTimeMillis(), SnapshotSyncLeaseRecord.Phase.APPLYING);
+                SnapshotSyncLeaseStore.write(txn, SnapshotSyncLease.completed(state));
+            }
             Map<LogReplicationMetadataType, Long> metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
                     LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
             long persistedTopologyConfigId = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -507,6 +599,9 @@ public class LogReplicationMetadataManager {
 
             if (topologyConfigId != persistedTopologyConfigId || ts != persistedSnapshotStart
                     || ts != persistedSnapshotTransferComplete) {
+                if (captured != null) {
+                    throw new SnapshotSyncLease.LeaseRejectedException("Snapshot completion metadata changed");
+                }
                 log.warn("Metadata mismatch, persisted={}, intended={}. Entry timestamp={}, while persisted start={}, transfer={}",
                         persistedTopologyConfigId, topologyConfigId, ts, persistedSnapshotStart, persistedSnapshotTransferComplete);
                 return;

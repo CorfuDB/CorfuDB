@@ -66,6 +66,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private long baseSnapshotTimestamp;
 
     private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+    private volatile boolean sinkLifecycleMode;
+    private volatile long verificationGeneration;
+    private java.util.concurrent.ScheduledFuture<?> pendingVerification;
 
     private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
@@ -99,7 +102,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @Override
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
+        InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        if (snapshotState != null && !event.getMetadata().matchesSnapshotAttempt(snapshotState.getSnapshotSender())) {
+            return this;
+        }
         switch (event.getType()) {
+            case SNAPSHOT_SYNC_CONTINUE:
+                // A transfer continuation already queued when transfer completed is harmless.
+                return this;
             case SNAPSHOT_SYNC_REQUEST:
                 log.info("Snapshot Sync requested {} while waiting for {} to complete.",
                         event.getMetadata().getSyncId(), getTransitionSyncId());
@@ -213,17 +223,27 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
         if (from != this) {
+            verificationGeneration++;
+            InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+            sinkLifecycleMode = snapshotState != null && snapshotState.getSnapshotSender().usesSnapshotLifecycle();
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             // Only a genuine new entry marks "this apply wait just started" -- the periodic
             // self-verification loop re-enters via onEntry(this) every SCHEDULE_APPLY_MONITOR_DELAY,
             // and restamping here would make a stuck apply always look like it just started.
             applyWaitStartTimeMs = System.currentTimeMillis();
         }
-        this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
+        long generation = verificationGeneration;
+        this.fsm.getLogReplicationFSMWorkers().submit(() -> {
+            if (generation == verificationGeneration) { verifyStatusOfSnapshotSyncApply(); }
+        });
     }
 
     @Override
     public void onExit(LogReplicationState to) {
+        if (to != this) {
+            verificationGeneration++;
+            if (pendingVerification != null) { pendingVerification.cancel(false); }
+        }
         if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
             snapshotSyncApplyTimerSample
                     .flatMap(sample -> MeterRegistryProvider.getInstance()
@@ -236,6 +256,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @VisibleForTesting
     void verifyStatusOfSnapshotSyncApply() {
+        long generation = verificationGeneration;
+        UUID verifyingId = transitionSyncId;
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -244,6 +266,33 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     metadataResponseCompletableFuture = dataSender.sendMetadataRequest();
             LogReplicationMetadataResponseMsg metadataResponse = metadataResponseCompletableFuture
                     .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+            if (generation != verificationGeneration) { return; }
+            if (metadataResponse.hasSnapshotLease()) {
+                sinkLifecycleMode = true;
+                org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease = metadataResponse.getSnapshotLease();
+                InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender source = snapshotState.getSnapshotSender();
+                boolean matching = source.getWireAttemptId() != null && lease.getAttemptId().equals(
+                        org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(source.getWireAttemptId()))
+                        && lease.getGeneration() == source.getWireAttemptGeneration()
+                        && lease.getTopologyConfigId() == fsm.getTopologyConfigId()
+                        && lease.getSourceSnapshot() == baseSnapshotTimestamp;
+                if (matching && lease.getOutcome() == org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
+                    fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
+                            new LogReplicationEventMetadata(verifyingId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)
+                                    .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));
+                    return;
+                }
+                if (lease.getPhase() != org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.NOT_READY
+                        && (!matching || lease.getOutcome() == org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.ABORTED)) {
+                    fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                            new LogReplicationEventMetadata(verifyingId, forcedSnapshotSync)
+                                    .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));
+                    return;
+                }
+                scheduleVerification(generation, verifyingId);
+                return;
+            }
 
             // If snapshot sync apply phase has been completed on remote cluster, transition to Log Entry Sync
             // (incremental update replication), otherwise, schedule new query.
@@ -294,7 +343,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         // and restarting is always safe (a fresh full transfer, not data loss), so erring generous
         // here only costs time, not correctness.
         long applyWaitElapsedMs = System.currentTimeMillis() - applyWaitStartTimeMs;
-        if (applyWaitElapsedMs > LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS) {
+        if (!sinkLifecycleMode && applyWaitElapsedMs > LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS) {
             log.error("Snapshot sync apply for {} did not complete within {} ms; canceling and restarting " +
                     "a fresh snapshot sync.", transitionSyncId, LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS);
             fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
@@ -303,14 +352,16 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
 
         // Schedule a one time action which will verify the snapshot apply status after a given delay
-        this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                TimeUnit.MILLISECONDS);
+        scheduleVerification(generation, verifyingId);
     }
 
-    private void scheduleSnapshotApplyVerification() {
-        log.debug("Schedule verification of snapshot sync apply id={}", transitionSyncId);
-        fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
-                new LogReplicationEventMetadata(transitionSyncId)));
+    private void scheduleVerification(long generation, UUID verifyingId) {
+        pendingVerification = snapshotSyncApplyMonitorExecutor.schedule(() -> {
+            if (generation == verificationGeneration) {
+                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
+                        new LogReplicationEventMetadata(verifyingId)));
+            }
+        }, SCHEDULE_APPLY_MONITOR_DELAY, TimeUnit.MILLISECONDS);
     }
 
     @Override
