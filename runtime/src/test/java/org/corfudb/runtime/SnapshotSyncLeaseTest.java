@@ -13,6 +13,11 @@ import java.util.function.UnaryOperator;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SnapshotSyncLeaseTest {
+    private final SnapshotSyncLeaseRecord ready = SnapshotSyncLease.initial("owner");
+    private final LogReplicationEntryMetadataMsg start = LogReplicationEntryMetadataMsg.newBuilder()
+            .setSyncRequestId(UuidMsg.newBuilder().setMsb(1).setLsb(2)).setSnapshotTimestamp(25)
+            .setTopologyConfigID(3).setSnapshotLifecycleVersion(1).setAdmissionEpoch(1).build();
+
     @Test
     void faultedCleanupRetainsProtectionAndCanBeReconciledAfterTheWorkerStops() {
         SnapshotSyncLeaseRecord abort = SnapshotSyncLease.abandon(reserve(), 200, "blocked worker");
@@ -25,11 +30,6 @@ class SnapshotSyncLeaseTest {
         assertEquals(Phase.RELEASING, SnapshotSyncLease.drained(fault, 90).getPhase());
         assertEquals(Phase.FAULTED, SnapshotSyncLease.faulted(SnapshotSyncLease.drained(abort, 90)).getPhase());
     }
-    private final SnapshotSyncLeaseRecord ready = SnapshotSyncLease.initial("owner");
-    private final LogReplicationEntryMetadataMsg start = LogReplicationEntryMetadataMsg.newBuilder()
-            .setSyncRequestId(UuidMsg.newBuilder().setMsb(1).setLsb(2)).setSnapshotTimestamp(25)
-            .setTopologyConfigID(3).setSnapshotLifecycleVersion(1).setAdmissionEpoch(1).build();
-
     private SnapshotSyncLeaseRecord reserve() {
         return SnapshotSyncLease.reserve(ready, start, 100, 1000, 50, "protection");
     }

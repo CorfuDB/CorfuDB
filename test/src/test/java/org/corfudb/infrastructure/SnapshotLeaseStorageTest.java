@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.ByteString;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
@@ -269,8 +270,8 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         assertEquals(100, metadata.getCachedSnapshotStatus().getSnapshotApplied());
         assertEquals(leases.read(), metadata.getCachedSnapshotStatus().getSnapshotLease());
         assertTrue(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
-        org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter incremental =
-                new org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter(config, metadata);
+        LogEntryWriter incremental =
+                new LogEntryWriter(config, metadata);
         incremental.setLeaseContext(leases.read());
         assertTrue(incremental.apply(delta(applying, 101)));
         assertEquals("delta-101", table.get("key"));

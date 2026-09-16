@@ -36,12 +36,17 @@ import static org.mockito.Mockito.when;
 @Slf4j
 public class InSnapshotSyncStateTest {
 
+    private SnapshotSender snapshotSender;
+    private InSnapshotSyncState state;
+    private ExecutorService workers;
+    private LogReplicationAckReader ackReader;
+
     @Test
     public void supersededQueuedContinuationRetainsResetAndRecoveryDelay() throws Exception {
         java.util.concurrent.CountDownLatch occupied = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
         workers.submit(() -> { occupied.countDown(); release.await(); return null; });
-        Assert.assertTrue(occupied.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        Assert.assertTrue(occupied.await(2, TimeUnit.SECONDS));
         org.mockito.Mockito.clearInvocations(snapshotSender);
         state.processEvent(cancelEvent());
         state.retryBackoffMs = 200;
@@ -53,11 +58,6 @@ public class InSnapshotSyncStateTest {
         verify(snapshotSender, times(1)).reset();
     }
 
-    private SnapshotSender snapshotSender;
-    private InSnapshotSyncState state;
-    private ExecutorService workers;
-    private LogReplicationAckReader ackReader;
-
     @Before
     public void setup() {
         LogReplicationFSM fsm = mock(LogReplicationFSM.class);
@@ -67,7 +67,7 @@ public class InSnapshotSyncStateTest {
         SenderPendingMessageQueue pendingMessages = new SenderPendingMessageQueue(10);
 
         when(fsm.getAckReader()).thenReturn(ackReader);
-        when(fsm.isValidTransition(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        when(fsm.isValidTransition(any(), any())).thenReturn(true);
         when(snapshotSender.getDataSenderBufferManager()).thenReturn(bufferManager);
         when(bufferManager.getPendingMessages()).thenReturn(pendingMessages);
         when(snapshotSender.getStopSnapshotSync()).thenReturn(new AtomicBoolean(false));
@@ -84,7 +84,7 @@ public class InSnapshotSyncStateTest {
         state.setTransitionSyncId(UUID.randomUUID());
         state.onEntry(initialized);
         // Let the (mocked, effectively instant) transmit() call settle before driving events.
-        verify(snapshotSender, timeout(2000)).transmit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(snapshotSender, timeout(2000)).transmit(any(), anyBoolean());
     }
 
     @After
@@ -151,12 +151,12 @@ public class InSnapshotSyncStateTest {
         // passes its own up-to-date counter on every markSnapshotSyncInfoOngoing() call site, not
         // just some of them.
         state.processEvent(cancelEvent());
-        verify(ackReader).markSnapshotSyncInfoOngoing(org.mockito.ArgumentMatchers.anyBoolean(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(1));
+        verify(ackReader).markSnapshotSyncInfoOngoing(anyBoolean(),
+                any(), org.mockito.ArgumentMatchers.eq(1));
 
         state.processEvent(cancelEvent());
-        verify(ackReader).markSnapshotSyncInfoOngoing(org.mockito.ArgumentMatchers.anyBoolean(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(2));
+        verify(ackReader).markSnapshotSyncInfoOngoing(anyBoolean(),
+                any(), org.mockito.ArgumentMatchers.eq(2));
     }
 
     @Test
@@ -231,7 +231,7 @@ public class InSnapshotSyncStateTest {
         state.onEntry(self); // from == this: re-entry after a cancellation, consumes the backoff
 
         verify(snapshotSender, timeout(3000).times(2))
-                .transmit(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+                .transmit(any(), anyBoolean());
         long elapsed = System.currentTimeMillis() - start;
         Assert.assertTrue("expected onEntry to delay by ~500ms before transmitting, elapsed=" + elapsed,
                 elapsed >= 450);
@@ -244,8 +244,8 @@ public class InSnapshotSyncStateTest {
         workers.submit(() -> { }).get(1, TimeUnit.SECONDS);
         state.processEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
                 new LogReplicationEventMetadata(state.getTransitionSyncId())));
-        verify(snapshotSender, org.mockito.Mockito.times(1)).transmit(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(snapshotSender, times(1)).transmit(
+                any(), anyBoolean());
     }
 
     @Test
@@ -255,7 +255,7 @@ public class InSnapshotSyncStateTest {
         state.onEntry(mock(WaitSnapshotApplyState.class));
         workers.submit(() -> { }).get(1, TimeUnit.SECONDS);
         verify(snapshotSender, timeout(2000).times(2)).transmit(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean());
+                any(), anyBoolean());
         Assert.assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) >= 250);
     }
 

@@ -38,6 +38,11 @@ import static org.mockito.Mockito.when;
 @Slf4j
 public class WaitSnapshotApplyStateTest {
 
+    private LogReplicationFSM fsm;
+    private InSnapshotSyncState inSnapshotSyncState;
+    private WaitSnapshotApplyState state;
+    private DataSender dataSender;
+
     private org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord ownedStatus() {
         UUID wireId = new UUID(11, 22);
         when(inSnapshotSyncState.getSnapshotSender().getWireAttemptId()).thenReturn(wireId);
@@ -146,11 +151,6 @@ public class WaitSnapshotApplyStateTest {
         verifying.get(2, java.util.concurrent.TimeUnit.SECONDS);
         verify(fsm, never()).input(any());
     }
-
-    private LogReplicationFSM fsm;
-    private InSnapshotSyncState inSnapshotSyncState;
-    private WaitSnapshotApplyState state;
-    private DataSender dataSender;
 
     private void setup() {
         fsm = mock(LogReplicationFSM.class);

@@ -65,7 +65,7 @@ class SnapshotSourceLifecycleTest {
                     .setEntryType(message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END
                             ? LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE : LogReplicationEntryType.SNAPSHOT_REPLICATED)).build());
         });
-        source = new SnapshotSender(runtime, reader, transport, null, 1, fsm, nanoTime::get);
+        source = new SnapshotSender(runtime, reader, transport, 1, fsm, nanoTime::get);
         source.reset();
         when(reader.read(any())).thenReturn(new SnapshotReadMessage(Collections.singletonList(
                 LogReplicationEntryMsg.newBuilder().setMetadata(LogReplicationEntryMetadataMsg.newBuilder()
@@ -101,6 +101,28 @@ class SnapshotSourceLifecycleTest {
         order.verify(transport).send(any(LogReplicationEntryMsg.class));
         verify(reader, never()).read(any());
         verify(runtime, never()).getParameters();
+    }
+
+    @Test
+    void aNewAdmissionEpochSelectsAFreshSourceCutBeforeRetryingStart() {
+        drive();
+        LogReplicationEntryMsg original = sent.get(0);
+        admission.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.getDefaultInstance()));
+        admission = new CompletableFuture<>();
+        status.set(status.get().toBuilder().setAdmissionEpoch(status.get().getAdmissionEpoch() + 1).build());
+        when(runtime.getAddressSpaceView().getLogTail()).thenReturn(75L);
+
+        drive();
+
+        assertEquals(2, sent.size());
+        LogReplicationEntryMsg refreshed = sent.get(1);
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, refreshed.getMetadata().getEntryType());
+        assertEquals(original.getMetadata().getSyncRequestId(), refreshed.getMetadata().getSyncRequestId());
+        assertEquals(status.get().getAdmissionEpoch(), refreshed.getMetadata().getAdmissionEpoch());
+        assertEquals(75, refreshed.getMetadata().getSnapshotTimestamp());
+        verify(reader).reset(75);
+        verify(fsm.getAckReader()).setBaseSnapshot(75);
+        verify(reader, never()).read(any());
     }
 
     @Test
@@ -334,6 +356,16 @@ class SnapshotSourceLifecycleTest {
         accept();
         assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(sent.size() - 1).getMetadata().getEntryType());
         verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+        verify(transport).onError(LogReplicationError.TRIM_SNAPSHOT_SYNC);
+    }
+
+    @Test
+    void sourceReadFailureCancelsWithUnknownErrorInsteadOfRenewingTheAttempt() {
+        when(reader.read(any())).thenThrow(new IllegalStateException("source read failed"));
+        accept();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(sent.size() - 1).getMetadata().getEntryType());
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+        verify(transport).onError(LogReplicationError.UNKNOWN);
     }
 
     @Test
@@ -436,7 +468,7 @@ class SnapshotSourceLifecycleTest {
 
     @Test
     void resendTimerMeasuresElapsedTimeRatherThanPollCount() {
-        java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(100);
+        AtomicLong now = new AtomicLong(100);
         LogReplicationPendingEntry pending = new LogReplicationPendingEntry(LogReplicationEntryMsg.getDefaultInstance(), now::get);
         for (int i = 0; i < 1000; i++) { assertFalse(pending.timeout(500)); }
         now.set(601);

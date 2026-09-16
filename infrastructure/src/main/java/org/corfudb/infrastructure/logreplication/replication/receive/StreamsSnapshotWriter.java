@@ -78,6 +78,30 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     private SnapshotSyncLeaseRecord leaseContext;
     private long deadlineNanos;
 
+    // Represents the actual replicated streams from active. This is a subset of all regular streams in
+    // regularToShadowStreamId map
+    private final Set<UUID> replicatedStreamIds = new HashSet<>();
+
+    // Mutated only while the caller (LogReplicationSinkManager) holds its own synchronized(this)
+    // lock (see startSnapshotApply(), reset()), but read from LogReplicationSinkManager's
+    // snapshotSyncLivenessExecutor thread via getPhase() in checkSnapshotSyncLiveness()'s
+    // unsynchronized fast-path guard clause before that method ever takes the lock -- volatile so
+    // that read has a defined happens-before relationship with the writes instead of relying
+    // entirely on the fast path's own double-checked re-verification under the lock to mask
+    // staleness.
+    @Getter
+    private volatile Phase phase;
+
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
+        super(config, logReplicationMetadataManager);
+        this.rt = rt;
+        this.phase = Phase.TRANSFER_PHASE;
+        this.snapshotSyncStartMarker = Optional.empty();
+
+        // Serialize the clear entry once to access its constant size on each subsequent use
+        serializeClearEntry();
+    }
+
     public void setLeaseContext(SnapshotSyncLeaseRecord attempt) {
         long remaining = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
                 Math.max(0, attempt.getDeadlineMs() - System.currentTimeMillis()));
@@ -102,30 +126,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
         return SnapshotSyncLeaseStore.fence(txn, leaseContext, System.currentTimeMillis(),
                 phase == Phase.APPLY_PHASE ? SnapshotSyncLeaseRecord.Phase.APPLYING : SnapshotSyncLeaseRecord.Phase.TRANSFERRING);
-    }
-
-    // Represents the actual replicated streams from active. This is a subset of all regular streams in
-    // regularToShadowStreamId map
-    private final Set<UUID> replicatedStreamIds = new HashSet<>();
-
-    // Mutated only while the caller (LogReplicationSinkManager) holds its own synchronized(this)
-    // lock (see startSnapshotApply(), reset()), but read from LogReplicationSinkManager's
-    // snapshotSyncLivenessExecutor thread via getPhase() in checkSnapshotSyncLiveness()'s
-    // unsynchronized fast-path guard clause before that method ever takes the lock -- volatile so
-    // that read has a defined happens-before relationship with the writes instead of relying
-    // entirely on the fast path's own double-checked re-verification under the lock to mask
-    // staleness.
-    @Getter
-    private volatile Phase phase;
-
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
-        super(config, logReplicationMetadataManager);
-        this.rt = rt;
-        this.phase = Phase.TRANSFER_PHASE;
-        this.snapshotSyncStartMarker = Optional.empty();
-
-        // Serialize the clear entry once to access its constant size on each subsequent use
-        serializeClearEntry();
     }
 
     private void serializeClearEntry() {

@@ -35,5 +35,7 @@ public interface SnapshotReader {
      * local write configuration. Zero means unknown. Existing readers may retain
      * their batching policy; an indivisible entry must still fit the sink write.
      */
-    default void setSnapshotBatchSizeHint(int maxWriteSize) { }
+    default void setSnapshotBatchSizeHint(int maxWriteSize) {
+        // Optional hint: custom readers retain their existing batching policy by default.
+    }
 }

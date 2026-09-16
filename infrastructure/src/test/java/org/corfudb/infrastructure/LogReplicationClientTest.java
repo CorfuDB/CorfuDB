@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipLossResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
@@ -37,6 +38,15 @@ import static org.mockito.Mockito.verify;
 @Slf4j
 public class LogReplicationClientTest {
 
+    private final static String SAMPLE_CLUSTER = "CLUSTER";
+
+    LogReplicationClientRouter lrClient;
+    LogReplicationRuntimeParameters lrRuntimeParameters;
+    CorfuLogReplicationRuntime lrFsm;
+    LogReplicationHandler lrClientHandler;
+    ClientResponseHandler responseHandler;
+    Map<PayloadCase, Handler> handlerMap;
+
     @Test
     public void metadataPollingAdvertisesSnapshotLifecycleSupport() {
         org.corfudb.runtime.clients.IClientRouter router = mock(org.corfudb.runtime.clients.IClientRouter.class);
@@ -46,15 +56,14 @@ public class LogReplicationClientTest {
                 org.mockito.ArgumentMatchers.eq(LogReplicationClientRouter.REMOTE_LEADER));
     }
 
-    private org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter timedTransport() throws Exception {
+    private IClientChannelAdapter timedTransport() throws Exception {
         doReturn(java.util.UUID.randomUUID().toString()).when(lrRuntimeParameters).getLocalClusterId();
         doReturn(java.util.UUID.randomUUID()).when(lrRuntimeParameters).getClientId();
         doReturn(java.time.Duration.ofMillis(10)).when(lrRuntimeParameters).getConnectionTimeout();
-        org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter adapter =
-                mock(org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter.class);
-        java.lang.reflect.Field field = LogReplicationClientRouter.class.getDeclaredField("channelAdapter");
-        field.setAccessible(true);
-        field.set(lrClient, adapter);
+        IClientChannelAdapter adapter =
+                mock(IClientChannelAdapter.class);
+        lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm, adapter));
+        lrClient.addClient(lrClientHandler);
         lrClient.setTimeoutResponse(10);
         return adapter;
     }
@@ -114,15 +123,6 @@ public class LogReplicationClientTest {
         Assertions.assertThat(other.isDone()).isFalse();
         Assertions.assertThat(lrClient.outstandingRequests).containsOnlyKeys(11L);
     }
-
-    private final static String SAMPLE_CLUSTER = "CLUSTER";
-
-    LogReplicationClientRouter lrClient;
-    LogReplicationRuntimeParameters lrRuntimeParameters;
-    CorfuLogReplicationRuntime lrFsm;
-    LogReplicationHandler lrClientHandler;
-    ClientResponseHandler responseHandler;
-    Map<PayloadCase, Handler> handlerMap;
 
     @Before
     public void setup() {

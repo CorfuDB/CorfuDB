@@ -18,6 +18,7 @@ import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.LogReplicationBusyException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +30,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -37,6 +39,21 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class SnapshotLeaseCoordinatorTest {
+
+    private final AtomicLong clock = new AtomicLong(1000);
+    private final AtomicLong nanos = new AtomicLong(1000000000);
+    private final AtomicLong trim = new AtomicLong(0);
+    private final AtomicLong safeCut = new AtomicLong(-1);
+    private final AtomicReference<CheckpointingStatus.StatusType> cycle = new AtomicReference<>(CheckpointingStatus.StatusType.IDLE);
+    private final AtomicReference<SnapshotSyncLeaseRecord> persisted = new AtomicReference<>(SnapshotSyncLeaseRecord.getDefaultInstance());
+    private CorfuRuntime runtime;
+    private LogReplicationMetadataManager metadata;
+    private ISnapshotSyncPlugin plugin;
+    private SnapshotLeaseCoordinator.Worker worker;
+    private SnapshotSyncLeaseStore store;
+    private DistributedCheckpointerHelper checkpointer;
+    private TxnContext txn;
+    private SnapshotLeaseCoordinator coordinator;
 
     @Test
     void legacyWorkAndUnsupportedPluginsCannotActivateTheNewPolicy() {
@@ -100,6 +117,46 @@ class SnapshotLeaseCoordinatorTest {
     }
 
     @Test
+    void trimmedApplyAbandonsEvenWhenRetriesRemain() {
+        verifyFatalApplyFailure(new TrimmedException());
+    }
+
+    @Test
+    void rejectedApplyLeaseAbandonsEvenWhenRetriesRemain() {
+        verifyFatalApplyFailure(new SnapshotSyncLease.LeaseRejectedException("writer fenced"));
+    }
+
+    private void verifyFatalApplyFailure(RuntimeException failure) {
+        create(MoreExecutors.newDirectExecutorService(), 2);
+        SnapshotSyncLeaseRecord attempt = transfer();
+        coordinator.transferComplete(attempt, 0);
+        doThrow(failure).when(worker).apply(any());
+        coordinator.tick();
+        assertEquals(Phase.ABORTING, coordinator.status().getPhase());
+        assertEquals(0, coordinator.status().getApplyRetries());
+        assertEquals(attempt.getDeadlineMs(), coordinator.status().getDeadlineMs());
+        assertTrue(coordinator.status().getProtectionHeld());
+        verify(worker, times(1)).apply(any());
+        verify(plugin, never()).releaseSnapshot(any(), any());
+    }
+
+    @Test
+    void workerAbandonmentDoesNotInterruptItsOwnThread() {
+        AtomicBoolean interrupted = new AtomicBoolean();
+        SnapshotSyncLeaseRecord attempt = transfer();
+        coordinator.transferComplete(attempt, 0);
+        doAnswer(invocation -> {
+            coordinator.abandon("worker cancelled its attempt");
+            interrupted.set(Thread.currentThread().isInterrupted());
+            return null;
+        }).when(worker).apply(any());
+        coordinator.tick();
+        verify(worker).apply(any());
+        assertEquals(Phase.ABORTING, coordinator.status().getPhase());
+        assertFalse(interrupted.get());
+    }
+
+    @Test
     void missingOrTrimmedShadowBoundaryNeverStartsApply() {
         SnapshotSyncLeaseRecord captured = transfer();
         coordinator.transferComplete(captured, 0);
@@ -126,21 +183,6 @@ class SnapshotLeaseCoordinatorTest {
         verify(txn, times(1)).putRecord(any(), eq(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM), any(), isNull());
         assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
     }
-    private final AtomicLong clock = new AtomicLong(1000);
-    private final AtomicLong nanos = new AtomicLong(1000000000);
-    private final AtomicLong trim = new AtomicLong(0);
-    private final AtomicLong safeCut = new AtomicLong(-1);
-    private final AtomicReference<CheckpointingStatus.StatusType> cycle = new AtomicReference<>(CheckpointingStatus.StatusType.IDLE);
-    private final AtomicReference<SnapshotSyncLeaseRecord> persisted = new AtomicReference<>(SnapshotSyncLeaseRecord.getDefaultInstance());
-    private CorfuRuntime runtime;
-    private LogReplicationMetadataManager metadata;
-    private ISnapshotSyncPlugin plugin;
-    private SnapshotLeaseCoordinator.Worker worker;
-    private SnapshotSyncLeaseStore store;
-    private DistributedCheckpointerHelper checkpointer;
-    private TxnContext txn;
-    private SnapshotLeaseCoordinator coordinator;
-
     @BeforeEach
     void setup() {
         runtime = mock(CorfuRuntime.class);
@@ -377,10 +419,14 @@ class SnapshotLeaseCoordinatorTest {
         coordinator.transferComplete(attempt, 0);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
         doAnswer(invocation -> {
             entered.countDown();
             while (release.getCount() != 0) {
-                try { release.await(); } catch (InterruptedException ignored) { /* Deliberately noninterruptible. */ }
+                try { release.await(); } catch (InterruptedException ignored) {
+                    // Observe cancellation, but deliberately keep the worker running until released by the test.
+                    interrupted.countDown();
+                }
             }
             return null;
         }).when(worker).apply(any());
@@ -389,6 +435,7 @@ class SnapshotLeaseCoordinatorTest {
             assertTrue(entered.await(2, TimeUnit.SECONDS));
             clock.set(3000);
             coordinator.tick();
+            assertTrue(interrupted.await(2, TimeUnit.SECONDS));
             coordinator.tick();
             assertEquals(Phase.ABORTING, coordinator.status().getPhase());
             clock.set(3100);

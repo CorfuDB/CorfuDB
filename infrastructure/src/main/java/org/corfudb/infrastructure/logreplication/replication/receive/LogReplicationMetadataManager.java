@@ -80,16 +80,16 @@ public class LogReplicationMetadataManager {
 
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
-    @lombok.Value
-    private static class CachedSnapshotStatus {
-        long readSequence;
-        LogReplication.LogReplicationMetadataResponseMsg response;
-    }
     private final java.util.concurrent.atomic.AtomicReference<CachedSnapshotStatus> snapshotStatus =
             new java.util.concurrent.atomic.AtomicReference<>(new CachedSnapshotStatus(-1,
                     LogReplication.LogReplicationMetadataResponseMsg.newBuilder()
                             .setSnapshotLease(SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
 
+    @lombok.Value
+    private static class CachedSnapshotStatus {
+        long readSequence;
+        LogReplication.LogReplicationMetadataResponseMsg response;
+    }
     public LogReplication.LogReplicationMetadataResponseMsg getCachedSnapshotStatus() {
         return snapshotStatus.get().getResponse();
     }

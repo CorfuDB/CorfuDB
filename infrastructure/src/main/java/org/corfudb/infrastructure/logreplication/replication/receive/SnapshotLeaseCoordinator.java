@@ -39,12 +39,6 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  */
 @Slf4j
 public final class SnapshotLeaseCoordinator implements AutoCloseable {
-    public interface Worker {
-        void prepare(SnapshotSyncLeaseRecord attempt);
-        void apply(SnapshotSyncLeaseRecord attempt);
-        void completed(SnapshotSyncLeaseRecord attempt);
-    }
-
     private final CorfuRuntime runtime;
     private final LogReplicationMetadataManager metadata;
     private final SnapshotSyncLeaseStore store;
@@ -69,6 +63,15 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     private final java.util.function.LongSupplier clock;
     private final java.util.function.LongSupplier ticker;
 
+    private volatile long deadlineNanos = Long.MAX_VALUE;
+    private volatile long timedGeneration = -1;
+    private long installedGeneration = -1;
+    private final ExecutorService effects;
+    private final ScheduledExecutorService transitions = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-transitions-%d").build());
+    private final ScheduledExecutorService health = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-health-%d").build());
+
     @lombok.AllArgsConstructor
     static class Environment {
         java.util.function.LongSupplier clock;
@@ -78,14 +81,12 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
         ExecutorService executor;
         boolean scheduled;
     }
-    private volatile long deadlineNanos = Long.MAX_VALUE;
-    private volatile long timedGeneration = -1;
-    private long installedGeneration = -1;
-    private final ExecutorService effects;
-    private final ScheduledExecutorService transitions = Executors.newSingleThreadScheduledExecutor(
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-transitions-%d").build());
-    private final ScheduledExecutorService health = Executors.newSingleThreadScheduledExecutor(
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-health-%d").build());
+
+    public interface Worker {
+        void prepare(SnapshotSyncLeaseRecord attempt);
+        void apply(SnapshotSyncLeaseRecord attempt);
+        void completed(SnapshotSyncLeaseRecord attempt);
+    }
 
     public SnapshotLeaseCoordinator(CorfuRuntime runtime, LogReplicationMetadataManager metadata,
                                     ISnapshotSyncPlugin plugin, Worker worker, long durationMs,
@@ -296,7 +297,7 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
                         execute(this::release);
                         break;
                     case RECOVERING:
-                        recover(current, now);
+                        recover(now);
                         break;
                     default:
                         break;
@@ -349,9 +350,10 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             }
             worker.apply(captured);
             publish(store.read()); // Worker commits completion and consistency in the same fenced transaction.
+        } catch (TrimmedException | SnapshotSyncLease.LeaseRejectedException e) {
+            abandon("Snapshot apply abandoned: " + e.getClass().getSimpleName());
         } catch (Exception e) {
-            if (e instanceof TrimmedException || e instanceof SnapshotSyncLease.LeaseRejectedException
-                    || captured.getApplyRetries() >= maxRetries) {
+            if (captured.getApplyRetries() >= maxRetries) {
                 abandon("Snapshot apply abandoned: " + e.getClass().getSimpleName());
             } else {
                 publish(store.updateOwned(owner, (txn, state) -> {
@@ -379,7 +381,7 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
         }));
     }
 
-    private void recover(SnapshotSyncLeaseRecord captured, long now) {
+    private void recover(long now) {
         long safeCut = -1;
         try (TxnContext txn = metadata.getTxnContext()) {
             CheckpointingStatus cycle = (CheckpointingStatus) txn.getRecord(
@@ -412,7 +414,7 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
 
     private void interruptWorker() {
         Thread thread = workerThread;
-        if (thread != null && thread != Thread.currentThread()) {
+        if (thread != null && thread.threadId() != Thread.currentThread().threadId()) {
             thread.interrupt();
         }
     }

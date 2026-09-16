@@ -25,6 +25,14 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     private java.util.UUID leaseAttemptId;
     private long leaseGeneration;
 
+    // The expectedSeqNum most recently reported by the sink, or Address.NON_ADDRESS if none has
+    // been reported yet. expectedSeqNum is always lastProcessedSeq + 1 (see
+    // SnapshotSinkBufferManager.generateAckMetadata()), so by itself it carries no more
+    // information than the ack it rides on -- it only reveals a genuine gap when it fails to
+    // advance across two acks despite the source continuing to send, which is what this field is
+    // used to detect (see expediteResendFrom() callers).
+    private long lastReportedExpectedSeqNum = Address.NON_ADDRESS;
+
     public void beginLease(java.util.UUID attemptId, long generation) {
         leaseAttemptId = attemptId;
         leaseGeneration = generation;
@@ -46,17 +54,9 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message,
-            String metricName, io.micrometer.core.instrument.Tag tag) {
+            String metricName, Tag tag) {
         return super.sendWithBuffering(identify(message), metricName, tag);
     }
-
-    // The expectedSeqNum most recently reported by the sink, or Address.NON_ADDRESS if none has
-    // been reported yet. expectedSeqNum is always lastProcessedSeq + 1 (see
-    // SnapshotSinkBufferManager.generateAckMetadata()), so by itself it carries no more
-    // information than the ack it rides on -- it only reveals a genuine gap when it fails to
-    // advance across two acks despite the source continuing to send, which is what this field is
-    // used to detect (see expediteResendFrom() callers).
-    private long lastReportedExpectedSeqNum = Address.NON_ADDRESS;
 
     public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
         super(dataSender, configureAcksCounter());

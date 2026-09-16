@@ -100,28 +100,6 @@ public class SnapshotSender {
     @VisibleForTesting
     long lastStallCheckTimeMs = 0;
 
-    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
-        this(runtime, snapshotReader, dataSender, readProcessor, snapshotSyncBatchSize, fsm, System::nanoTime);
-    }
-
-    @VisibleForTesting
-    SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                   ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm,
-                   LongSupplier nanoTime) {
-        this.runtime = runtime;
-        this.snapshotReader = snapshotReader;
-        this.fsm = fsm;
-        this.dataSender = dataSender;
-        this.nanoTime = nanoTime;
-        this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
-        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
-        this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
-                registry.gauge("logreplication.messages",
-                        ImmutableList.of(Tag.of("replication.type", "snapshot")),
-                        new AtomicLong(0)));
-    }
-
     private CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
     private volatile Boolean lifecycleMode;
     @Getter
@@ -144,6 +122,30 @@ public class SnapshotSender {
     private static final java.util.concurrent.ScheduledExecutorService CONTINUATIONS =
             java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new com.google.common.util.concurrent.ThreadFactoryBuilder()
                     .setDaemon(true).setNameFormat("snapshot-admission-poll-%d").build());
+
+    // Retain the public constructor signature for existing callers; snapshot reads do not use a ReadProcessor.
+    @SuppressWarnings("PMD.UnusedFormalParameter")
+    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
+        this(runtime, snapshotReader, dataSender, snapshotSyncBatchSize, fsm, System::nanoTime);
+    }
+
+    @VisibleForTesting
+    SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                   int snapshotSyncBatchSize, LogReplicationFSM fsm,
+                   LongSupplier nanoTime) {
+        this.runtime = runtime;
+        this.snapshotReader = snapshotReader;
+        this.fsm = fsm;
+        this.dataSender = dataSender;
+        this.nanoTime = nanoTime;
+        this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
+        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
+        this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge("logreplication.messages",
+                        ImmutableList.of(Tag.of("replication.type", "snapshot")),
+                        new AtomicLong(0)));
+    }
 
     public boolean usesSnapshotLifecycle() {
         return Boolean.TRUE.equals(lifecycleMode);
@@ -302,7 +304,7 @@ public class SnapshotSender {
                 snapshotReader.setSnapshotBatchSizeHint(response.getSnapshotTransferWriteSize());
                 if (!Boolean.TRUE.equals(lifecycleMode)) { lifecycleMode = response.hasSnapshotLease(); }
                 remoteLease = response.getSnapshotLease();
-            } catch (java.util.concurrent.CompletionException e) {
+            } catch (CompletionException e) {
                 log.debug("Snapshot status unavailable; retry after transport recovery", e);
             } finally {
                 statusFuture = null;
@@ -346,24 +348,23 @@ public class SnapshotSender {
                         admitted = true;
                         startSnapshotSync = false;
                     }
-                } catch (java.util.concurrent.CompletionException e) {
+                } catch (CompletionException e) {
                     log.debug("START not yet accepted; reconcile and retry the same proposal", e);
                 } finally {
                     admissionFuture = null;
                 }
             }
             if (!admitted) {
-                if (remoteLease.getPhase() == Phase.READY) {
-                    if (admissionRequest == null || admissionRequest.getMetadata().getAdmissionEpoch() != remoteLease.getAdmissionEpoch()) {
-                        // Choose a usable source cut after sink recovery, not at the beginning of its cooldown.
-                        baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
-                        snapshotReader.reset(baseSnapshotTimestamp);
-                        fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
-                        admissionRequest = getSnapshotSyncStartMarker(wireAttemptId).toBuilder().setMetadata(
-                                getSnapshotSyncStartMarker(wireAttemptId).getMetadata().toBuilder()
-                                        .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
-                                        .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
-                    }
+                if (remoteLease.getPhase() == Phase.READY && (admissionRequest == null
+                        || admissionRequest.getMetadata().getAdmissionEpoch() != remoteLease.getAdmissionEpoch())) {
+                    // Choose a usable source cut after sink recovery, not at the beginning of its cooldown.
+                    baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+                    snapshotReader.reset(baseSnapshotTimestamp);
+                    fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
+                    admissionRequest = getSnapshotSyncStartMarker(wireAttemptId).toBuilder().setMetadata(
+                            getSnapshotSyncStartMarker(wireAttemptId).getMetadata().toBuilder()
+                                    .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
+                                    .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
                 }
                 if (admissionFuture == null && admissionRequest != null
                         && (remoteLease.getPhase() == Phase.READY || ours)) {
@@ -396,9 +397,12 @@ public class SnapshotSender {
                 sent += processReads(batch.getMessages(), wireAttemptId, snapshotCompleted);
             }
             scheduleContinuation(eventId, snapshotCompleted || dataSenderBufferManager.getPendingMessages().isFull() ? 2000 : 0);
+        } catch (TrimmedException e) {
+            log.warn("Source snapshot cut became unusable", e);
+            snapshotSyncCancel(eventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, forced);
         } catch (Exception e) {
             log.warn("Source snapshot cut became unusable", e);
-            snapshotSyncCancel(eventId, e instanceof TrimmedException ? LogReplicationError.TRIM_SNAPSHOT_SYNC : LogReplicationError.UNKNOWN, forced);
+            snapshotSyncCancel(eventId, LogReplicationError.UNKNOWN, forced);
         }
         return true;
     }
