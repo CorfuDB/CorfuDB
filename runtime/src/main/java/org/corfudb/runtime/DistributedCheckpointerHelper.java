@@ -164,7 +164,7 @@ public class DistributedCheckpointerHelper {
     public boolean isCheckpointFrozen(TxnContext txn) {
         // Owned protection has no independent expiry. Only the LR lifecycle can release it.
         // An older running cycle may still complete using its pre-reservation safe cutoff.
-        LogReplication.SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.read(txn);
+        CorfuCompactorManagement.SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.read(txn);
         if (lease.getProtectionHeld()) {
             CheckpointingStatus manager = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,

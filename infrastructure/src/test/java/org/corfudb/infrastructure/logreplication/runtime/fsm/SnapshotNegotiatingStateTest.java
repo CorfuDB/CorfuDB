@@ -6,9 +6,9 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

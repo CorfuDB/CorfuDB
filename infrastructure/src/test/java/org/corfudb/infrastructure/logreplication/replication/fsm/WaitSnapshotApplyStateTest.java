@@ -38,16 +38,16 @@ import static org.mockito.Mockito.when;
 @Slf4j
 public class WaitSnapshotApplyStateTest {
 
-    private org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord ownedStatus() {
+    private org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord ownedStatus() {
         UUID wireId = new UUID(11, 22);
         when(inSnapshotSyncState.getSnapshotSender().getWireAttemptId()).thenReturn(wireId);
         when(inSnapshotSyncState.getSnapshotSender().getWireAttemptGeneration()).thenReturn(7L);
         when(inSnapshotSyncState.getSnapshotSender().usesSnapshotLifecycle()).thenReturn(true);
         state.setTransitionSyncId(UUID.randomUUID());
         state.setBaseSnapshotTimestamp(100);
-        return org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
+        return org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
                 .setAttemptId(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(wireId)).setGeneration(7)
-                .setSourceSnapshot(100).setPhase(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.APPLYING).build();
+                .setSourceSnapshot(100).setPhase(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase.APPLYING).build();
     }
 
     @Test
@@ -87,8 +87,8 @@ public class WaitSnapshotApplyStateTest {
     @Test
     public void ownedCompletionSurvivesCleanupAndRecovery() {
         setup();
-        var lease = ownedStatus().toBuilder().setPhase(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.RECOVERING)
-                .setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
+        var lease = ownedStatus().toBuilder().setPhase(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase.RECOVERING)
+                .setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
         when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
                 LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
         state.verifyStatusOfSnapshotSyncApply();
@@ -107,7 +107,7 @@ public class WaitSnapshotApplyStateTest {
         verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
                 event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
         org.mockito.Mockito.clearInvocations(fsm);
-        lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.ABORTED).build();
+        lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.ABORTED).build();
         when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
                 LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
         state.verifyStatusOfSnapshotSyncApply();
@@ -127,7 +127,7 @@ public class WaitSnapshotApplyStateTest {
         state.verifyStatusOfSnapshotSyncApply();
         when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
                 LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(
-                        org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
+                        org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
         state.verifyStatusOfSnapshotSyncApply();
         verify(fsm, never()).input(any());
     }
@@ -135,7 +135,7 @@ public class WaitSnapshotApplyStateTest {
     @Test
     public void replyAfterExitCannotCompleteAStoppedAttempt() throws Exception {
         setup();
-        var lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
+        var lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
         CompletableFuture<LogReplicationMetadataResponseMsg> reply = new CompletableFuture<>();
         java.util.concurrent.CountDownLatch queried = new java.util.concurrent.CountDownLatch(1);
         when(dataSender.sendMetadataRequest()).thenAnswer(call -> { queried.countDown(); return reply; });

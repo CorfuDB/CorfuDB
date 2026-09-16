@@ -196,7 +196,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         if (negotiationResponse.hasSnapshotLease()
                 && negotiationResponse.getSnapshotLease().getOutcome()
-                    != LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
+                    != org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
             // The source snapshot state negotiates admission or follows a durable pending apply.
             // Legacy timestamp triples cannot identify an abandoned attempt or recovery debt.
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,

@@ -42,7 +42,7 @@ public class LogReplicationServerTest {
     public void ownedMetadataUsesCachedViewWithoutWorkerOrStorageAndRejectsLegacyProtocol() {
         lrServer.setLeadership(true);
         doReturn(true).when(sinkManager).isSnapshotLifecycleEnabled();
-        doReturn(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
+        doReturn(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
         doReturn(true).when(lrServer).isLeader(any(), any(), any(), anyBoolean());
         org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg cached =
                 org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(
@@ -70,7 +70,7 @@ public class LogReplicationServerTest {
         doReturn(parked).when(fresh).getExecutorService(1, "LogReplicationServer-");
         doReturn(parked).when(fresh).getExecutorService(1, "LogReplicationServer-control-");
         LogReplicationServer server = new LogReplicationServer(fresh, metadataManager, sinkManager, "sink");
-        doReturn(org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
+        doReturn(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.getDefaultInstance()).when(sinkManager).getSnapshotLease();
         RequestMsg entry = getRequestMsg(HeaderMsg.getDefaultInstance(), CorfuMessage.RequestPayloadMsg.newBuilder()
                 .setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build());
         for (int i = 0; i < 6; i++) { server.processRequest(entry, mockHandlerContext, mockServerRouter); }

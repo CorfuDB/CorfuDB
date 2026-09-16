@@ -1,9 +1,9 @@
 package org.corfudb.runtime;
 
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 
 /**
  * Pure transitions for the durable, domain-wide snapshot lease. Callers commit transitions

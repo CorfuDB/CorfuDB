@@ -2,7 +2,7 @@ package org.corfudb.runtime;
 
 import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;

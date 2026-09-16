@@ -10,7 +10,7 @@ import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.TxnContext;

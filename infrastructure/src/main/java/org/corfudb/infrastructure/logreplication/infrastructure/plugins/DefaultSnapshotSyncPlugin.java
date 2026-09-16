@@ -41,14 +41,14 @@ public class DefaultSnapshotSyncPlugin implements ISnapshotSyncPlugin {
 
     @Override
     public void acquireSnapshot(CorfuRuntime runtime,
-                                org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease) {
+                                org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease) {
         // In-repository protection is enforced transactionally by SnapshotSyncLeaseStore.
         // This sample has no additional external effect requiring reconciliation.
     }
 
     @Override
     public void releaseSnapshot(CorfuRuntime runtime,
-                                org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease) {
+                                org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease) {
         // The coordinator releases the matching durable guard after this hook returns.
     }
 

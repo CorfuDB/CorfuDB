@@ -55,6 +55,18 @@ public class MetadataManagerTest extends AbstractViewTest {
      * updated in the metadata table on the Sink cluster
      */
     @Test
+    public void snapshotMetadataAdvertisesTheSinkWriteBudgetInBothModes() {
+        LogReplicationMetadataManager metadata = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
+                localClusterId);
+        int expected = corfuRuntime.getParameters().getMaxWriteSize();
+        var legacy = metadata.getMetadataResponse(org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg
+                .getDefaultInstance(), false, -1, false, 0).getPayload().getLrMetadataResponse();
+        Assert.assertEquals(expected, legacy.getSnapshotTransferWriteSize());
+        metadata.refreshSnapshotStatus();
+        Assert.assertEquals(expected, metadata.getCachedSnapshotStatus().getSnapshotTransferWriteSize());
+    }
+
+    @Test
     public void testMetadataAfterLogEntrySync() {
 
         LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,

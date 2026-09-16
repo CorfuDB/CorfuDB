@@ -20,9 +20,9 @@ import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -31,10 +31,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
@@ -100,10 +102,18 @@ public class SnapshotSender {
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
+        this(runtime, snapshotReader, dataSender, readProcessor, snapshotSyncBatchSize, fsm, System::nanoTime);
+    }
+
+    @VisibleForTesting
+    SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+                   ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm,
+                   LongSupplier nanoTime) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
         this.dataSender = dataSender;
+        this.nanoTime = nanoTime;
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
         this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
@@ -122,6 +132,10 @@ public class SnapshotSender {
     private boolean ownedTransferFinished;
     private CompletableFuture<LogReplicationMetadataResponseMsg> statusFuture;
     private CompletableFuture<LogReplicationEntryMsg> admissionFuture;
+    private final LongSupplier nanoTime;
+    private static final long REQUEST_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS);
+    private long statusRequestNanos;
+    private long admissionRequestNanos;
     private SnapshotSyncLeaseRecord remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
     private LogReplicationEntryMsg admissionRequest;
     private long lastStatusPollNanos;
@@ -265,15 +279,27 @@ public class SnapshotSender {
     /** Returns false only after negotiating a legacy sink. Every wait yields the FSM worker. */
     private boolean transmitWithLifecycle(UUID eventId, boolean forced) {
         if (ownedTransferFinished) { return true; }
-        long now = System.nanoTime();
+        long now = nanoTime.getAsLong();
+        // DataSender implementations need not complete lost RPCs themselves. Expire the
+        // local wait, not the snapshot attempt: a late reply cannot authorize this run,
+        // and a lost START reply must be reconciled/retried using the identical proposal.
+        if (statusFuture != null && !statusFuture.isDone() && now - statusRequestNanos >= REQUEST_TIMEOUT_NANOS) {
+            statusFuture = null;
+            lastStatusPollNanos = 0;
+        }
+        if (admissionFuture != null && !admissionFuture.isDone() && now - admissionRequestNanos >= REQUEST_TIMEOUT_NANOS) {
+            admissionFuture = null;
+        }
         if (statusFuture == null && (lastStatusPollNanos == 0
                 || now - lastStatusPollNanos >= TimeUnit.SECONDS.toNanos(2))) {
             lastStatusPollNanos = now;
-            statusFuture = dataSender.sendMetadataRequest();
+            statusRequestNanos = now;
+            statusFuture = observeReply(dataSender.sendMetadataRequest(), statusRequestNanos);
         }
         if (statusFuture != null && statusFuture.isDone()) {
             try {
                 LogReplicationMetadataResponseMsg response = statusFuture.join();
+                snapshotReader.setSnapshotBatchSizeHint(response.getSnapshotTransferWriteSize());
                 if (!Boolean.TRUE.equals(lifecycleMode)) { lifecycleMode = response.hasSnapshotLease(); }
                 remoteLease = response.getSnapshotLease();
             } catch (java.util.concurrent.CompletionException e) {
@@ -341,7 +367,8 @@ public class SnapshotSender {
                 }
                 if (admissionFuture == null && admissionRequest != null
                         && (remoteLease.getPhase() == Phase.READY || ours)) {
-                    admissionFuture = dataSender.send(admissionRequest);
+                    admissionRequestNanos = nanoTime.getAsLong();
+                    admissionFuture = observeReply(dataSender.send(admissionRequest), admissionRequestNanos);
                 }
                 scheduleContinuation(eventId, 2000);
                 return true;
@@ -374,6 +401,17 @@ public class SnapshotSender {
             snapshotSyncCancel(eventId, e instanceof TrimmedException ? LogReplicationError.TRIM_SNAPSHOT_SYNC : LogReplicationError.UNKNOWN, forced);
         }
         return true;
+    }
+
+    private <T> CompletableFuture<T> observeReply(CompletableFuture<T> reply, long sentAtNanos) {
+        // Check arrival in the completion callback, not when the FSM next gets a worker.
+        // A prompt reply remains valid if another workflow delays the next continuation.
+        return reply.thenApply(value -> {
+            if (nanoTime.getAsLong() - sentAtNanos >= REQUEST_TIMEOUT_NANOS) {
+                throw new CompletionException(new TimeoutException("Snapshot RPC reply arrived after its deadline"));
+            }
+            return value;
+        });
     }
 
     private synchronized void scheduleContinuation(UUID eventId, long delayMs) {

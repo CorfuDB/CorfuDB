@@ -966,6 +966,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testSnapshotSyncAndLogEntrySync(0, true, 0);
     }
 
+    @Test
+    public void testSnapshotSyncWithLostInitialMetadataResponse() throws Exception {
+        testConfig.setTimeoutInitialMetadataResponse(true);
+        testSnapshotSyncAndLogEntrySync(0, false, 0);
+        assertThat(sourceDataSender.getInitialMetadataTimeouts().get()).isEqualTo(1);
+    }
+
     /**
      * Test the case where the ack for the final snapshot-transfer message (SNAPSHOT_TRANSFER_COMPLETE)
      * is delayed past the source's ack-wait timeout, while the sink reports (via the metadata poll)
@@ -1001,11 +1008,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         sourceDataSender.checkStatusOnStandby(true);
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
 
-        // Verify the busy-signal mechanism was actually exercised: the source only polls the sink
-        // directly on an ack-wait timeout, so this being non-zero proves the delay was long enough to
-        // trigger at least one such timeout, and the sync surviving it proves the busy response
-        // extended the source's patience rather than it giving up.
-        assertThat(sourceDataSender.getMetadataRequestCount().get()).isGreaterThan(0);
+        // Count only polls while the final transfer ACK is outstanding; startup capability
+        // negotiation and normal apply-status polls must not satisfy this assertion.
+        assertThat(sourceDataSender.getBusyMetadataPolls().get()).isGreaterThan(0);
     }
 
     /**
@@ -1361,6 +1366,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         startSnapshotSync(conditions);
 
         log.debug("****** Snapshot Sync COMPLETE");
+
+        assertThat(sourceDataSender.getCountDelayedApplyCycles()).isEqualTo(numCyclesToDelayApply);
+        assertThat(sourceDataSender.getApplyMetadataTimeouts().get()).isEqualTo(delayResponse ? 1 : 0);
 
         //verify isDataConsistent is true
         sourceDataSender.checkStatusOnStandby(true);
@@ -1742,7 +1750,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyMetadataResponse(LogReplicationMetadataResponseMsg response) {
-        if (response.getSnapshotTransferred() == response.getSnapshotApplied()) {
+        long expectedSnapshot = logReplicationSourceManager.getLogReplicationFSM().getBaseSnapshot();
+        // A capability response (including -1 == -1) or an older completed snapshot is
+        // not completion of this transfer. Require delivery of this attempt's END ACK.
+        if (sourceDataSender.isSnapshotTransferAcknowledged(expectedSnapshot)
+                && response.getSnapshotStart() == expectedSnapshot
+                && response.getSnapshotTransferred() == expectedSnapshot
+                && response.getSnapshotApplied() == expectedSnapshot) {
             log.debug("Metadata response indicates snapshot sync apply has completed");
             blockUntilExpectedMetadataResponse.release();
         } else {
@@ -1839,6 +1853,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         private boolean deleteOP = false;
         private WAIT waitOn = WAIT.ON_ACK;
         private boolean timeoutMetadataResponse = false;
+        private boolean timeoutInitialMetadataResponse = false;
         private String remoteClusterId = null;
 
         // Indicates if a snapshot start message should be dropped
@@ -1870,6 +1885,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             dropAckLevel = 0;
             delayedApplyCycles = 0;
             timeoutMetadataResponse = false;
+            timeoutInitialMetadataResponse = false;
             trim = false;
             writingSrc = false;
             writingDst = false;

@@ -100,7 +100,7 @@ public class CompactorLeaderServices {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             // CorfuStore is WRITE_AFTER_WRITE: include the shared guard in the write set,
             // not just the read set, to serialize this cycle with snapshot admission.
-            org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease =
+            org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease =
                     org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn);
             if (lease.getProtectionHeld()) {
                 txn.commit();

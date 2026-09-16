@@ -31,3 +31,52 @@ message StringKey {
 message ActiveCPStreamMsg {
   int64 sync_heartbeat = 1;
 }
+
+// Shared snapshot retention and checkpoint admission metadata. Keep this record
+// with its control-table key and the compactor schemas registered in the same domain,
+// independently of transport-only definitions. Never reset it on LR topology changes.
+message SnapshotSyncLeaseRecord {
+  enum Phase {
+    NOT_READY = 0;
+    READY = 1;
+    PREPARING = 2;
+    TRANSFERRING = 3;
+    APPLYING = 4;
+    ABORTING = 5;
+    RELEASING = 6;
+    RECOVERING = 7;
+    FAULTED = 8;
+  }
+  enum Outcome {
+    NONE = 0;
+    COMPLETED = 1;
+    ABORTED = 2;
+  }
+  uint32 schemaVersion = 1;
+  Phase phase = 2;
+  Outcome outcome = 3;
+  uint64 revision = 4;
+  uint64 generation = 5;
+  string ownerId = 6;
+  UuidMsg attemptId = 7;
+  UuidMsg externalRequestId = 8;
+  int64 sourceSnapshot = 9;
+  int64 topologyConfigId = 10;
+  uint64 admissionEpoch = 11;
+  int64 admittedAtMs = 12;
+  int64 deadlineMs = 13;
+  // All writes belonging to this reservation are strictly after this sink address.
+  int64 protectedAfter = 14;
+  bool protectionHeld = 15;
+  string protectionId = 16;
+  int64 firstShadowAddress = 17;
+  int64 transferredSequence = 18;
+  int64 recoveryCut = 19;
+  int64 releasedAtMs = 20;
+  int64 abortedAtMs = 21;
+  uint32 applyRetries = 22;
+  int64 retryAtMs = 23;
+  string failure = 24;
+  int64 endSequence = 25;
+  int64 cleanupStartedAtMs = 26;
+}

@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Snap
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication.*;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -22,11 +23,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
 
 class SnapshotSourceLifecycleTest {
     private CorfuRuntime runtime;
@@ -38,6 +42,7 @@ class SnapshotSourceLifecycleTest {
     private final AtomicReference<SnapshotSyncLeaseRecord> status = new AtomicReference<>(SnapshotSyncLease.initial("sink"));
     private final List<LogReplicationEntryMsg> sent = new ArrayList<>();
     private CompletableFuture<LogReplicationEntryMsg> admission;
+    private final AtomicLong nanoTime = new AtomicLong(1);
 
     @BeforeEach
     void setup() {
@@ -47,7 +52,7 @@ class SnapshotSourceLifecycleTest {
         when(addressSpace.getLogTail()).thenReturn(50L);
         fsm = mock(LogReplicationFSM.class);
         when(fsm.getAckReader()).thenReturn(mock(LogReplicationAckReader.class));
-        reader = mock(SnapshotReader.class);
+        reader = mock(SnapshotReader.class, CALLS_REAL_METHODS);
         transport = mock(DataSender.class);
         when(transport.sendMetadataRequest()).thenAnswer(invocation -> CompletableFuture.completedFuture(
                 LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build()));
@@ -60,7 +65,7 @@ class SnapshotSourceLifecycleTest {
                     .setEntryType(message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END
                             ? LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE : LogReplicationEntryType.SNAPSHOT_REPLICATED)).build());
         });
-        source = new SnapshotSender(runtime, reader, transport, null, 1, fsm);
+        source = new SnapshotSender(runtime, reader, transport, null, 1, fsm, nanoTime::get);
         source.reset();
         when(reader.read(any())).thenReturn(new SnapshotReadMessage(Collections.singletonList(
                 LogReplicationEntryMsg.newBuilder().setMetadata(LogReplicationEntryMetadataMsg.newBuilder()
@@ -83,6 +88,19 @@ class SnapshotSourceLifecycleTest {
         admission.complete(start.toBuilder().setMetadata(start.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(reserved.getGeneration())).build());
         drive();
+    }
+
+    @Test
+    void sinkWriteBudgetReachesReaderBeforeStartAndBeforeAnyDataRead() {
+        when(transport.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get())
+                        .setSnapshotTransferWriteSize(10000).build()));
+        drive();
+        var order = inOrder(reader, transport);
+        order.verify(reader).setSnapshotBatchSizeHint(10000);
+        order.verify(transport).send(any(LogReplicationEntryMsg.class));
+        verify(reader, never()).read(any());
+        verify(runtime, never()).getParameters();
     }
 
     @Test
@@ -122,6 +140,172 @@ class SnapshotSourceLifecycleTest {
         assertEquals(2, sent.size());
         assertEquals(original, sent.get(1));
         verify(reader, never()).read(any());
+    }
+
+    @Test
+    void unfinishedMetadataRequestExpiresAndLateLegacyReplyCannotBypassRecovery() {
+        CompletableFuture<LogReplicationMetadataResponseMsg> lost = new CompletableFuture<>();
+        status.set(status.get().toBuilder().setPhase(SnapshotSyncLeaseRecord.Phase.RECOVERING).build());
+        when(transport.sendMetadataRequest()).thenReturn(lost).thenAnswer(call -> CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build()));
+        drive();
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS) - 1);
+        drive();
+        verify(transport, times(1)).sendMetadataRequest();
+        assertTrue(sent.isEmpty());
+
+        nanoTime.incrementAndGet();
+        drive();
+        verify(transport, times(2)).sendMetadataRequest();
+        lost.complete(LogReplicationMetadataResponseMsg.getDefaultInstance());
+        drive();
+        assertTrue(source.usesSnapshotLifecycle());
+        assertTrue(sent.isEmpty());
+        verify(reader, never()).read(any());
+
+        status.set(SnapshotSyncLease.initial("sink"));
+        drive();
+        assertEquals(1, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
+    }
+
+    @Test
+    void timelyRepliesRemainUsableWhenAnotherWorkflowDelaysTheSourceWorker() {
+        CompletableFuture<LogReplicationMetadataResponseMsg> metadataReply = new CompletableFuture<>();
+        when(transport.sendMetadataRequest()).thenReturn(metadataReply).thenAnswer(call -> CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build()));
+        drive();
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS) - 1);
+        metadataReply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build());
+        nanoTime.addAndGet(2);
+        drive();
+        verify(transport, times(1)).sendMetadataRequest();
+        assertEquals(1, sent.size());
+
+        LogReplicationEntryMsg proposal = sent.get(0);
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), proposal.getMetadata(),
+                1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.prepared(reserved));
+        admission.complete(proposal.toBuilder().setMetadata(proposal.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
+                .setAttemptGeneration(reserved.getGeneration())).build());
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS) + 1);
+        drive();
+        verify(reader).read(any());
+        assertEquals(reserved.getGeneration(), source.getWireAttemptGeneration());
+        assertEquals(1, sent.stream().filter(message -> message.getMetadata().getEntryType()
+                == LogReplicationEntryType.SNAPSHOT_START).count());
+    }
+
+    @Test
+    void choosingTheSourceCutDoesNotConsumeTheStartReplyBudget() {
+        when(runtime.getAddressSpaceView().getLogTail()).thenAnswer(call -> {
+            nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS) + 1);
+            return 50L;
+        });
+        drive();
+        LogReplicationEntryMsg proposal = sent.get(0);
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), proposal.getMetadata(),
+                1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.prepared(reserved));
+        admission.complete(proposal.toBuilder().setMetadata(proposal.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
+                .setAttemptGeneration(reserved.getGeneration())).build());
+        drive();
+        verify(reader).read(any());
+        assertEquals(reserved.getGeneration(), source.getWireAttemptGeneration());
+    }
+
+    @Test
+    void metadataReplyArrivingAfterDeadlineCannotSelectLegacyModeBeforeTheNextPoll() {
+        CompletableFuture<LogReplicationMetadataResponseMsg> lateReply = new CompletableFuture<>();
+        status.set(status.get().toBuilder().setPhase(SnapshotSyncLeaseRecord.Phase.RECOVERING).build());
+        when(transport.sendMetadataRequest()).thenReturn(lateReply).thenAnswer(call -> CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build()));
+        drive();
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS));
+        lateReply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotTransferWriteSize(1).build());
+        drive();
+        assertTrue(sent.isEmpty());
+        verify(reader, never()).setSnapshotBatchSizeHint(1);
+        drive();
+        assertTrue(source.usesSnapshotLifecycle());
+        assertTrue(sent.isEmpty());
+        verify(reader, never()).read(any());
+    }
+
+    @Test
+    void neverCompletedStartReplyIsRetriedWithTheSameProposal() {
+        drive();
+        LogReplicationEntryMsg proposal = sent.get(0);
+        status.set(SnapshotSyncLease.reserve(status.get(), proposal.getMetadata(), 1000, 10000, 20, "protection"));
+        CompletableFuture<LogReplicationEntryMsg> lostReply = admission;
+        admission = new CompletableFuture<>();
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS));
+        drive();
+        assertEquals(List.of(proposal, proposal), sent);
+        assertFalse(lostReply.isDone());
+        verify(reader, never()).read(any());
+    }
+
+    @Test
+    void unfinishedStartReplyExpiresWithoutRenewingReservationOrTrustingLateAck() {
+        drive();
+        LogReplicationEntryMsg proposal = sent.get(0);
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), proposal.getMetadata(),
+                1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.prepared(reserved));
+        CompletableFuture<LogReplicationEntryMsg> lost = admission;
+        admission = new CompletableFuture<>();
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS) - 1);
+        drive();
+        assertEquals(1, sent.size());
+        nanoTime.incrementAndGet();
+        lost.complete(proposal.toBuilder().setMetadata(proposal.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(99)).build());
+        drive();
+        assertEquals(List.of(proposal, proposal), sent);
+        assertEquals(reserved.getDeadlineMs(), status.get().getDeadlineMs());
+
+        drive();
+        verify(reader, never()).read(any());
+        assertEquals(0, source.getWireAttemptGeneration());
+        admission.complete(proposal.toBuilder().setMetadata(proposal.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
+                .setAttemptGeneration(reserved.getGeneration())).build());
+        drive();
+        verify(reader).read(any());
+        assertEquals(reserved.getGeneration(), source.getWireAttemptGeneration());
+    }
+
+    @Test
+    void resetDiscardsOutstandingAdmissionAndOldAcceptance() {
+        drive();
+        LogReplicationEntryMsg oldProposal = sent.get(0);
+        CompletableFuture<LogReplicationEntryMsg> oldReply = admission;
+        source.reset();
+        admission = new CompletableFuture<>();
+        drive();
+        oldReply.complete(oldProposal.toBuilder().setMetadata(oldProposal.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(1)).build());
+        drive();
+        assertNotEquals(oldProposal.getMetadata().getSyncRequestId(), sent.get(1).getMetadata().getSyncRequestId());
+        verify(reader, never()).read(any());
+        assertEquals(0, source.getWireAttemptGeneration());
+    }
+
+    @Test
+    void unfinishedAdmissionDoesNotPreventObservingSinkAbandonment() {
+        drive();
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), sent.get(0).getMetadata(),
+                1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.abandon(reserved, 11000, "deadline"));
+        drive();
+        // Without an accepted generation there is no authorized wire CANCEL to send.
+        // Reconciliation must still cancel locally and must not retry START or send data.
+        assertEquals(1, sent.size());
+        verify(reader, never()).read(any());
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
     }
 
     @Test

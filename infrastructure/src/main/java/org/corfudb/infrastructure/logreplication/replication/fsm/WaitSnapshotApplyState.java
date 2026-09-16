@@ -269,7 +269,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             if (generation != verificationGeneration) { return; }
             if (metadataResponse.hasSnapshotLease()) {
                 sinkLifecycleMode = true;
-                org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord lease = metadataResponse.getSnapshotLease();
+                org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease = metadataResponse.getSnapshotLease();
                 InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender source = snapshotState.getSnapshotSender();
                 boolean matching = source.getWireAttemptId() != null && lease.getAttemptId().equals(
@@ -277,14 +277,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                         && lease.getGeneration() == source.getWireAttemptGeneration()
                         && lease.getTopologyConfigId() == fsm.getTopologyConfigId()
                         && lease.getSourceSnapshot() == baseSnapshotTimestamp;
-                if (matching && lease.getOutcome() == org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
+                if (matching && lease.getOutcome() == org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED) {
                     fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
                             new LogReplicationEventMetadata(verifyingId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)
                                     .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));
                     return;
                 }
-                if (lease.getPhase() != org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Phase.NOT_READY
-                        && (!matching || lease.getOutcome() == org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord.Outcome.ABORTED)) {
+                if (lease.getPhase() != org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase.NOT_READY
+                        && (!matching || lease.getOutcome() == org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.ABORTED)) {
                     fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
                             new LogReplicationEventMetadata(verifyingId, forcedSnapshotSync)
                                     .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));

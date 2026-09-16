@@ -22,7 +22,7 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.SnapshotSyncLeaseStore;
-import org.corfudb.runtime.LogReplication.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -111,6 +111,7 @@ public class LogReplicationMetadataManager {
                     .setSnapshotTransferred(values.get(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED))
                     .setSnapshotApplied(values.get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED))
                     .setLastLogEntryTimestamp(values.get(LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED))
+                    .setSnapshotTransferWriteSize(runtime.getParameters().getMaxWriteSize())
                     .setSnapshotLease(lease).build();
             long sequence = txn.getTxnSequence();
             txn.commit();
@@ -408,6 +409,7 @@ public class LogReplicationMetadataManager {
                 .setProcessingSnapshotTimestamp(processingSnapshotTimestamp)
                 .setApplyRetriesExhausted(applyRetriesExhausted)
                 .setCheckpointerGracePeriodMs(checkpointerGracePeriodMs)
+                .setSnapshotTransferWriteSize(runtime.getParameters().getMaxWriteSize())
                 .build();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
                 .setLrMetadataResponse(metadataMsg).build();

@@ -1,0 +1,216 @@
+# SnapshotSyncLeaseRecord from PR head 53f070c548cb8ad17a5191784e82c2eb0b8a262c.
+name: "SnapshotSyncLeaseRecord"
+field {
+  name: "schemaVersion"
+  number: 1
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT32
+}
+field {
+  name: "phase"
+  number: 2
+  label: LABEL_OPTIONAL
+  type: TYPE_ENUM
+  type_name: ".org.corfudb.runtime.SnapshotSyncLeaseRecord.Phase"
+}
+field {
+  name: "outcome"
+  number: 3
+  label: LABEL_OPTIONAL
+  type: TYPE_ENUM
+  type_name: ".org.corfudb.runtime.SnapshotSyncLeaseRecord.Outcome"
+}
+field {
+  name: "revision"
+  number: 4
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT64
+}
+field {
+  name: "generation"
+  number: 5
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT64
+}
+field {
+  name: "ownerId"
+  number: 6
+  label: LABEL_OPTIONAL
+  type: TYPE_STRING
+}
+field {
+  name: "attemptId"
+  number: 7
+  label: LABEL_OPTIONAL
+  type: TYPE_MESSAGE
+  type_name: ".org.corfudb.runtime.UuidMsg"
+}
+field {
+  name: "externalRequestId"
+  number: 8
+  label: LABEL_OPTIONAL
+  type: TYPE_MESSAGE
+  type_name: ".org.corfudb.runtime.UuidMsg"
+}
+field {
+  name: "sourceSnapshot"
+  number: 9
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "topologyConfigId"
+  number: 10
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "admissionEpoch"
+  number: 11
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT64
+}
+field {
+  name: "admittedAtMs"
+  number: 12
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "deadlineMs"
+  number: 13
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "protectedAfter"
+  number: 14
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "protectionHeld"
+  number: 15
+  label: LABEL_OPTIONAL
+  type: TYPE_BOOL
+}
+field {
+  name: "protectionId"
+  number: 16
+  label: LABEL_OPTIONAL
+  type: TYPE_STRING
+}
+field {
+  name: "firstShadowAddress"
+  number: 17
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "transferredSequence"
+  number: 18
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "recoveryCut"
+  number: 19
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "releasedAtMs"
+  number: 20
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "abortedAtMs"
+  number: 21
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "applyRetries"
+  number: 22
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT32
+}
+field {
+  name: "retryAtMs"
+  number: 23
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "failure"
+  number: 24
+  label: LABEL_OPTIONAL
+  type: TYPE_STRING
+}
+field {
+  name: "endSequence"
+  number: 25
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+field {
+  name: "cleanupStartedAtMs"
+  number: 26
+  label: LABEL_OPTIONAL
+  type: TYPE_INT64
+}
+enum_type {
+  name: "Phase"
+  value {
+    name: "NOT_READY"
+    number: 0
+  }
+  value {
+    name: "READY"
+    number: 1
+  }
+  value {
+    name: "PREPARING"
+    number: 2
+  }
+  value {
+    name: "TRANSFERRING"
+    number: 3
+  }
+  value {
+    name: "APPLYING"
+    number: 4
+  }
+  value {
+    name: "ABORTING"
+    number: 5
+  }
+  value {
+    name: "RELEASING"
+    number: 6
+  }
+  value {
+    name: "RECOVERING"
+    number: 7
+  }
+  value {
+    name: "FAULTED"
+    number: 8
+  }
+}
+enum_type {
+  name: "Outcome"
+  value {
+    name: "NONE"
+    number: 0
+  }
+  value {
+    name: "COMPLETED"
+    number: 1
+  }
+  value {
+    name: "ABORTED"
+    number: 2
+  }
+}
