@@ -1007,11 +1007,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         log.debug("****** Snapshot Sync COMPLETE despite delayed final ack");
 
-        // Verify isDataConsistent is true and data was correctly and fully replicated by the first and
-        // only attempt -- i.e. the sync genuinely completed, it wasn't cancelled and started over.
+        // Verify data was correctly and fully replicated by the first and only attempt -- i.e. the
+        // sync genuinely completed, it wasn't cancelled and started over.
+        // isDataConsistent is not looked at here. The sink sets it in the transaction that completes
+        // the lease, which is asserted above. But in this harness the source and the sink share one
+        // metadata manager, and with it one status row, which the source rewrites without that flag
+        // when it enters log entry sync: this test waits for exactly that. Tests that stop at the
+        // sink's completion verify the flag.
         assertThat(sinkManager.getSnapshotLease().getGeneration()).isEqualTo(1);
         assertThat(sinkManager.getSnapshotLease().getConsecutiveAborts()).isZero();
-        sourceDataSender.checkStatusOnStandby(true);
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
     }
 

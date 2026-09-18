@@ -19,6 +19,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -218,6 +219,46 @@ public class LogReplicationSinkManagerTest extends AbstractViewTest {
         // The pre-lease hooks, whose production implementation writes the freeze token, are dead.
         verify(plugin, never()).onSnapshotSyncStart(any());
         verify(plugin, never()).onSnapshotSyncEnd(any());
+    }
+
+    /**
+     * The sink reserves an attempt, and freezes the checkpointer for it, when it takes the START. A
+     * source that gives up before it sees the acceptance does not know the generation it was given:
+     * its cancellation is matched by the attempt id, which only that source has. Without this the
+     * reservation, and the freeze, would last until the inactivity limit.
+     */
+    @Test
+    public void aSourceThatGivesUpBeforeItSawItsAdmissionStillReleasesTheCheckpointer() throws Exception {
+        lead();
+        LogReplicationEntryMsg start = startMessage();
+        LogReplicationBusyException reserved = assertThrows(LogReplicationBusyException.class, () -> sink.receive(start));
+        assertEquals(Reason.ADMISSION_CLOSED, reserved.getResponse().getReason());
+        assertEquals("preparation only takes a moment, and the source is told so",
+                SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS, reserved.getResponse().getRetryAfterMs());
+        assertTrue(checkpointer.isCheckpointFrozen());
+
+        // Somebody else's cancellation changes nothing.
+        assertEquals(Reason.STALE_ATTEMPT, rejection(LogReplicationEntryMsg.newBuilder().setMetadata(
+                header(LogReplicationEntryType.SNAPSHOT_CANCEL).setSyncRequestId(getUuidMsg(UUID.randomUUID()))).build()));
+        assertTrue(checkpointer.isCheckpointFrozen());
+
+        assertEquals(Reason.STALE_ATTEMPT, rejection(LogReplicationEntryMsg.newBuilder().setMetadata(
+                header(LogReplicationEntryType.SNAPSHOT_CANCEL).setSyncRequestId(start.getMetadata().getSyncRequestId())).build()));
+        await(() -> !sink.getSnapshotLease().getProtectionHeld());
+        assertFalse(checkpointer.isCheckpointFrozen());
+        assertEquals("Source cancelled its snapshot cut", sink.getSnapshotLease().getFailure());
+    }
+
+    /** A cancellation that names a generation must name the right one. */
+    @Test
+    public void aCancellationOfAnotherGenerationIsRefused() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        assertEquals(Reason.STALE_ATTEMPT, rejection(LogReplicationEntryMsg.newBuilder().setMetadata(
+                header(LogReplicationEntryType.SNAPSHOT_CANCEL).setSyncRequestId(attempt.getAttemptId())
+                        .setAttemptGeneration(attempt.getGeneration() + 1)).build()));
+        assertTrue(SnapshotSyncLease.active(sink.getSnapshotLease()));
+        assertTrue(checkpointer.isCheckpointFrozen());
     }
 
     /**

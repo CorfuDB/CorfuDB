@@ -187,6 +187,36 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         } finally { sink.shutdown(); }
     }
 
+    /**
+     * Preparation, apply, installing the incremental writer and release are each due the moment the
+     * sink reserves, takes the end marker, or completes. Left to the periodic reconciliation, each of
+     * them would add up to a period to every snapshot sync, and to the time the checkpointer stays
+     * frozen. Here the period is longer than the test waits, so only events can have driven it.
+     */
+    @Test
+    public void aSnapshotSyncIsDrivenByEventsNotByThePeriodicReconciliation() throws Exception {
+        compactorIsConfigured();
+        leases.update((txn, current) -> SnapshotSyncLeaseRecord.getDefaultInstance());
+        LogReplicationSinkManager sink = new LogReplicationSinkManager(rt, config, metadata, new DefaultSnapshotSyncPlugin(rt));
+        // Four steps would take four of these periods. One period fits in what await() allows, so a
+        // step that fails once is still retried in time.
+        sink.configureSnapshotLifecycle(new SnapshotLeaseCoordinator.Timing(60000, 0, 5000, 0, 3),
+                TimeUnit.SECONDS.toMillis(8));
+        sink.updateTopologyConfigId(1);
+        try {
+            sink.setLeadership(true);
+            await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.READY);
+            SnapshotSyncLeaseRecord captured = start(sink);
+            sink.receive(data(captured));
+            LogReplicationEntryMsg end = data(captured).toBuilder().clearData().setMetadata(data(captured).getMetadata().toBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_END).setSnapshotSyncSeqNum(1)).build();
+            assertEquals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE, sink.receive(end).getMetadata().getEntryType());
+            await(() -> sink.getSnapshotLease().getOutcome() == SnapshotSyncLeaseRecord.Outcome.COMPLETED
+                    && !sink.getSnapshotLease().getProtectionHeld() && sink.isIncrementalSyncAdmitted());
+            assertEquals(SnapshotSyncLeaseRecord.Phase.RECOVERING, sink.getSnapshotLease().getPhase());
+        } finally { sink.shutdown(); }
+    }
+
     @Test
     public void sinkTransferFailureAbandonsAndReleasesWithoutWaitingForSource() throws Exception {
         compactorIsConfigured();

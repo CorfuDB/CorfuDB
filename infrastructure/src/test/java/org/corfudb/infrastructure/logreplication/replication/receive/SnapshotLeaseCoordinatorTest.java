@@ -537,6 +537,105 @@ class SnapshotLeaseCoordinatorTest {
         verify(metadata).transferSnapshot(txn, attempt.getSourceSnapshot());
     }
 
+    // ---------------------------------------------------------------- reconciling on events
+
+    /**
+     * Every step on this side is a reconciliation away from the event that makes it due. Left to
+     * the period alone, each of them would add up to a second to every snapshot sync, and to the
+     * time the checkpointer stays frozen.
+     */
+    @Test
+    void aReservationAsksForItsPreparationAtOnce() {
+        long before = coordinator.requestedReconciliations.get();
+        coordinator.start(proposal());
+        assertEquals(Phase.PREPARING, coordinator.status().getPhase());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+
+        coordinator.start(proposal());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get(), "a duplicate START changes nothing");
+    }
+
+    /** A reconciliation does nothing while a message is being received, so it is asked for after. */
+    @Test
+    void theEndOfATransferAsksForItsApplyOnceTheMessageIsDone() {
+        SnapshotSyncLeaseRecord attempt = transfer();
+        LogReplicationEntryMetadataMsg entry = proposal().toBuilder().setAttemptGeneration(attempt.getGeneration()).build();
+        coordinator.enterTransfer(entry);
+        coordinator.exitTransfer();
+        long before = coordinator.requestedReconciliations.get();
+
+        coordinator.enterTransfer(entry);
+        coordinator.exitTransfer();
+        assertEquals(before, coordinator.requestedReconciliations.get(), "an ordinary message asks for nothing");
+
+        coordinator.enterTransfer(entry);
+        coordinator.transferComplete(attempt, 7);
+        assertEquals(before, coordinator.requestedReconciliations.get(), "not while the message is being received");
+        coordinator.exitTransfer();
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+    }
+
+    @Test
+    void anAbandonmentAsksForItsReleaseAtOnce() {
+        transfer();
+        long before = coordinator.requestedReconciliations.get();
+        coordinator.abandon("test");
+        assertEquals(Phase.ABORTING, coordinator.status().getPhase());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+    }
+
+    /**
+     * An effect that moved the lease on makes the next step due. One that failed and left it where
+     * it was must be retried by the period: asking again at once would spin.
+     */
+    @Test
+    void onlyAnEffectThatMovedTheLeaseOnAsksForTheNextStep() {
+        coordinator.start(proposal());
+        long before = coordinator.requestedReconciliations.get();
+        coordinator.tick(); // Preparation: PREPARING to TRANSFERRING.
+        assertEquals(Phase.TRANSFERRING, coordinator.status().getPhase());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+
+        doThrow(new IllegalStateException("uncertain release")).when(plugin).releaseSnapshot(any(), any());
+        coordinator.abandon("test");
+        before = coordinator.requestedReconciliations.get();
+        coordinator.tick(); // The release fails after draining: ABORTING to RELEASING.
+        assertEquals(Phase.RELEASING, coordinator.status().getPhase());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+
+        coordinator.tick(); // It fails again, and the lease stays where it was.
+        coordinator.tick();
+        assertEquals(Phase.RELEASING, coordinator.status().getPhase());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get(), "a failing release must not spin");
+    }
+
+    @Test
+    void installingTheIncrementalWriterAsksForTheReleaseThatFollows() {
+        SnapshotSyncLeaseRecord attempt = transfer();
+        coordinator.transferComplete(attempt, 7);
+        doAnswer(invocation -> {
+            persisted.set(SnapshotSyncLease.completed(persisted.get()));
+            return null;
+        }).when(worker).apply(any());
+        coordinator.tick(); // Apply completes the attempt.
+        assertEquals(Outcome.COMPLETED, coordinator.status().getOutcome());
+        long before = coordinator.requestedReconciliations.get();
+
+        coordinator.tick(); // Installs the incremental writer; the lease itself does not move.
+        verify(worker).completed(any());
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+    }
+
+    /** What a source is told when its START is reserved: come back soon, preparation has started. */
+    @Test
+    void aRefusalCanCarryItsOwnRetryHint() {
+        assertEquals(SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS, coordinator.rejected(
+                LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS)
+                .getResponse().getRetryAfterMs());
+        assertTrue(coordinator.rejected(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED).getResponse().getRetryAfterMs()
+                > SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS);
+    }
+
     // ---------------------------------------------------------------- budget and inactivity
 
     @Test

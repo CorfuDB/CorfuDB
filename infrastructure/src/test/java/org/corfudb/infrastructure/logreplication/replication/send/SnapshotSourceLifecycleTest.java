@@ -397,7 +397,11 @@ class SnapshotSourceLifecycleTest {
         oldReply.complete(oldProposal.toBuilder().setMetadata(oldProposal.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(1)).build());
         drive();
-        assertNotEquals(oldProposal.getMetadata().getSyncRequestId(), sent.get(1).getMetadata().getSyncRequestId());
+        // The replaced proposal is cancelled, in case the sink reserved it; then a new one is made.
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(1).getMetadata().getEntryType());
+        assertEquals(oldProposal.getMetadata().getSyncRequestId(), sent.get(1).getMetadata().getSyncRequestId());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(2).getMetadata().getEntryType());
+        assertNotEquals(oldProposal.getMetadata().getSyncRequestId(), sent.get(2).getMetadata().getSyncRequestId());
         verify(reader, never()).read(any());
         assertEquals(0, source.getWireAttemptGeneration());
     }
@@ -409,9 +413,11 @@ class SnapshotSourceLifecycleTest {
                 1000, 10000, 20, "protection");
         status.set(SnapshotSyncLease.abandon(reserved, 11000, "deadline"));
         drive();
-        // Without an accepted generation there is no authorized wire CANCEL to send.
-        // Reconciliation must still cancel locally and must not retry START or send data.
-        assertEquals(1, sent.size());
+        // Reconciliation cancels locally and neither retries START nor sends data. The wire CANCEL
+        // carries no generation, since none was ever accepted; the sink matches it by attempt id.
+        assertEquals(2, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(1).getMetadata().getEntryType());
+        assertEquals(0, sent.get(1).getMetadata().getAttemptGeneration());
         verify(reader, never()).read(any());
         verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
     }
@@ -591,6 +597,96 @@ class SnapshotSourceLifecycleTest {
         assertEquals(sent.get(0).getMetadata().getSyncRequestId(), sent.get(1).getMetadata().getSyncRequestId());
     }
 
+    // ---------------------------------------------------------------- handshake pacing
+
+    /**
+     * Status, START, the retry of a START the sink was still preparing, acceptance: on a poll period
+     * each, the smallest snapshot sync would spend several periods before its first byte.
+     */
+    @Test
+    void theStatusReplyWakesTheSenderUp() throws Exception {
+        CompletableFuture<LogReplicationMetadataResponseMsg> reply = new CompletableFuture<>();
+        when(transport.sendMetadataRequest()).thenReturn(reply);
+        drive();
+        assertTrue(sent.isEmpty());
+        CountDownLatch continued = nextContinuation();
+
+        reply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build());
+
+        assertTrue(continued.await(1, TimeUnit.SECONDS), "the status reply did not wake the sender up");
+        source.transmit(eventId, false);
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
+    }
+
+    @Test
+    void theAcceptanceWakesTheSenderUp() throws Exception {
+        drive();
+        LogReplicationEntryMsg start = sent.get(0);
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), start.getMetadata(), 1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.prepared(reserved));
+        CountDownLatch continued = nextContinuation();
+
+        admission.complete(start.toBuilder().setMetadata(start.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(reserved.getGeneration())).build());
+
+        assertTrue(continued.await(1, TimeUnit.SECONDS), "the acceptance did not wake the sender up");
+    }
+
+    /**
+     * The sink reserves the attempt on the first START and answers BUSY while it prepares, with the
+     * time after which the same proposal will do. The reply wakes the sender up at once, so that
+     * time is what paces the retry: not sooner, which would be a busy loop, and not a poll period.
+     */
+    @Test
+    void aStartTheSinkIsStillPreparingIsRetriedWhenTheSinkSaysSo() throws Exception {
+        drive();
+        LogReplicationEntryMsg proposal = sent.get(0);
+        status.set(SnapshotSyncLease.reserve(status.get(), proposal.getMetadata(), 1000, 10000, 20, "protection"));
+        CompletableFuture<LogReplicationEntryMsg> refused = admission;
+        admission = new CompletableFuture<>();
+        CountDownLatch continued = nextContinuation();
+
+        refused.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.newBuilder()
+                .setReason(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED).setRetryAfterMs(200).build()));
+
+        assertTrue(continued.await(1, TimeUnit.SECONDS), "the refusal did not wake the sender up");
+        drive();
+        assertEquals(1, sent.size(), "not before the sink said");
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(200) - 1);
+        drive();
+        assertEquals(1, sent.size(), "not before the sink said");
+
+        nanoTime.addAndGet(1);
+        drive();
+        assertEquals(2, sent.size());
+        assertEquals(proposal, sent.get(1), "the identical proposal");
+        verify(reader, never()).read(any());
+    }
+
+    @Test
+    void aRefusalWithoutAHintIsRetriedOnThePollPeriod() {
+        drive();
+        admission.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.getDefaultInstance()));
+        admission = new CompletableFuture<>();
+        drive(); // Takes the refusal.
+        assertEquals(1, sent.size());
+        nanoTime.addAndGet(TimeUnit.SECONDS.toNanos(2) - 1);
+        drive();
+        assertEquals(1, sent.size());
+        nanoTime.addAndGet(1);
+        drive();
+        assertEquals(2, sent.size());
+    }
+
+    /** A transport that fails at once must not be retried at once: that is left to the poll period. */
+    @Test
+    void aStartThatFailsInTheTransportDoesNotWakeTheSenderUp() throws Exception {
+        drive();
+        CountDownLatch continued = nextContinuation();
+        admission.completeExceptionally(new TimeoutException("transport"));
+        assertFalse(continued.await(500, TimeUnit.MILLISECONDS));
+    }
+
     // ---------------------------------------------------------------- transfer pacing
 
     /**
@@ -671,6 +767,53 @@ class SnapshotSourceLifecycleTest {
         assertNotEquals(replaced, source.getWireAttemptId());
     }
 
+    /**
+     * A cancellation usually goes out on the very connection whose loss is the reason for it. A sink
+     * that never gets it keeps the attempt, closed to the next one and frozen, until its inactivity
+     * limit: so the next run repeats it for as long as the sink's status still shows that attempt.
+     */
+    @Test
+    void aCancellationTheSinkNeverGotIsRepeatedByTheNextRun() {
+        accept();
+        source.stop();
+        int count = sent.size();
+        LogReplicationEntryMsg cancel = sent.get(count - 1);
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, cancel.getMetadata().getEntryType());
+
+        source.reset(); // The next run. The sink still shows the attempt of the previous one.
+        drive();
+        assertEquals(count, sent.size(), "not more often than the status is polled");
+        nanoTime.addAndGet(TimeUnit.SECONDS.toNanos(2));
+        drive();
+        assertEquals(count + 1, sent.size());
+        assertEquals(cancel, sent.get(count), "the same cancellation, and no proposal while the sink is held");
+
+        // The sink let go of it: nothing is owed any more, and the new run proposes.
+        status.set(SnapshotSyncLease.seedIdle("sink", -1, 0));
+        nanoTime.addAndGet(TimeUnit.SECONDS.toNanos(2));
+        drive();
+        assertEquals(count + 2, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(count + 1).getMetadata().getEntryType());
+        assertNotEquals(cancel.getMetadata().getSyncRequestId(), sent.get(count + 1).getMetadata().getSyncRequestId());
+        nanoTime.addAndGet(TimeUnit.SECONDS.toNanos(2));
+        drive();
+        assertEquals(count + 2, sent.size());
+    }
+
+    /** The end marker had made it after all: the sink applies, and that is followed, never cancelled. */
+    @Test
+    void aTransferThatTurnsOutToBeCompleteIsFollowedNotCancelledAgain() {
+        accept();
+        source.stop();
+        status.set(SnapshotSyncLease.transferred(status.get()));
+        source.reset();
+        int count = sent.size();
+        nanoTime.addAndGet(TimeUnit.SECONDS.toNanos(2));
+        drive();
+        assertEquals(count, sent.size());
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE));
+    }
+
     @Test
     void anApplyThatRunsOnTheSinkIsNeverCancelledByAStop() {
         accept();
@@ -680,12 +823,42 @@ class SnapshotSourceLifecycleTest {
         assertEquals(count, sent.size());
     }
 
+    /**
+     * The sink reserves an attempt, and protects itself for it, when it takes the START: before this
+     * sender can know. A sender that gives up in between must still say so, or the sink would hold
+     * that reservation until its inactivity limit, closed to every other attempt.
+     */
     @Test
-    void aProposalThatWasNeverAcceptedHasNothingToCancel() {
+    void aProposalTheSinkMayHaveReservedIsCancelledWithoutKnowingItsGeneration() {
+        drive();
+        LogReplicationEntryMetadataMsg start = sent.get(0).getMetadata();
+        source.stop();
+        assertEquals(2, sent.size());
+        LogReplicationEntryMetadataMsg cancel = sent.get(1).getMetadata();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, cancel.getEntryType());
+        assertEquals(start.getSyncRequestId(), cancel.getSyncRequestId());
+        assertEquals(start.getSnapshotTimestamp(), cancel.getSnapshotTimestamp());
+        assertEquals(0, cancel.getAttemptGeneration(), "the generation was never learnt");
+        source.stop();
+        assertEquals(2, sent.size(), "once");
+    }
+
+    @Test
+    void replacingAProposalTheSinkMayHaveReservedCancelsItFirst() {
+        drive();
+        UUID replaced = source.getWireAttemptId();
+        source.reset();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(1).getMetadata().getEntryType());
+        assertEquals(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(replaced), sent.get(1).getMetadata().getSyncRequestId());
+    }
+
+    @Test
+    void aSenderThatNeverProposedHasNothingToCancel() {
+        status.set(status.get().toBuilder().setPhase(SnapshotSyncLeaseRecord.Phase.RECOVERING).build());
         drive();
         source.stop();
-        assertEquals(1, sent.size());
-        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
+        source.reset();
+        assertTrue(sent.isEmpty());
     }
 
     /** The worker only records a failure in a Future nobody reads: a step must reschedule itself. */
@@ -698,6 +871,7 @@ class SnapshotSourceLifecycleTest {
         status.set(SnapshotSyncLease.prepared(reserved));
         admission.complete(start.toBuilder().setMetadata(start.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(reserved.getGeneration())).build());
+        TimeUnit.MILLISECONDS.sleep(200); // The acceptance asks for a step itself: let that one pass.
         CountDownLatch continued = nextContinuation();
 
         assertThrows(AssertionError.class, this::drive);

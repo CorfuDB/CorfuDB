@@ -46,9 +46,10 @@ already reports.
    budget) and the log position everything after which is protected. From this transaction on the
    checkpointer does not start a new cycle. A cycle that was already running with an older cut is
    unaffected and may still trim up to that position.
-3. While the sink prepares, the source is told to come back (`BUSY`). It repeats the same proposal
-   and is then answered `SNAPSHOT_START_ACCEPTED` with the attempt's generation. Only now does the
-   source send data; every message carries the attempt's identity and generation.
+3. While the sink prepares, the source is told to come back (`BUSY`), and when: preparation starts
+   at once and takes a moment, so the reply asks for the same proposal again after 200 ms. The
+   source repeats it and is then answered `SNAPSHOT_START_ACCEPTED` with the attempt's generation.
+   Only now does the source send data; every message carries the attempt's identity and generation.
 4. `SNAPSHOT_END` moves the lease to `APPLYING` and marks the sink's data inconsistent in the same
    transaction. The sink applies the snapshot by itself. A transient failure is retried by the sink
    within the same budget. During the transfer, a write that the sink's sequencer refused (it failed
@@ -64,6 +65,22 @@ already reports.
 Anything the sink cannot process at the moment is answered with a typed `BUSY` reply that carries
 the lease, never by dropping the message: `ADMISSION_CLOSED` (come back later), `STALE_ATTEMPT`
 (this attempt is over, start again from the status), `OVERLOADED`, `UNSUPPORTED_PROTOCOL`.
+
+Neither side waits for a timer when there is an event to act on. The source takes its next step
+when the sink's reply arrives (status, acceptance, a `BUSY` with its retry time, acknowledgements);
+its two second status poll is what notices a lost reply or a change nobody announced. The sink
+reconciles the lease the moment it reserves an attempt, takes the end marker, abandons, or finishes
+a step; its one second reconciliation is what retries a step that failed and enforces the deadlines.
+A small snapshot sync therefore costs a few round trips plus the apply, not a period per step.
+
+A source that gives up tells the sink (`SNAPSHOT_CANCEL`), also when it has proposed an attempt but
+not yet seen it accepted: the sink reserves, and freezes the checkpointer, when it takes the
+proposal, which is before the source can know. Such a cancellation carries no generation and is
+matched by the attempt id, which only that source has. A cancellation often goes out on the very
+connection whose loss is the reason for it, so the source's next run repeats it, at the pace of its
+status polls, for as long as the sink still shows that attempt waiting for data. Only a source that
+is gone for good (it crashed, or its leader moved to another node) leaves the attempt to the idle
+interval below.
 
 ## What bounds the freeze
 

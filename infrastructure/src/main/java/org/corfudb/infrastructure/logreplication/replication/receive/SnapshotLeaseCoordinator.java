@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.Meter;
@@ -78,6 +79,14 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     /** How long the trim that follows a satisfying cycle may take before another cycle is requested. */
     static final long TRIM_WAIT_MS = TimeUnit.MINUTES.toMillis(2);
 
+    /**
+     * What a source is told to wait when its START has been reserved and is being prepared, which
+     * takes a moment, not the seconds any other refusal takes to clear.
+     */
+    public static final long PREPARING_RETRY_AFTER_MS = 200;
+
+    static final long RECONCILE_PERIOD_MS = 1000;
+
     private static final int MAX_TABLES_IN_DETAIL = 10;
     private static final long RETRY_AFTER_MS = 2000;
 
@@ -131,6 +140,11 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     private boolean checkpointRequested;
     private volatile String reportedBlockedDescription;
 
+    // Reconciliations asked for ahead of the period. A driver that is not scheduled (a test drives
+    // it by hand) only counts them.
+    @VisibleForTesting
+    final AtomicLong requestedReconciliations = new AtomicLong();
+
     // Observability. Gauges are backed by these holders and refreshed on every reconciliation.
     private final AtomicInteger recoveryBlocked = new AtomicInteger();
     private final AtomicInteger snapshotFailing = new AtomicInteger();
@@ -169,6 +183,13 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
         DistributedCheckpointerHelper checkpointer;
         ExecutorService executor;
         boolean scheduled;
+        /** Period of the reconciliation that retries what failed and notices what nothing announces. */
+        long periodMs;
+
+        Environment(LongSupplier clock, LongSupplier ticker, SnapshotSyncLeaseStore store,
+                    DistributedCheckpointerHelper checkpointer, ExecutorService executor, boolean scheduled) {
+            this(clock, ticker, store, checkpointer, executor, scheduled, RECONCILE_PERIOD_MS);
+        }
     }
 
     public interface Worker {
@@ -216,7 +237,7 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             throw new IllegalStateException("Cannot initialize snapshot recovery", e);
         }
         if (scheduled) {
-            transitions.scheduleWithFixedDelay(this::tick, 0, 1, TimeUnit.SECONDS);
+            transitions.scheduleWithFixedDelay(this::tick, 0, environment.periodMs, TimeUnit.MILLISECONDS);
             health.scheduleWithFixedDelay(this::checkHealth, 1, 1, TimeUnit.SECONDS);
         }
     }
@@ -265,13 +286,27 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             installedGeneration = -1;
             interruptWorker();
             clearObservations();
-        } else if (scheduled) {
-            // Take over without waiting for the next periodic reconciliation.
-            try {
-                transitions.execute(this::tick);
-            } catch (java.util.concurrent.RejectedExecutionException e) {
-                log.debug("Snapshot lease driver is closed; ignoring leadership", e);
-            }
+        } else {
+            kick(); // Take over without waiting for the next periodic reconciliation.
+        }
+    }
+
+    /**
+     * Reconciles now instead of at the next period. Every step of a snapshot sync on this side
+     * (preparation, apply, installing the incremental writer, release, recovery) is a
+     * reconciliation away from the event that makes it due. Left to the period alone, each of
+     * them adds up to a second to every snapshot sync, and to the time protection is held. The
+     * period remains what retries a step that failed.
+     */
+    private void kick() {
+        requestedReconciliations.incrementAndGet();
+        if (!scheduled) {
+            return;
+        }
+        try {
+            transitions.execute(this::tick);
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            log.debug("Snapshot lease driver is closed; nothing to reconcile", e);
         }
     }
 
@@ -319,6 +354,7 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             });
             touchActivity(reserved.getGeneration());
             publish(reserved);
+            kick(); // Preparation is due.
             return reserved;
         } catch (SnapshotSyncLease.LeaseRejectedException e) {
             throw rejected(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED);
@@ -347,6 +383,11 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     public void exitTransfer() {
         lastActivityNanos = ticker.getAsLong();
         receiving.set(false);
+        if (view.get().getPhase() != Phase.TRANSFERRING) {
+            // The end marker was taken (apply is due) or the transfer was abandoned (release is
+            // due). Only now, because a reconciliation does nothing while a message is received.
+            kick();
+        }
     }
 
     public void transferComplete(SnapshotSyncLeaseRecord captured, long endSequence) {
@@ -375,11 +416,16 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             return abandoned;
         }));
         interruptWorker();
+        kick(); // Release is due.
     }
 
     public LogReplicationBusyException rejected(LogReplicationBusyResponseMsg.Reason reason) {
+        return rejected(reason, RETRY_AFTER_MS);
+    }
+
+    public LogReplicationBusyException rejected(LogReplicationBusyResponseMsg.Reason reason, long retryAfterMs) {
         return new LogReplicationBusyException(LogReplicationBusyResponseMsg.newBuilder()
-                .setReason(reason).setSnapshotLease(status()).setRetryAfterMs(RETRY_AFTER_MS).build());
+                .setReason(reason).setSnapshotLease(status()).setRetryAfterMs(retryAfterMs).build());
     }
 
     void tick() {
@@ -591,6 +637,8 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
         try {
             effects.execute(() -> {
                 workerThread = Thread.currentThread();
+                SnapshotSyncLeaseRecord before = view.get();
+                long installedBefore = installedGeneration;
                 try {
                     action.run();
                 } catch (Throwable e) {
@@ -599,6 +647,13 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
                     workerThread = null;
                     Thread.interrupted();
                     busy.set(false);
+                    SnapshotSyncLeaseRecord after = view.get();
+                    if (before.getPhase() != after.getPhase() || before.getOutcome() != after.getOutcome()
+                            || before.getGeneration() != after.getGeneration() || installedBefore != installedGeneration) {
+                        // The effect moved the lease on, so the next step is due. One that failed
+                        // and left the lease where it was is retried by the period, not at once.
+                        kick();
+                    }
                 }
             });
         } catch (java.util.concurrent.RejectedExecutionException e) {

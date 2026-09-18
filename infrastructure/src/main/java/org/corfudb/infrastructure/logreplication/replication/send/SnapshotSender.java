@@ -25,6 +25,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.SnapshotSyncLease;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
@@ -111,17 +112,26 @@ public class SnapshotSender {
     private volatile long wireAttemptGeneration;
 
     // Written by the FSM worker that runs the steps, read by stop(), which the FSM consumer calls.
+    // A START went out for the current identity: the sink may hold a reservation for it, whether or
+    // not this sender ever sees it accepted.
+    private volatile boolean proposed;
     private volatile boolean admitted;
     private volatile boolean transferFinished;
     private volatile boolean cancelSent;
     // This run gave up and asked the FSM for a new one; nothing of it runs any more.
     private volatile boolean cancelled;
+    // A cancellation the sink has not been seen to act on, see repeatOwedCancel(). It outlives
+    // reset(): it is about the attempt of an earlier run.
+    private volatile LogReplicationEntryMsg owedCancel;
+    private volatile long lastCancelNanos;
     private boolean unsupportedSinkReported;
     private CompletableFuture<Object> replySignal;
     private CompletableFuture<LogReplicationMetadataResponseMsg> statusFuture;
     private CompletableFuture<LogReplicationEntryMsg> admissionFuture;
     private long statusRequestNanos;
     private long admissionRequestNanos;
+    // The sink answered BUSY to the current proposal: the same proposal is not sent again before this.
+    private long admissionNotBeforeNanos;
     private long lastStatusPollNanos;
     private SnapshotSyncLeaseRecord remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
     private LogReplicationEntryMsg admissionRequest;
@@ -186,13 +196,14 @@ public class SnapshotSender {
     }
 
     private void step(UUID eventId, boolean forced) {
-        pollStatus();
+        pollStatus(eventId);
         if (remoteLease.getSchemaVersion() != SnapshotSyncLease.VERSION) {
             // No usable status yet: the reply is outstanding, was lost, or the sink has not
             // initialized its lease (it is not the leader yet).
             scheduleContinuation(eventId, STATUS_POLL_MS);
             return;
         }
+        repeatOwedCancel();
         boolean sameTopology = remoteLease.getTopologyConfigId() == fsm.getTopologyConfigId();
         // Identity and topology are separate questions: an attempt of this sender that was admitted
         // under a topology this source has since moved on from is still this sender's to cancel.
@@ -221,7 +232,7 @@ public class SnapshotSender {
             return;
         }
         if (!admitted && !negotiateAdmission(eventId, ours)) {
-            scheduleContinuation(eventId, STATUS_POLL_MS);
+            scheduleContinuation(eventId, admissionWaitMs());
             return;
         }
         transfer(eventId, forced);
@@ -232,7 +243,7 @@ public class SnapshotSender {
      * the snapshot attempt: a late reply cannot authorize this run, and a lost START reply must be
      * reconciled/retried using the identical proposal.
      */
-    private void pollStatus() {
+    private void pollStatus(UUID eventId) {
         long now = nanoTime.getAsLong();
         if (statusFuture != null && !statusFuture.isDone() && now - statusRequestNanos >= REQUEST_TIMEOUT_NANOS) {
             statusFuture = null;
@@ -245,6 +256,7 @@ public class SnapshotSender {
             lastStatusPollNanos = now;
             statusRequestNanos = now;
             statusFuture = observeReply(dataSender.sendMetadataRequest(), statusRequestNanos);
+            continueOnReply(statusFuture, eventId, false);
         }
         if (statusFuture == null || !statusFuture.isDone()) {
             return;
@@ -288,14 +300,31 @@ public class SnapshotSender {
             admissionRequest = start.toBuilder().setMetadata(start.getMetadata().toBuilder()
                     .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
                     .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
+            // The sink has not refused this proposal yet.
+            admissionNotBeforeNanos = nanoTime.getAsLong();
         }
-        if (admissionFuture == null && admissionRequest != null && (remoteLease.getPhase() == Phase.READY || ours)) {
+        if (admissionFuture == null && admissionRequest != null && (remoteLease.getPhase() == Phase.READY || ours)
+                && nanoTime.getAsLong() - admissionNotBeforeNanos >= 0) {
             admissionRequestNanos = nanoTime.getAsLong();
+            proposed = true;
             admissionFuture = observeReply(dataSender.send(admissionRequest), admissionRequestNanos);
+            continueOnReply(admissionFuture, eventId, true);
             // A transport that answers synchronously already has the reply.
             return consumeAdmissionReply(eventId);
         }
         return false;
+    }
+
+    /** Until the refused proposal may be sent again, and never longer than until the next status poll. */
+    private long admissionWaitMs() {
+        long untilRetryMs = TimeUnit.NANOSECONDS.toMillis(admissionNotBeforeNanos - nanoTime.getAsLong());
+        return untilRetryMs <= 0 ? STATUS_POLL_MS : Math.max(MIN_WAIT_MS, Math.min(STATUS_POLL_MS, untilRetryMs));
+    }
+
+    /** How long the sink asked to be left alone, within what this sender would wait anyway. */
+    private static long retryAfterMs(LogReplicationBusyException busy) {
+        long hint = busy.getResponse().getRetryAfterMs();
+        return hint <= 0 ? STATUS_POLL_MS : Math.max(MIN_WAIT_MS, Math.min(STATUS_POLL_MS, hint));
     }
 
     private boolean consumeAdmissionReply(UUID eventId) {
@@ -320,6 +349,12 @@ public class SnapshotSender {
             }
         } catch (CompletionException | java.util.concurrent.CancellationException e) {
             log.debug("START not yet accepted; reconcile and retry the same proposal", e);
+            if (e.getCause() instanceof LogReplicationBusyException) {
+                // Typically the sink has reserved the attempt and is still preparing it. The reply
+                // wakes this sender up at once, so the retry is paced here and not by a poll period.
+                admissionNotBeforeNanos = nanoTime.getAsLong() + TimeUnit.MILLISECONDS.toNanos(
+                        retryAfterMs((LogReplicationBusyException) e.getCause()));
+            }
         } finally {
             admissionFuture = null;
         }
@@ -389,6 +424,28 @@ public class SnapshotSender {
     }
 
     /**
+     * The handshake follows the sink's replies as well. Status, START, the retry of a START the sink
+     * was still preparing, acceptance: on a poll period each, the smallest snapshot sync would take
+     * several periods before its first byte. The poll timer remains the fallback for a lost reply.
+     *
+     * @param onBusyOnly whether a failure other than a typed BUSY reply is left to the poll timer,
+     *                   so that a transport that fails at once is not retried at once
+     */
+    private synchronized <T> void continueOnReply(CompletableFuture<T> reply, UUID eventId, boolean onBusyOnly) {
+        if (reply.isDone()) {
+            return; // A synchronous transport: the step that sent the request consumes the reply.
+        }
+        long captured = runGeneration;
+        reply.whenComplete((value, failure) -> {
+            Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                    ? failure.getCause() : failure;
+            if (failure == null || !onBusyOnly || cause instanceof LogReplicationBusyException) {
+                continueNow(eventId, captured);
+            }
+        });
+    }
+
+    /**
      * Transfer speed must follow the sink's acknowledgements, not a timer: a window of a few
      * messages refilled once per timer period could never move a large snapshot inside its budget.
      */
@@ -414,7 +471,13 @@ public class SnapshotSender {
     }
 
     private synchronized void scheduleContinuation(UUID eventId, long delayMs) {
-        if (stopSnapshotSync.get() || (continuation != null && !continuation.isDone())) { return; }
+        if (stopSnapshotSync.get()) { return; }
+        if (continuation != null && !continuation.isDone()) {
+            if (continuation.getDelay(TimeUnit.MILLISECONDS) <= delayMs) { return; }
+            // Pending, but later than this step needs: typically the poll-period fallback of the
+            // step that sent a request, while this step has just been told when to come back.
+            continuation.cancel(false);
+        }
         long captured = runGeneration;
         continuation = CONTINUATIONS.schedule(() -> {
             synchronized (SnapshotSender.this) {
@@ -529,14 +592,19 @@ public class SnapshotSender {
     }
 
     /**
-     * Tells the sink that an admitted transfer will not be finished, so that it releases its
-     * protection right away instead of noticing the silence minutes later. Best effort: if this is
-     * lost, the sink's own inactivity and deadline checks still end the attempt. An apply that is
-     * already running on the sink is never cancelled: it does not need the source any more.
+     * Tells the sink that a proposed or admitted transfer will not be finished, so that it releases
+     * its protection right away instead of noticing the silence minutes later. If this is lost, the
+     * next run repeats it (see {@link #repeatOwedCancel}); if there is no next run, the sink's own
+     * inactivity and deadline checks end the attempt. An apply that is already running on the sink
+     * is never cancelled: it does not need the source any more.
      */
     private void cancelAdmittedAttempt() {
         UUID attemptId = wireAttemptId;
-        if (!admitted || transferFinished || cancelSent || attemptId == null) {
+        // Proposed is enough. The sink reserves an attempt when it takes the START, which is before
+        // this sender learns of it: giving up in between without a word would leave the sink holding
+        // that reservation, and its protection, until its inactivity limit. The generation is then
+        // still unknown (0), which the sink accepts on a cancellation of the matching attempt.
+        if (!proposed || transferFinished || cancelSent || attemptId == null) {
             return;
         }
         cancelSent = true;
@@ -544,10 +612,40 @@ public class SnapshotSender {
         LogReplicationEntryMsg cancel = end.toBuilder().setMetadata(end.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)
                 .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION).setAttemptGeneration(wireAttemptGeneration)).build();
+        owedCancel = cancel;
+        sendCancel(cancel);
+    }
+
+    private void sendCancel(LogReplicationEntryMsg cancel) {
+        lastCancelNanos = nanoTime.getAsLong();
         try {
             dataSender.send(cancel).exceptionally(failure -> null);
         } catch (RuntimeException e) {
-            log.debug("Cancellation delivery failed; the sink deadline still applies", e);
+            log.debug("Cancellation delivery failed; it is repeated while the sink still holds the attempt", e);
+        }
+    }
+
+    /**
+     * The first cancellation often goes out on the very connection whose loss is the reason for it.
+     * A sink that never gets it keeps the attempt, closed to the next one and with the checkpointer
+     * frozen, until its inactivity limit. So the cancellation is repeated, at the pace of the status
+     * polls, for as long as the sink's status shows that attempt waiting for this source. An attempt
+     * whose transfer is complete is left alone: the sink applies it, and the next run follows that.
+     */
+    private void repeatOwedCancel() {
+        LogReplicationEntryMsg owed = owedCancel;
+        if (owed == null) {
+            return;
+        }
+        boolean held = remoteLease.hasAttemptId()
+                && remoteLease.getAttemptId().equals(owed.getMetadata().getSyncRequestId())
+                && (remoteLease.getPhase() == Phase.PREPARING || remoteLease.getPhase() == Phase.TRANSFERRING);
+        if (!held) {
+            owedCancel = null;
+        } else if (nanoTime.getAsLong() - lastCancelNanos >= STATUS_POLL_NANOS) {
+            log.info("The sink still holds snapshot attempt {} of an earlier run; cancelling it again",
+                    CorfuProtocolCommon.getUUID(owed.getMetadata().getSyncRequestId()));
+            sendCancel(owed);
         }
     }
 
@@ -565,6 +663,7 @@ public class SnapshotSender {
         cancelAdmittedAttempt();
         wireAttemptId = UUID.randomUUID();
         wireAttemptGeneration = 0;
+        proposed = false;
         admitted = false;
         transferFinished = false;
         cancelSent = false;
@@ -572,6 +671,7 @@ public class SnapshotSender {
         statusFuture = null;
         admissionFuture = null;
         admissionRequest = null;
+        admissionNotBeforeNanos = 0;
         lastStatusPollNanos = 0;
         remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
         // TODO: Do we need to persist the lastTransferDone in the event of failover?

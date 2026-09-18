@@ -190,16 +190,17 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.rxState = RxState.LOG_ENTRY_SYNC;
 
         initWriterAndBufferMgr();
-        lifecycle = newCoordinator(leaseTiming);
+        lifecycle = newCoordinator(leaseTiming, SnapshotLeaseCoordinator.RECONCILE_PERIOD_MS);
     }
 
-    private SnapshotLeaseCoordinator newCoordinator(SnapshotLeaseCoordinator.Timing timing) {
+    private SnapshotLeaseCoordinator newCoordinator(SnapshotLeaseCoordinator.Timing timing, long reconcilePeriodMs) {
         return new SnapshotLeaseCoordinator(runtime, logReplicationMetadataManager, snapshotSyncPlugin,
                 new SnapshotLeaseCoordinator.Worker() {
                     public void prepare(SnapshotSyncLeaseRecord attempt) { prepareOwnedSnapshot(attempt); }
                     public void apply(SnapshotSyncLeaseRecord attempt) { applyOwnedSnapshot(attempt); }
                     public void completed(SnapshotSyncLeaseRecord attempt) { installCompletedSnapshot(attempt); }
-                }, timing);
+                }, timing, new SnapshotLeaseCoordinator.Environment(System::currentTimeMillis, System::nanoTime,
+                        null, null, null, true, reconcilePeriodMs));
     }
 
     /**
@@ -209,12 +210,21 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @VisibleForTesting
     public synchronized void configureSnapshotLifecycle(SnapshotLeaseCoordinator.Timing timing) {
+        configureSnapshotLifecycle(timing, SnapshotLeaseCoordinator.RECONCILE_PERIOD_MS);
+    }
+
+    /**
+     * Test-only seam, as above, that also sets the period of the lease driver's reconciliation. With
+     * a period far longer than a test, whatever the test sees happen was driven by events alone.
+     */
+    @VisibleForTesting
+    public synchronized void configureSnapshotLifecycle(SnapshotLeaseCoordinator.Timing timing, long reconcilePeriodMs) {
         if (leadershipGranted) {
             throw new IllegalStateException("The snapshot lease driver is already running");
         }
         lifecycle.close();
         leaseTiming = timing;
-        lifecycle = newCoordinator(timing);
+        lifecycle = newCoordinator(timing, reconcilePeriodMs);
         lifecycle.sinkRole(sinkRole);
     }
 
@@ -431,13 +441,19 @@ public class LogReplicationSinkManager implements DataReceiver {
         if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
             state = lifecycle.start(entry);
             if (state.getPhase() != Phase.TRANSFERRING && state.getPhase() != Phase.APPLYING) {
-                // Reserved, but preparation has not finished. The source retries the same proposal.
-                throw lifecycle.rejected(Reason.ADMISSION_CLOSED);
+                // Reserved, but preparation has not finished. The source retries the same proposal,
+                // and soon: preparation has already been started and only takes a moment.
+                throw lifecycle.rejected(Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS);
             }
             return getLrEntryAckMsg(entry.toBuilder().setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
                     .setAttemptGeneration(state.getGeneration()).build());
         }
-        if (!SnapshotSyncLease.matches(state, entry) || state.getGeneration() != entry.getAttemptGeneration()) {
+        // A source that gives up before it has seen its START accepted does not know the generation
+        // the sink reserved for it. Its attempt id, which only that source has, identifies the attempt.
+        boolean cancelOfUnseenAdmission = entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_CANCEL
+                && entry.getAttemptGeneration() == 0;
+        if (!SnapshotSyncLease.matches(state, entry)
+                || (state.getGeneration() != entry.getAttemptGeneration() && !cancelOfUnseenAdmission)) {
             throw lifecycle.rejected(Reason.STALE_ATTEMPT);
         }
         if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_CANCEL) {
