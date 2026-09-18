@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -83,6 +84,24 @@ class SnapshotSourceLifecycleTest {
     private void drive() {
         source.pollStatusNow();
         source.transmit(eventId, false);
+    }
+
+    /**
+     * Counts down when the sender asks the FSM for its next step from now on. A verification with a
+     * timeout cannot be used for this: LogReplicationFSM.input is synchronized, and Mockito holds
+     * the mock's monitor for as long as such a verification polls, so the thread that delivers the
+     * event could never get in while the test waits for it.
+     */
+    private CountDownLatch nextContinuation() {
+        CountDownLatch requested = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            LogReplicationEvent event = invocation.getArgument(0);
+            if (event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE) {
+                requested.countDown();
+            }
+            return null;
+        }).when(fsm).input(any());
+        return requested;
     }
 
     private void accept() {
@@ -600,15 +619,14 @@ class SnapshotSourceLifecycleTest {
         drive();
         assertEquals(whenFull, sent.size(), "a full window sends nothing");
         TimeUnit.MILLISECONDS.sleep(200); // Let continuations of the earlier steps fire.
-        clearInvocations(fsm);
+        CountDownLatch continued = nextContinuation();
 
         LogReplicationEntryMsg first = sent.get(1);
         replies.get(0).complete(first.toBuilder().setMetadata(first.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_REPLICATED)).build());
 
         // Well inside the status poll period, which is the only timer a waiting step has.
-        verify(fsm, timeout(1000).atLeastOnce()).input(argThat(event ->
-                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE));
+        assertTrue(continued.await(1, TimeUnit.SECONDS), "the reply did not wake the sender up");
         drive();
         assertEquals(whenFull + 1, sent.size(), "the freed slot is used by the next step");
     }
@@ -672,7 +690,7 @@ class SnapshotSourceLifecycleTest {
 
     /** The worker only records a failure in a Future nobody reads: a step must reschedule itself. */
     @Test
-    void aStepThatDiesWithAnErrorIsStillRetried() {
+    void aStepThatDiesWithAnErrorIsStillRetried() throws Exception {
         when(reader.read(any())).thenThrow(new AssertionError("unexpected"));
         drive();
         LogReplicationEntryMsg start = sent.get(0);
@@ -680,12 +698,11 @@ class SnapshotSourceLifecycleTest {
         status.set(SnapshotSyncLease.prepared(reserved));
         admission.complete(start.toBuilder().setMetadata(start.getMetadata().toBuilder()
                 .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(reserved.getGeneration())).build());
-        clearInvocations(fsm);
+        CountDownLatch continued = nextContinuation();
 
         assertThrows(AssertionError.class, this::drive);
 
-        verify(fsm, timeout(5000).atLeastOnce()).input(argThat(event ->
-                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE));
+        assertTrue(continued.await(5, TimeUnit.SECONDS), "nothing would ever run this snapshot sync again");
     }
 
     @Test

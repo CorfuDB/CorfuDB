@@ -206,15 +206,13 @@ public class SourceForwardingDataSender implements DataSender {
             return new CompletableFuture<>();
         }
 
-        // Check if the SNAPSHOT_START message must be dropped
-        if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
-                LogReplicationEntryType.SNAPSHOT_START) {
-            // If a limited number of START messages must be dropped, drop them only if the number is yet to be
-            // reached
-            if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
-                numStartMsgsDropped++;
-                return new CompletableFuture<>();
-            }
+        // Check if the SNAPSHOT_START message must be dropped. If a limited number of START messages must be
+        // dropped, drop them only if the number is yet to be reached
+        if (testConfig.isDropSnapshotStartMsg()
+                && message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START
+                && numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
+            numStartMsgsDropped++;
+            return new CompletableFuture<>();
         }
 
         if (message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START

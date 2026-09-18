@@ -81,37 +81,6 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     private static final int MAX_TABLES_IN_DETAIL = 10;
     private static final long RETRY_AFTER_MS = 2000;
 
-    /** Timing policy of the lease. A non-positive {@code idleMs} disables inactivity abandonment. */
-    @Value
-    public static class Timing {
-        /** Total budget of one attempt: preparation, transfer, apply and apply retries. */
-        long durationMs;
-        /** Minimum time protection stays released before admission may reopen. */
-        long recoveryMs;
-        /** How long cleanup or recovery may take before it is reported. */
-        long alarmMs;
-        /** How long an admitted attempt may go without accepted snapshot traffic. */
-        long idleMs;
-        /** Retries of a transiently failing apply, all inside the same budget. */
-        int maxApplyRetries;
-    }
-
-    @lombok.AllArgsConstructor
-    static class Environment {
-        LongSupplier clock;
-        LongSupplier ticker;
-        SnapshotSyncLeaseStore store;
-        DistributedCheckpointerHelper checkpointer;
-        ExecutorService executor;
-        boolean scheduled;
-    }
-
-    public interface Worker {
-        void prepare(SnapshotSyncLeaseRecord attempt);
-        void apply(SnapshotSyncLeaseRecord attempt);
-        void completed(SnapshotSyncLeaseRecord attempt);
-    }
-
     private final CorfuRuntime runtime;
     private final LogReplicationMetadataManager metadata;
     private final SnapshotSyncLeaseStore store;
@@ -176,6 +145,37 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-transitions-%d").build());
     private final ScheduledExecutorService health = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-lease-health-%d").build());
+
+    /** Timing policy of the lease. A non-positive {@code idleMs} disables inactivity abandonment. */
+    @Value
+    public static class Timing {
+        /** Total budget of one attempt: preparation, transfer, apply and apply retries. */
+        long durationMs;
+        /** Minimum time protection stays released before admission may reopen. */
+        long recoveryMs;
+        /** How long cleanup or recovery may take before it is reported. */
+        long alarmMs;
+        /** How long an admitted attempt may go without accepted snapshot traffic. */
+        long idleMs;
+        /** Retries of a transiently failing apply, all inside the same budget. */
+        int maxApplyRetries;
+    }
+
+    @lombok.AllArgsConstructor
+    static class Environment {
+        LongSupplier clock;
+        LongSupplier ticker;
+        SnapshotSyncLeaseStore store;
+        DistributedCheckpointerHelper checkpointer;
+        ExecutorService executor;
+        boolean scheduled;
+    }
+
+    public interface Worker {
+        void prepare(SnapshotSyncLeaseRecord attempt);
+        void apply(SnapshotSyncLeaseRecord attempt);
+        void completed(SnapshotSyncLeaseRecord attempt);
+    }
 
     public SnapshotLeaseCoordinator(CorfuRuntime runtime, LogReplicationMetadataManager metadata,
                                     ISnapshotSyncPlugin plugin, Worker worker, Timing timing) {

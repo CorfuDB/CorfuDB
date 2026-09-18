@@ -314,8 +314,11 @@ class SnapshotLeaseCoordinatorTest {
     @Test
     void aReservationThatLosesACommitRaceIsAnsweredWithATypedReply() {
         SnapshotSyncLeaseRecord before = persisted.get();
-        when(store.updateOwned(anyString(), any())).thenThrow(new TransactionAbortedException(
-                new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)), AbortCause.CONFLICT, new Throwable(), null));
+        // doThrow, not when(): when(store.updateOwned(anyString(), any())) would call the answer that
+        // is already stubbed, with the empty owner that anyString() evaluates to.
+        doThrow(new TransactionAbortedException(
+                new TxResolutionInfo(UUID.randomUUID(), new Token(0, 0)), AbortCause.CONFLICT, new Throwable(), null))
+                .when(store).updateOwned(anyString(), any());
         LogReplicationBusyException busy = assertThrows(LogReplicationBusyException.class, () -> coordinator.start(proposal()));
         assertEquals(LogReplicationBusyResponseMsg.Reason.OVERLOADED, busy.getResponse().getReason());
         assertTrue(busy.getResponse().getRetryAfterMs() > 0);
@@ -384,18 +387,20 @@ class SnapshotLeaseCoordinatorTest {
     void aLeadershipLossDuringTheTakeoverDoesNotLeaveTheNodeInitialized() {
         coordinator.leadership(false);
         coordinator.leadership(true);
-        when(store.update(any())).thenAnswer(invocation -> {
+        // doAnswer, not when(): when(store.update(any())) would call the answer that is already
+        // stubbed, with the null that any() evaluates to.
+        doAnswer(invocation -> {
             BiFunction<TxnContext, SnapshotSyncLeaseRecord, SnapshotSyncLeaseRecord> change = invocation.getArgument(0);
             SnapshotSyncLeaseRecord next = change.apply(txn, persisted.get());
             persisted.set(next);
             coordinator.leadership(false); // Lost while the transaction was in flight.
             return next;
-        }).thenAnswer(invocation -> {
+        }).doAnswer(invocation -> {
             BiFunction<TxnContext, SnapshotSyncLeaseRecord, SnapshotSyncLeaseRecord> change = invocation.getArgument(0);
             SnapshotSyncLeaseRecord next = change.apply(txn, persisted.get());
             persisted.set(next);
             return next;
-        });
+        }).when(store).update(any());
         clearInvocations(metadata, worker);
 
         coordinator.tick();
