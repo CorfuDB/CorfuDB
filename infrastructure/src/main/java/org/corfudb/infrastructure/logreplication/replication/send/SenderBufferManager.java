@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
@@ -11,18 +10,23 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
+import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.view.Address;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -77,15 +81,6 @@ public abstract class SenderBufferManager {
     public long maxAckTimestamp = Address.NON_ADDRESS;
 
     /*
-     * Wall-clock time maxAckTimestamp last actually advanced, i.e. the last time any real forward
-     * progress was made -- as opposed to msgTimer-driven resends, which happen on a fixed cadence
-     * regardless of whether the recipient is making any progress at all. Used to detect a
-     * genuinely-stalled recipient (see isGenuinelyStalled()).
-     */
-    @VisibleForTesting
-    volatile long lastAckAdvancedTimeMs = System.currentTimeMillis();
-
-    /*
      * The snapshot sync sequence number
      */
     protected long snapshotSyncSequenceNumber = Address.NON_ADDRESS;
@@ -95,6 +90,14 @@ public abstract class SenderBufferManager {
     private long topologyConfigId;
 
     private Optional<AtomicLong> ackCounter = Optional.empty();
+
+    /*
+     * Bounds of the pause taken when every outstanding request has failed, see processAcks().
+     */
+    private static final long MIN_RETRY_PAUSE_MS = 50;
+    private static final long MAX_RETRY_PAUSE_MS = 1000;
+
+    private volatile LogReplicationBusyResponseMsg lastBusyReply;
 
     /*
      * The messages sent to the receiver that have not been ACKed yet.
@@ -172,8 +175,14 @@ public abstract class SenderBufferManager {
 
         // A failed RPC is no longer a candidate ACK. Keep its buffered payload for a paced
         // resend, but do not let a settled exceptional future poison every subsequent anyOf.
-        pendingCompletableFutureForAcks.entrySet().removeIf(entry ->
-                entry.getValue().isCompletedExceptionally() || entry.getValue().isCancelled());
+        discardFailedRequests();
+
+        if (pendingCompletableFutureForAcks.isEmpty() && !pendingMessages.isEmpty()) {
+            // Every outstanding request failed (the sink answered BUSY, or the transport is down).
+            // There is nothing to wait on, and the caller comes straight back: without this pause it
+            // would spin until the resend timer of the buffered messages expires.
+            TimeUnit.MILLISECONDS.sleep(Math.max(MIN_RETRY_PAUSE_MS, Math.min(msgTimer, MAX_RETRY_PAUSE_MS)));
+        }
 
         if (!pendingCompletableFutureForAcks.isEmpty()) {
             ack = (LogReplicationEntryMsg) CompletableFuture.anyOf(pendingCompletableFutureForAcks
@@ -189,6 +198,94 @@ public abstract class SenderBufferManager {
         }
 
         return ack;
+    }
+
+    private void discardFailedRequests() {
+        pendingCompletableFutureForAcks.entrySet().removeIf(entry -> {
+            CompletableFuture<LogReplicationEntryMsg> reply = entry.getValue();
+            if (!reply.isCompletedExceptionally() && !reply.isCancelled()) {
+                return false;
+            }
+            reply.exceptionally(failure -> {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                        ? failure.getCause() : failure;
+                if (cause instanceof LogReplicationBusyException) {
+                    lastBusyReply = ((LogReplicationBusyException) cause).getResponse();
+                }
+                return null;
+            });
+            return true;
+        });
+    }
+
+    /**
+     * The most recent typed BUSY reply of the sink, cleared by reading it. It carries the sink's
+     * lease, which tells a sender why it is not being served.
+     */
+    public LogReplicationBusyResponseMsg takeLastBusyReply() {
+        LogReplicationBusyResponseMsg busy = lastBusyReply;
+        lastBusyReply = null;
+        return busy;
+    }
+
+    /**
+     * Consumes every acknowledgement that has already arrived, without waiting for one. A failed
+     * request is not an acknowledgement: its payload stays buffered and is resent on its timer.
+     *
+     * @return the acknowledgement that ends a snapshot transfer if one arrived, otherwise the last
+     *         one consumed, or null if none had arrived
+     */
+    public LogReplicationEntryMsg pollAcks() {
+        discardFailedRequests();
+        LogReplicationEntryMsg result = null;
+        // updateAck() replaces the map, so iterate over a copy of what is outstanding now.
+        for (Map.Entry<Long, CompletableFuture<LogReplicationEntryMsg>> pending
+                : new ArrayList<>(pendingCompletableFutureForAcks.entrySet())) {
+            CompletableFuture<LogReplicationEntryMsg> reply = pending.getValue();
+            if (!reply.isDone() || reply.isCompletedExceptionally()) {
+                continue;
+            }
+            // A reply is consumed once, whatever it says. One that updateAck() ignores (it belongs to
+            // another attempt) would otherwise count as arrived on every step, forever; its message
+            // stays buffered and is resent on its timer.
+            pendingCompletableFutureForAcks.remove(pending.getKey(), reply);
+            LogReplicationEntryMsg ack = reply.getNow(null);
+            if (ack == null) {
+                continue;
+            }
+            updateAck(ack);
+            ackCounter.ifPresent(AtomicLong::incrementAndGet);
+            if (result == null || result.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE) {
+                result = ack;
+            }
+        }
+        return result;
+    }
+
+    /** Whether a reply has arrived that {@link #pollAcks()} has not consumed yet. */
+    public boolean hasArrivedReplies() {
+        for (CompletableFuture<LogReplicationEntryMsg> reply : pendingCompletableFutureForAcks.values()) {
+            if (reply.isDone() && !reply.isCompletedExceptionally()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Requests whose reply has not arrived yet. */
+    public List<CompletableFuture<LogReplicationEntryMsg>> outstandingRequests() {
+        List<CompletableFuture<LogReplicationEntryMsg>> outstanding = new ArrayList<>();
+        for (CompletableFuture<LogReplicationEntryMsg> reply : pendingCompletableFutureForAcks.values()) {
+            if (!reply.isDone()) {
+                outstanding.add(reply);
+            }
+        }
+        return outstanding;
+    }
+
+    /** How long an unacknowledged message waits before it is sent again. */
+    public long getResendTimerMs() {
+        return msgTimer;
     }
 
     public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message) {
@@ -245,8 +342,13 @@ public abstract class SenderBufferManager {
             force = true;
         } catch (ExecutionException ee) {
             // Exceptions thrown from the send message completable future will be wrapped around ExecutionException
-            log.warn("Caught an execution exception while processing ACKs", ee);
             final Throwable cause = ee.getCause();
+            if (cause instanceof LogReplicationBusyException) {
+                // An answer, not a fault: the sink says it cannot serve this message right now.
+                log.debug("The sink replied BUSY while processing ACKs", ee);
+            } else {
+                log.warn("Caught an execution exception while processing ACKs", ee);
+            }
             if (cause instanceof TimeoutException) {
                 force = true;
             }
@@ -254,11 +356,20 @@ public abstract class SenderBufferManager {
             log.warn("Caught an exception while processing ACKs.", e);
         }
 
+        resendPending(force);
+        return ack;
+    }
+
+    /** Resends what has been waiting for an acknowledgement for longer than the resend timer. */
+    public void resendTimedOut() {
+        resendPending(false);
+    }
+
+    private void resendPending(boolean force) {
         for (int i = 0; i < pendingMessages.getSize(); i++) {
             LogReplicationPendingEntry entry = pendingMessages.getPendingEntries().get(i);
-            if (entry.timeout(msgTimer) || force || entry.isExpedited()) {
+            if (entry.timeout(msgTimer) || force) {
                 entry.retry();
-                entry.setExpedited(false);
                 // Update metadata as topologyConfigId could have changed in between resend cycles
                 LogReplicationEntryMsg dataEntry = entry.getData();
                 LogReplicationEntryMetadataMsg metadata = overrideTopologyConfigId(
@@ -272,8 +383,6 @@ public abstract class SenderBufferManager {
                         entry.getData().getMetadata().getSnapshotSyncSeqNum());
             }
         }
-
-        return ack;
     }
 
 
@@ -287,27 +396,6 @@ public abstract class SenderBufferManager {
         maxAckTimestamp = lastAckedTimestamp;
         pendingMessages.clear();
         pendingCompletableFutureForAcks.clear();
-        lastAckAdvancedTimeMs = System.currentTimeMillis();
-    }
-
-    /**
-     * Record that maxAckTimestamp just genuinely advanced. Called by subclasses' updateAck()
-     * implementations, not derived generically here, since what counts as "advancing" differs
-     * (snapshotSyncSeqNum vs. log entry timestamp).
-     */
-    protected void markAckAdvanced() {
-        lastAckAdvancedTimeMs = System.currentTimeMillis();
-    }
-
-    /**
-     * How long it's been, in real wall-clock time, since maxAckTimestamp last genuinely advanced.
-     * Unlike LogReplicationPendingEntry's resend timer (which resets on every resend regardless of
-     * whether the recipient is making progress), this reflects actual forward progress -- used to
-     * detect a genuinely-stalled recipient rather than merely a slow one still being resent to on
-     * cadence. Returns 0 if there's nothing pending (no stall is possible with an empty buffer).
-     */
-    public long getMillisSinceLastAckAdvance() {
-        return pendingMessages.isEmpty() ? 0 : System.currentTimeMillis() - lastAckAdvancedTimeMs;
     }
 
     public abstract void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf);

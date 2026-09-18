@@ -494,6 +494,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.reconcileStatusTable();
                 replicationManager.start();
+                // The lock holder also settles what this cluster's sink may have left in the snapshot
+                // lease when the role changed (an attempt in flight keeps the checkpointer frozen).
+                // The server itself stays closed to replication traffic while the cluster is active.
+                interClusterReplicationService.getLogReplicationServer().getSinkManager().setLeadership(true);
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;

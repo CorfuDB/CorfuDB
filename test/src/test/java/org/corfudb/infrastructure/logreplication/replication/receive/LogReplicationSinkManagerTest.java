@@ -1,469 +1,357 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.protobuf.ByteString;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.service.CorfuProtocolLogReplication;
+import org.corfudb.runtime.CompactorMetadataTables;
+import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
+import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
-import org.junit.Assert;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.time.Duration;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for the concurrency/state-machine logic added to LogReplicationSinkManager by the
- * snapshot-sync backpressure/freeze-lifecycle fix: resumeSnapshotApply()'s backoff-and-cap
- * accounting, the receive()/ongoingApply single-flight gate, self-unfreeze
- * (checkSnapshotSyncLiveness()) and stuck-apply detection (checkForStuckApply()). Previously none
- * of this had dedicated unit coverage -- only indirectly, and non-deterministically w.r.t. timing,
- * through the full two-cluster LogReplicationIT integration tests.
- *
- * Uses the {@code @VisibleForTesting} constructor that skips real CorfuRuntime.connect() and
- * reflective plugin classloading (see that constructor's Javadoc), and the package-private
- * (also {@code @VisibleForTesting}) backoff/timestamp fields to fast-forward past real-time delays
- * (backoff waits up to MAX_RETRY_BACKOFF_MS, the self-unfreeze timeout, the 30 minute stuck-apply
- * bound) that would otherwise make these paths impractical to exercise in a unit test.
+ * The sink side of snapshot sync, against a real store. Snapshot sync is governed by the sink's
+ * lease only: there is no other protocol to fall back to, anything that cannot be processed is
+ * answered with a typed reply instead of being dropped, and the checkpointer is released by the
+ * sink on its own, whatever the source does.
  */
 public class LogReplicationSinkManagerTest extends AbstractViewTest {
 
-    private static final long TOPOLOGY_CONFIG_ID = 5L;
+    private static final long TOPOLOGY = 5L;
+    private static final long SNAPSHOT = 100L;
+    private static final long IDLE_MS = 1500;
 
-    private CorfuRuntime corfuRuntime;
-    private LogReplicationMetadataManager metadataManager;
-    private ISnapshotSyncPlugin snapshotSyncPlugin;
-    private LogReplicationSinkManager sinkManager;
+    private final String streamName = "sink-manager-test-data";
+    private final UUID stream = CorfuRuntime.getStreamID(streamName);
+
+    private CorfuRuntime rt;
+    private LogReplicationConfig config;
+    private LogReplicationMetadataManager metadata;
+    private DistributedCheckpointerHelper checkpointer;
+    private ISnapshotSyncPlugin plugin;
+    private LogReplicationSinkManager sink;
 
     @Before
-    public void setUp() {
-        corfuRuntime = getDefaultRuntime();
-        // Force protobuf serializer registration, needed by SinkWriter's constructor chain.
-        corfuRuntime.getTableRegistry();
-
-        LogReplicationConfig config = mock(LogReplicationConfig.class);
-        LogReplicationConfigManager configManager = mock(LogReplicationConfigManager.class);
-        doReturn(configManager).when(config).getConfigManager();
-        doReturn(corfuRuntime).when(configManager).getConfigRuntime();
-
-        metadataManager = mock(LogReplicationMetadataManager.class);
-        doReturn(TOPOLOGY_CONFIG_ID).when(metadataManager).getTopologyConfigId();
-
-        snapshotSyncPlugin = mock(ISnapshotSyncPlugin.class);
-
-        sinkManager = new LogReplicationSinkManager(corfuRuntime, config, metadataManager, snapshotSyncPlugin);
-        sinkManager.updateTopologyConfigId(TOPOLOGY_CONFIG_ID);
-    }
-
-    private LogReplicationEntryMsg snapshotStartMsg(UUID syncId, long snapshotTimestamp) {
-        LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
-                .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                .setTopologyConfigID(TOPOLOGY_CONFIG_ID)
-                .setSyncRequestId(getUuidMsg(syncId))
-                .setSnapshotTimestamp(snapshotTimestamp)
-                .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                .build();
-        return LogReplicationEntryMsg.newBuilder().setMetadata(metadata).build();
-    }
-
-    // ---- receive() / ongoingApply single-flight gate ----
-
-    @Test
-    public void receiveDropsMessageWithMismatchedTopologyConfigId() {
-        LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
-                .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                .setTopologyConfigID(TOPOLOGY_CONFIG_ID + 1)
-                .setSyncRequestId(getUuidMsg(UUID.randomUUID()))
-                .setSnapshotTimestamp(1L)
-                .build();
-        LogReplicationEntryMsg msg = LogReplicationEntryMsg.newBuilder().setMetadata(metadata).build();
-
-        Assert.assertNull(sinkManager.receive(msg));
-        // Never even reaches isValidSnapshotStart()/processSnapshotStart() -- the plugin must not
-        // have been asked to freeze for a message with the wrong topology config id.
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncStart(any());
-    }
-
-    @Test
-    public void processSnapshotStartFreezesAndStampsBaseSnapshotTimestamp() {
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(eq(TOPOLOGY_CONFIG_ID), eq(100L));
-
-        Assert.assertNull(sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 100L)));
-
-        verify(snapshotSyncPlugin, times(1)).onSnapshotSyncStart(corfuRuntime);
-        Assert.assertEquals(100L, sinkManager.getBaseSnapshotTimestamp());
-    }
-
-    @Test
-    public void receiveDropsFreshSnapshotStartWhileOngoingApplyTrue() {
-        // Simulate a resumed (or in-flight) apply for a prior attempt still running -- the sole
-        // gate that keeps a fresh attempt's SNAPSHOT_START from being accepted (and, transitively,
-        // from clobbering the in-flight apply's metadata-store bookkeeping); see receive()'s
-        // Javadoc-level comment and this class's isMessageFromNewSnapshotSync().
-        sinkManager.getOngoingApply().set(true);
-
-        Assert.assertNull(sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 200L)));
-
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncStart(any());
-        verify(metadataManager, never()).setBaseSnapshotStart(anyLong(), anyLong());
-    }
-
-    // ---- startSnapshotApply(): an individual failed attempt must not unfreeze ----
-
-    @Test
-    public void individualApplyFailureDoesNotUnfreezeWhileRetriesRemain() throws Exception {
-        // There's no way to force a real concurrent trim deterministically in a unit test, so this
-        // injects the one otherwise-untriggerable failure directly: the apply call itself throwing,
-        // exactly as it would if a concurrent trim removed shadow-stream data mid-read.
-        StreamsSnapshotWriter failingWriter = mock(StreamsSnapshotWriter.class);
-        doReturn(StreamsSnapshotWriter.Phase.TRANSFER_PHASE).when(failingWriter).getPhase();
-        doThrow(new TrimmedException("shadow stream data trimmed concurrently"))
-                .when(failingWriter).startSnapshotSyncApply();
-        sinkManager.setSnapshotWriter(failingWriter);
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        // Otherwise defaults to 0 (Mockito's default for an unstubbed long-returning method),
-        // which would desync SnapshotSinkBufferManager's lastProcessedSeq from the seqNum=0
-        // SNAPSHOT_END below and cause it to be silently buffered instead of processed.
-        doReturn(Address.NON_ADDRESS).when(metadataManager).getLastSnapshotTransferredSequenceNumber();
-
-        UUID syncId = UUID.randomUUID();
-        sinkManager.receive(snapshotStartMsg(syncId, 100L));
-        LogReplicationEntryMetadataMsg endMetadata = LogReplicationEntryMetadataMsg.newBuilder()
-                .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
-                .setTopologyConfigID(TOPOLOGY_CONFIG_ID)
-                .setSyncRequestId(getUuidMsg(syncId))
-                .setSnapshotTimestamp(100L)
-                .setSnapshotSyncSeqNum(0L)
-                .build();
-        sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(endMetadata).build());
-
-        long deadline = System.currentTimeMillis() + 10_000;
-        while (sinkManager.getOngoingApply().get() && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
+    public void setUp() throws Exception {
+        rt = getDefaultRuntime();
+        metadata = new LogReplicationMetadataManager(rt, TOPOLOGY, "sink");
+        checkpointer = new DistributedCheckpointerHelper(metadata.getCorfuStore());
+        // A configured compaction service creates this record on its first pass. With it, admission
+        // stays closed after an attempt until a checkpoint and trim pass its recovery cut, so the
+        // state an abandoned attempt leaves behind stays in place to be inspected.
+        try (TxnContext txn = metadata.getTxnContext()) {
+            txn.putRecord(checkpointer.getCompactorMetadataTables().getCompactionManagerTable(),
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY,
+                    CheckpointingStatus.newBuilder().setStatus(CheckpointingStatus.StatusType.IDLE).build(), null);
+            txn.commit();
         }
-        Assert.assertFalse("ongoingApply must reset even though the attempt failed",
-                sinkManager.getOngoingApply().get());
 
-        // The sequence stays marked active, and checkpointing stays frozen -- see
-        // applyRetrySequenceActive's Javadoc for why: this attempt may still be retried in place by
-        // resumeSnapshotApply(), reading the same shadow-stream data.
-        Assert.assertTrue(sinkManager.applyRetrySequenceActive);
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
+        config = mock(LogReplicationConfig.class);
+        LogReplicationConfigManager configManager = mock(LogReplicationConfigManager.class);
+        when(config.getConfigManager()).thenReturn(configManager);
+        when(configManager.getConfigRuntime()).thenReturn(rt);
+        when(config.getStreamsIdToNameMap()).thenReturn(Map.of(stream, streamName));
+        when(config.getMaxDataSizePerMsg()).thenReturn(1024 * 1024);
+
+        plugin = mock(ISnapshotSyncPlugin.class);
+        sink = new LogReplicationSinkManager(rt, config, metadata, plugin);
+        sink.configureSnapshotLifecycle(new SnapshotLeaseCoordinator.Timing(60_000, 0, 5_000, IDLE_MS, 3));
+        sink.updateTopologyConfigId(TOPOLOGY);
     }
 
-    // ---- resumeSnapshotApply(): pending/ongoing re-validation ----
-
-    @Test
-    public void resumeSnapshotApplySkipsWhenOngoingApplyTrue() {
-        sinkManager.getOngoingApply().set(true);
-        doReturn(10L).when(metadataManager).getLastStartedSnapshotTimestamp();
-        doReturn(10L).when(metadataManager).getLastTransferredSnapshotTimestamp();
-        doReturn(5L).when(metadataManager).getLastAppliedSnapshotTimestamp();
-
-        sinkManager.resumeSnapshotApply();
-
-        // Nothing should have been touched -- ongoingApply.get() being true short-circuits before
-        // any backoff/attempt accounting.
-        Assert.assertEquals(0, sinkManager.resumeAttemptCount);
+    @After
+    public void tearDown() {
+        sink.shutdown();
     }
 
-    @Test
-    public void resumeSnapshotApplySkipsWhenNotActuallyPending() {
-        // started == transferred, but transferred <= applied: already applied, nothing to resume.
-        doReturn(10L).when(metadataManager).getLastStartedSnapshotTimestamp();
-        doReturn(10L).when(metadataManager).getLastTransferredSnapshotTimestamp();
-        doReturn(10L).when(metadataManager).getLastAppliedSnapshotTimestamp();
-
-        sinkManager.resumeSnapshotApply();
-
-        Assert.assertEquals(0, sinkManager.resumeAttemptCount);
-        Assert.assertFalse(sinkManager.getOngoingApply().get());
+    private void await(BooleanSupplier condition) throws InterruptedException {
+        long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (!condition.getAsBoolean() && System.nanoTime() < limit) { TimeUnit.MILLISECONDS.sleep(10); }
+        assertTrue("the sink did not reach the expected state, lease=" + sink.getSnapshotLease(), condition.getAsBoolean());
     }
 
-    // ---- resumeSnapshotApply(): backoff accounting ----
-
-    @Test
-    public void resumeSnapshotApplyDefersWithinBackoffWindow() {
-        seedPendingApply(10L);
-        sinkManager.resumeBackoffForStartedTimestamp = 10L;
-        sinkManager.nextResumeAttemptTimeMs = System.currentTimeMillis() + Duration.ofMinutes(1).toMillis();
-
-        sinkManager.resumeSnapshotApply();
-
-        Assert.assertEquals(0, sinkManager.resumeAttemptCount);
-        Assert.assertFalse(sinkManager.getOngoingApply().get());
+    private void lead() throws InterruptedException {
+        sink.setLeadership(true);
+        await(() -> sink.getSnapshotLease().getPhase() == Phase.READY);
     }
 
-    @Test
-    public void resumeSnapshotApplyProceedsOnceBackoffElapsedAndStampsBaseSnapshotTimestamp() {
-        seedPendingApply(10L);
-
-        sinkManager.resumeSnapshotApply();
-
-        Assert.assertEquals(1, sinkManager.resumeAttemptCount);
-        Assert.assertEquals(10L, sinkManager.getBaseSnapshotTimestamp());
-        // startSnapshotApplyAsync() submits to an async executor; ongoingApply flips to true
-        // synchronously (before submission) so this doesn't need to wait for the task to run.
-        Assert.assertTrue(sinkManager.getOngoingApply().get());
+    private LogReplicationEntryMetadataMsg.Builder header(LogReplicationEntryType type) {
+        return LogReplicationEntryMetadataMsg.newBuilder().setSnapshotLifecycleVersion(1).setEntryType(type)
+                .setTopologyConfigID(TOPOLOGY).setSnapshotTimestamp(SNAPSHOT);
     }
 
-    @Test
-    public void resumeSnapshotApplyResetsBackoffAndCountForAGenuinelyNewAttempt() {
-        seedPendingApply(10L);
-        sinkManager.resumeAttemptCount = 3;
-        sinkManager.resumeBackoffMs = LogReplicationConfig.MAX_RETRY_BACKOFF_MS;
-        sinkManager.resumeBackoffForStartedTimestamp = 10L;
-        sinkManager.loggedResumeExhaustedForCurrentAttempt = true;
+    private LogReplicationEntryMsg startMessage() {
+        return LogReplicationEntryMsg.newBuilder().setMetadata(header(LogReplicationEntryType.SNAPSHOT_START)
+                .setSyncRequestId(getUuidMsg(UUID.randomUUID()))
+                .setAdmissionEpoch(sink.getSnapshotLease().getAdmissionEpoch())).build();
+    }
 
-        // A different startedTimestamp is a genuinely new attempt.
-        seedPendingApply(20L);
+    private LogReplicationEntryMsg dataMessage(SnapshotSyncLeaseRecord attempt, long sequence) {
+        OpaqueEntry opaque = new OpaqueEntry(SNAPSHOT, Map.of(stream, Collections.singletonList(
+                new SMREntry("put", new Object[] {"key-" + sequence, "value"}, Serializers.PRIMITIVE))));
+        return CorfuProtocolLogReplication.getLrEntryMsg(ByteString.copyFrom(
+                CorfuProtocolLogReplication.generatePayload(Collections.singletonList(opaque))),
+                header(LogReplicationEntryType.SNAPSHOT_MESSAGE).setSyncRequestId(attempt.getAttemptId())
+                        .setAttemptGeneration(attempt.getGeneration()).setSnapshotSyncSeqNum(sequence).build());
+    }
 
-        sinkManager.resumeSnapshotApply();
+    /** The source proposes, is told to retry while the sink prepares, and is then accepted. */
+    private SnapshotSyncLeaseRecord admit() throws InterruptedException {
+        LogReplicationEntryMsg start = startMessage();
+        long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (true) {
+            try {
+                LogReplicationEntryMsg accepted = sink.receive(start);
+                assertEquals(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED, accepted.getMetadata().getEntryType());
+                assertEquals(sink.getSnapshotLease().getGeneration(), accepted.getMetadata().getAttemptGeneration());
+                return sink.getSnapshotLease();
+            } catch (LogReplicationBusyException busy) {
+                // Told to come back: the sink is busy, or has reserved the attempt and prepares it.
+                assertEquals(Reason.ADMISSION_CLOSED, busy.getResponse().getReason());
+                assertTrue("the proposal was never accepted: " + sink.getSnapshotLease(), System.nanoTime() < limit);
+                TimeUnit.MILLISECONDS.sleep(20);
+            }
+        }
+    }
 
-        Assert.assertEquals(1, sinkManager.resumeAttemptCount);
-        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS, sinkManager.resumeBackoffMs);
-        Assert.assertFalse(sinkManager.loggedResumeExhaustedForCurrentAttempt);
-        Assert.assertFalse("a genuinely new attempt must not inherit the prior attempt's exhausted " +
-                "status either", sinkManager.isApplyRetriesExhausted());
+    private Reason rejection(LogReplicationEntryMsg message) {
+        LogReplicationBusyException busy = assertThrows(LogReplicationBusyException.class, () -> sink.receive(message));
+        assertTrue("the source is told when to come back", busy.getResponse().getRetryAfterMs() > 0);
+        assertEquals("the reply carries the lease the source has to act on",
+                sink.getSnapshotLease().getGeneration(), busy.getResponse().getSnapshotLease().getGeneration());
+        return busy.getResponse().getReason();
     }
 
     @Test
-    public void resumeSnapshotApplyGivesUpAfterConfiguredMaxRetries() {
-        final int cap = 3;
-        sinkManager.maxSnapshotApplyResumeRetries = cap;
-        seedPendingApply(10L);
-        sinkManager.resumeBackoffForStartedTimestamp = 10L;
-        sinkManager.resumeAttemptCount = cap;
-        sinkManager.nextResumeAttemptTimeMs = 0;
-
-        sinkManager.resumeSnapshotApply();
-
-        // Gave up: no new attempt submitted, count not incremented further, alert logged once.
-        Assert.assertFalse(sinkManager.getOngoingApply().get());
-        Assert.assertEquals(cap, sinkManager.resumeAttemptCount);
-        Assert.assertTrue(sinkManager.loggedResumeExhaustedForCurrentAttempt);
-        // The public, wire-facing signal (LogReplicationServer surfaces this in the metadata
-        // response so the source can cancel and restart immediately -- see
-        // WaitSnapshotApplyState.verifyStatusOfSnapshotSyncApply()) must reflect the same state.
-        Assert.assertTrue(sinkManager.isApplyRetriesExhausted());
-
-        // Calling again must not re-attempt or re-log (idempotent while still exhausted).
-        sinkManager.resumeSnapshotApply();
-        Assert.assertEquals(cap, sinkManager.resumeAttemptCount);
-        Assert.assertTrue(sinkManager.isApplyRetriesExhausted());
+    public void nothingIsAdmittedBeforeThisNodeLeads() {
+        assertEquals(Phase.NOT_READY, sink.getSnapshotLease().getPhase());
+        assertFalse(sink.isIncrementalSyncAdmitted());
+        assertEquals(Reason.ADMISSION_CLOSED, rejection(startMessage()));
+        assertEquals(Reason.ADMISSION_CLOSED, rejection(LogReplicationEntryMsg.newBuilder()
+                .setMetadata(header(LogReplicationEntryType.LOG_ENTRY_MESSAGE).setTimestamp(101).setPreviousTimestamp(100)).build()));
+        assertEquals(Reason.STALE_ATTEMPT, rejection(dataMessage(SnapshotSyncLeaseRecord.getDefaultInstance(), 0)));
+        assertEquals(3, (int) sink.getRxMessageCount().getValue());
+        verify(plugin, never()).acquireSnapshot(any(), any());
     }
 
     @Test
-    public void resumeSnapshotApplyHonorsASmallerConfiguredCap() {
-        // Demonstrates the cap is genuinely configurable, not hardcoded: with a cap of 1, a single
-        // attempt already exhausts it.
-        sinkManager.maxSnapshotApplyResumeRetries = 1;
-        seedPendingApply(10L);
-        sinkManager.resumeBackoffForStartedTimestamp = 10L;
-        sinkManager.resumeAttemptCount = 1;
-        sinkManager.nextResumeAttemptTimeMs = 0;
+    public void aMessageOfAnotherTopologyIsAnsweredNotDropped() throws Exception {
+        lead();
+        assertEquals(Reason.STALE_ATTEMPT, rejection(LogReplicationEntryMsg.newBuilder().setMetadata(
+                startMessage().getMetadata().toBuilder().setTopologyConfigID(TOPOLOGY + 1)).build()));
+        assertEquals(Phase.READY, sink.getSnapshotLease().getPhase());
+    }
 
-        sinkManager.resumeSnapshotApply();
-
-        Assert.assertFalse(sinkManager.getOngoingApply().get());
-        Assert.assertTrue(sinkManager.loggedResumeExhaustedForCurrentAttempt);
-        Assert.assertTrue(sinkManager.isApplyRetriesExhausted());
+    /**
+     * The sink cluster is upgraded first, so for a while its source still speaks the pre-lease
+     * protocol. It must be refused outright: serving it would freeze the checkpointer through the
+     * freeze token, with none of the bounds the lease provides.
+     */
+    @Test
+    public void aPreLeaseSourceIsRefusedAndNeverFreezesTheCheckpointer() throws Exception {
+        lead();
+        LogReplicationEntryMsg legacyStart = LogReplicationEntryMsg.newBuilder().setMetadata(
+                startMessage().getMetadata().toBuilder().clearSnapshotLifecycleVersion().clearAdmissionEpoch()).build();
+        assertEquals(Reason.UNSUPPORTED_PROTOCOL, rejection(legacyStart));
+        assertEquals(Phase.READY, sink.getSnapshotLease().getPhase());
+        assertFalse(sink.getSnapshotLease().getProtectionHeld());
+        assertFalse(checkpointer.isCheckpointFrozen());
+        assertEquals(-1, metadata.queryMetadata(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED));
+        verify(plugin, never()).acquireSnapshot(any(), any());
+        verify(plugin, never()).onSnapshotSyncStart(any());
     }
 
     @Test
-    public void resumeSnapshotApplyGiveUpUnfreezesExactlyOnce() {
-        final int cap = 1;
-        sinkManager.maxSnapshotApplyResumeRetries = cap;
-        seedPendingApply(10L);
-        sinkManager.resumeBackoffForStartedTimestamp = 10L;
-        sinkManager.resumeAttemptCount = cap;
-        sinkManager.nextResumeAttemptTimeMs = 0;
-        // Simulate the sequence having been active since an earlier (now abandoned) attempt.
-        sinkManager.applyRetrySequenceActive = true;
+    public void thePluginIsNotifiedThroughTheLeaseHooksOnly() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        assertTrue(checkpointer.isCheckpointFrozen());
+        verify(plugin, times(1)).acquireSnapshot(any(), any());
 
-        sinkManager.resumeSnapshotApply();
+        assertEquals(Reason.STALE_ATTEMPT, rejection(LogReplicationEntryMsg.newBuilder().setMetadata(
+                header(LogReplicationEntryType.SNAPSHOT_CANCEL).setSyncRequestId(attempt.getAttemptId())
+                        .setAttemptGeneration(attempt.getGeneration())).build()));
+        verify(plugin, timeout(10_000).times(1)).releaseSnapshot(any(), any());
+        await(() -> !sink.getSnapshotLease().getProtectionHeld());
+        assertFalse(checkpointer.isCheckpointFrozen());
+        assertEquals("Source cancelled its snapshot cut", sink.getSnapshotLease().getFailure());
+        // The pre-lease hooks, whose production implementation writes the freeze token, are dead.
+        verify(plugin, never()).onSnapshotSyncStart(any());
+        verify(plugin, never()).onSnapshotSyncEnd(any());
+    }
 
-        // This is the ONE deliberate unfreeze point for a failed-attempt sequence -- see
-        // applyRetrySequenceActive's Javadoc.
-        verify(snapshotSyncPlugin, times(1)).onSnapshotSyncEnd(corfuRuntime);
-        Assert.assertFalse("the sequence must be marked over once truly abandoned",
-                sinkManager.applyRetrySequenceActive);
+    /**
+     * The scenario behind the original incident, from the sink's point of view: the source goes
+     * away in the middle of a transfer and never comes back. The sink notices the silence itself and
+     * releases the checkpointer long before the attempt's budget is used up.
+     */
+    @Test
+    public void aSourceThatDisappearsMidTransferReleasesTheCheckpointerWellBeforeTheBudget() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        sink.receive(dataMessage(attempt, 0));
+        assertTrue(checkpointer.isCheckpointFrozen());
+        long silentSince = System.nanoTime();
 
-        // Idempotent: calling again while still exhausted must not unfreeze a second time.
-        sinkManager.resumeSnapshotApply();
-        verify(snapshotSyncPlugin, times(1)).onSnapshotSyncEnd(corfuRuntime);
+        await(() -> sink.getSnapshotLease().getOutcome() == Outcome.ABORTED && !sink.getSnapshotLease().getProtectionHeld());
+
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - silentSince);
+        assertTrue("released after " + waitedMs + " ms of a 60 s budget", waitedMs < 20_000);
+        assertTrue(sink.getSnapshotLease().getFailure(), sink.getSnapshotLease().getFailure().startsWith("No snapshot traffic"));
+        assertEquals(1, sink.getSnapshotLease().getConsecutiveAborts());
+        assertFalse(checkpointer.isCheckpointFrozen());
+        // The source comes back with the old attempt: it is told to start over, not served.
+        assertEquals(Reason.STALE_ATTEMPT, rejection(dataMessage(attempt, 1)));
     }
 
     @Test
-    public void getCheckpointerGracePeriodMsReflectsConfiguredValue() {
-        Assert.assertEquals(LogReplicationConfig.DEFAULT_CHECKPOINTER_GRACE_PERIOD_MS,
-                sinkManager.getCheckpointerGracePeriodMs());
+    public void aSourceThatKeepsSendingIsNotAbandonedForInactivity() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(3 * IDLE_MS);
+        for (long sequence = 0; System.nanoTime() < until; sequence++) {
+            sink.receive(dataMessage(attempt, sequence));
+            TimeUnit.MILLISECONDS.sleep(IDLE_MS / 5);
+        }
+        assertEquals(Phase.TRANSFERRING, sink.getSnapshotLease().getPhase());
+        assertEquals(attempt.getDeadlineMs(), sink.getSnapshotLease().getDeadlineMs());
+    }
 
-        sinkManager.checkpointerGracePeriodMs = 900_000L;
+    /**
+     * A sequencer that fails over refuses the transactions it was asked for before anything is
+     * written. That is no reason to throw away a transfer that may have been running for an hour.
+     */
+    @Test
+    public void aWriteTheSequencerRefusedIsResentInsteadOfCostingTheWholeTransfer() throws Exception {
+        lead();
+        StreamsSnapshotWriter writer = spy(new StreamsSnapshotWriter(rt, config, metadata));
+        sink.setSnapshotWriter(writer);
+        SnapshotSyncLeaseRecord attempt = admit();
+        doThrow(new StreamsSnapshotWriter.RetryableWriteException(new IllegalStateException("sequencer failed over")))
+                .doCallRealMethod().when(writer).apply(any(LogReplicationEntryMsg.class));
 
-        Assert.assertEquals(900_000L, sinkManager.getCheckpointerGracePeriodMs());
+        assertEquals(Reason.OVERLOADED, rejection(dataMessage(attempt, 0)));
+        assertEquals(Phase.TRANSFERRING, sink.getSnapshotLease().getPhase());
+
+        // The source sends the same message again, and the transfer goes on where it was.
+        sink.receive(dataMessage(attempt, 0));
+        sink.receive(dataMessage(attempt, 1));
+        await(() -> sink.getSnapshotLease().getTransferredSequence() == 1);
+        assertEquals(Outcome.NONE, sink.getSnapshotLease().getOutcome());
+        assertEquals(0, sink.getSnapshotLease().getConsecutiveAborts());
     }
 
     @Test
-    public void isApplyRetriesExhaustedFalseBeforeAnyResumeAttempt() {
-        // Baseline: a sink that has never had a stuck attempt must report false, not some
-        // uninitialized/stale value.
-        Assert.assertFalse(sinkManager.isApplyRetriesExhausted());
-    }
-
-    private void seedPendingApply(long startedAndTransferredTimestamp) {
-        doReturn(startedAndTransferredTimestamp).when(metadataManager).getLastStartedSnapshotTimestamp();
-        doReturn(startedAndTransferredTimestamp).when(metadataManager).getLastTransferredSnapshotTimestamp();
-        doReturn(0L).when(metadataManager).getLastAppliedSnapshotTimestamp();
-        doReturn(1L).when(metadataManager).getCurrentSnapshotSyncCycleId();
-    }
-
-    // ---- checkSnapshotSyncLiveness(): self-unfreeze ----
-
-    @Test
-    public void checkSnapshotSyncLivenessDoesNothingOutsideSnapshotSync() {
-        // Default state is LOG_ENTRY_SYNC; must not touch the plugin regardless of idle time.
-        sinkManager.lastSnapshotSyncActivityTimeMs = 0L;
-
-        sinkManager.checkSnapshotSyncLiveness();
-
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
+    public void resetLeavesARunningAttemptAlone() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        sink.receive(dataMessage(attempt, 0));
+        sink.reset();
+        sink.receive(dataMessage(attempt, 1));
+        // The writer records its progress in the store; the published view follows within a second.
+        await(() -> sink.getSnapshotLease().getTransferredSequence() == 1);
+        assertEquals(Phase.TRANSFERRING, sink.getSnapshotLease().getPhase());
     }
 
     @Test
-    public void checkSnapshotSyncLivenessUnfreezesOnceAfterProlongedIdleInTransferPhase() {
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-        // A fresh SNAPSHOT_START always resets into TRANSFER_PHASE (StreamsSnapshotWriter.reset()),
-        // which checkSnapshotSyncLiveness()'s self-unfreeze requires -- see its Javadoc.
-        sinkManager.lastSnapshotSyncActivityTimeMs =
-                System.currentTimeMillis() - LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS - 1;
-
-        sinkManager.checkSnapshotSyncLiveness();
-        // A second consecutive call with the same stale idle time must not fire again -- proves
-        // the guard (selfUnfrozeForCurrentIdlePeriod) via the only externally-observable effect.
-        sinkManager.checkSnapshotSyncLiveness();
-
-        verify(snapshotSyncPlugin, times(1)).onSnapshotSyncEnd(corfuRuntime);
+    public void aTopologyChangeAbandonsTheAttemptAndReleasesTheCheckpointer() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        sink.updateTopologyConfigId(TOPOLOGY + 1);
+        await(() -> sink.getSnapshotLease().getOutcome() == Outcome.ABORTED && !sink.getSnapshotLease().getProtectionHeld());
+        assertEquals("Topology changed", sink.getSnapshotLease().getFailure());
+        assertEquals(Reason.STALE_ATTEMPT, rejection(dataMessage(attempt, 0)));
+        assertFalse(checkpointer.isCheckpointFrozen());
     }
 
     @Test
-    public void checkSnapshotSyncLivenessDoesNotFireBeforeTimeoutElapsed() {
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-        sinkManager.lastSnapshotSyncActivityTimeMs = System.currentTimeMillis();
+    public void losingLeadershipClosesTheSinkAndTheNextLeadershipAbandonsTheAttempt() throws Exception {
+        lead();
+        SnapshotSyncLeaseRecord attempt = admit();
+        sink.stopOnLeadershipLoss();
+        assertEquals(Phase.NOT_READY, sink.getSnapshotLease().getPhase());
+        assertEquals(Reason.STALE_ATTEMPT, rejection(dataMessage(attempt, 0)));
 
-        sinkManager.checkSnapshotSyncLiveness();
-
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
+        sink.setLeadership(true);
+        await(() -> sink.getSnapshotLease().getOutcome() == Outcome.ABORTED && !sink.getSnapshotLease().getProtectionHeld());
+        assertEquals("Sink ownership changed", sink.getSnapshotLease().getFailure());
+        assertEquals(attempt.getDeadlineMs(), sink.getSnapshotLease().getDeadlineMs());
     }
 
     @Test
-    public void checkSnapshotSyncLivenessDoesNotFireDuringApplyPhase() {
-        // Deliberately restricted to TRANSFER_PHASE (see the method's Javadoc): unfreezing during
-        // an in-progress apply risks the checkpointer trimming shadow-stream data apply still needs.
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-        sinkManager.getOngoingApply().set(true);
-        sinkManager.lastSnapshotSyncActivityTimeMs =
-                System.currentTimeMillis() - LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS - 1;
-
-        sinkManager.checkSnapshotSyncLiveness();
-
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
+    public void theDriverCannotBeReplacedOnceItRuns() throws Exception {
+        lead();
+        assertThrows(IllegalStateException.class, () -> sink.configureSnapshotLifecycle(
+                new SnapshotLeaseCoordinator.Timing(1_000, 0, 1_000, 0, 0)));
     }
 
     @Test
-    public void checkSnapshotSyncLivenessDoesNotFireWhileApplyRetrySequenceActive() {
-        // Simulates the gap *between* individual resume attempts (ongoingApply momentarily false,
-        // phase back at TRANSFER_PHASE courtesy of resumeSnapshotApply()'s snapshotWriter.reset())
-        // -- must stay frozen exactly like the actively-applying case, not just it. See
-        // applyRetrySequenceActive's Javadoc for why unfreezing here would be unsafe.
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-        sinkManager.applyRetrySequenceActive = true;
-        sinkManager.lastSnapshotSyncActivityTimeMs =
-                System.currentTimeMillis() - LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS - 1;
+    public void leaseTimingComesFromTheConfigurationAndMeaninglessValuesFallBack() {
+        SnapshotLeaseCoordinator.Timing defaults = new SnapshotLeaseCoordinator.Timing(
+                LogReplicationConfig.DEFAULT_SNAPSHOT_LEASE_DURATION_MS, LogReplicationConfig.DEFAULT_SNAPSHOT_LEASE_MIN_RECOVERY_MS,
+                LogReplicationConfig.DEFAULT_SNAPSHOT_LEASE_ALARM_MS, LogReplicationConfig.DEFAULT_SNAPSHOT_LEASE_TRANSFER_IDLE_MS,
+                LogReplicationConfig.DEFAULT_SNAPSHOT_LEASE_MAX_APPLY_RETRIES);
+        assertEquals(defaults, LogReplicationSinkManager.readLeaseTiming(new Properties(), defaults));
 
-        sinkManager.checkSnapshotSyncLiveness();
+        Properties configured = new Properties();
+        configured.setProperty("snapshot_lifecycle_max_duration_ms", "7200000");
+        configured.setProperty("snapshot_lifecycle_min_recovery_ms", "0");
+        configured.setProperty("snapshot_lifecycle_recovery_alarm_ms", "600000");
+        configured.setProperty("snapshot_lifecycle_transfer_idle_ms", "0");
+        configured.setProperty("snapshot_lifecycle_max_apply_retries", "0");
+        assertEquals(new SnapshotLeaseCoordinator.Timing(7_200_000, 0, 600_000, 0, 0),
+                LogReplicationSinkManager.readLeaseTiming(configured, defaults));
 
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
-    }
+        // A budget that is not finite and positive would bring the unbounded freeze back.
+        Properties meaningless = new Properties();
+        meaningless.setProperty("snapshot_lifecycle_max_duration_ms", "0");
+        meaningless.setProperty("snapshot_lifecycle_min_recovery_ms", "-5");
+        meaningless.setProperty("snapshot_lifecycle_recovery_alarm_ms", "-1");
+        meaningless.setProperty("snapshot_lifecycle_max_apply_retries", "-2");
+        assertEquals(defaults, LogReplicationSinkManager.readLeaseTiming(meaningless, defaults));
 
-    // ---- stopOnLeadershipLoss() ----
-
-    @Test
-    public void stopOnLeadershipLossUnfreezesInTransferPhaseWhenNoRetrySequenceActive() {
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-
-        sinkManager.stopOnLeadershipLoss();
-
-        verify(snapshotSyncPlugin, times(1)).onSnapshotSyncEnd(corfuRuntime);
-    }
-
-    @Test
-    public void stopOnLeadershipLossDoesNotUnfreezeWhileApplyRetrySequenceActive() {
-        // Same reasoning as checkSnapshotSyncLiveness() above: losing leadership in the gap between
-        // resume attempts must not unfreeze out from under a retry sequence a metadata poll on this
-        // node isn't going to resume again anyway (handleMetadataRequest() is gated on leadership).
-        doReturn(true).when(metadataManager).setBaseSnapshotStart(anyLong(), anyLong());
-        sinkManager.receive(snapshotStartMsg(UUID.randomUUID(), 1L));
-        sinkManager.applyRetrySequenceActive = true;
-
-        sinkManager.stopOnLeadershipLoss();
-
-        verify(snapshotSyncPlugin, never()).onSnapshotSyncEnd(any());
-    }
-
-        // ---- checkForStuckApply(): detection-only, must never throw and must be idempotent ----
-
-    @Test
-    public void checkForStuckApplyIsANoOpWhenNoApplyOngoing() {
-        sinkManager.getOngoingApply().set(false);
-        sinkManager.checkForStuckApply();
-    }
-
-    @Test
-    public void checkForStuckApplyDoesNotAlertBeforeMaxWaitElapsed() {
-        sinkManager.getOngoingApply().set(true);
-        sinkManager.applyStartTimeMs = System.currentTimeMillis();
-        sinkManager.checkForStuckApply();
-    }
-
-    @Test
-    public void checkForStuckApplyAlertsPastMaxWaitAndIsIdempotent() {
-        sinkManager.getOngoingApply().set(true);
-        sinkManager.applyStartTimeMs =
-                System.currentTimeMillis() - LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS - 1;
-
-        // Exercises the compareAndSet guard on the first call and its "already logged" branch on
-        // the second -- must not throw either way.
-        sinkManager.checkForStuckApply();
-        sinkManager.checkForStuckApply();
-    }
-
-    // ---- isProcessingSnapshotSync() ----
-
-    @Test
-    public void isProcessingSnapshotSyncTrueWhileApplyOngoing() {
-        sinkManager.getOngoingApply().set(true);
-        Assert.assertTrue(sinkManager.isProcessingSnapshotSync());
+        Properties malformed = new Properties();
+        malformed.setProperty("snapshot_lifecycle_max_duration_ms", "ninety minutes");
+        assertThrows(NumberFormatException.class, () -> LogReplicationSinkManager.readLeaseTiming(malformed, defaults));
     }
 }

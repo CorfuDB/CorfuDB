@@ -55,15 +55,19 @@ public class MetadataManagerTest extends AbstractViewTest {
      * updated in the metadata table on the Sink cluster
      */
     @Test
-    public void snapshotMetadataAdvertisesTheSinkWriteBudgetInBothModes() {
+    public void snapshotMetadataAdvertisesTheSinkWriteBudgetAndTheLease() {
         LogReplicationMetadataManager metadata = new LogReplicationMetadataManager(corfuRuntime, topologyConfigId,
                 localClusterId);
         int expected = corfuRuntime.getParameters().getMaxWriteSize();
-        var legacy = metadata.getMetadataResponse(org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg
-                .getDefaultInstance(), false, -1, false, 0).getPayload().getLrMetadataResponse();
-        Assert.assertEquals(expected, legacy.getSnapshotTransferWriteSize());
-        metadata.refreshSnapshotStatus();
-        Assert.assertEquals(expected, metadata.getCachedSnapshotStatus().getSnapshotTransferWriteSize());
+        // Before the lease coordinator published anything, the status is a placeholder that still
+        // carries a (not ready) lease: a source must be able to tell this sink from a pre-lease one.
+        Assert.assertTrue(metadata.getCachedSnapshotStatus().hasSnapshotLease());
+        var read = metadata.getMetadataResponse(org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg
+                .getDefaultInstance()).getPayload().getLrMetadataResponse();
+        Assert.assertEquals(expected, read.getSnapshotTransferWriteSize());
+        Assert.assertTrue(read.hasSnapshotLease());
+        Assert.assertEquals((long) topologyConfigId, read.getTopologyConfigID());
+        Assert.assertEquals(read, metadata.getCachedSnapshotStatus());
     }
 
     @Test

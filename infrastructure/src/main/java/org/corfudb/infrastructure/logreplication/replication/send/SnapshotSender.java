@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.protobuf.TextFormat;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -15,14 +15,15 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
-import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
-import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
-import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -32,6 +33,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,7 +44,6 @@ import java.util.function.LongSupplier;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.SNAPSHOT_SYNC_ACK_MAX_RETRIES;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
@@ -51,8 +54,12 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
  * It reads log entries from the data-store through the SnapshotReader, and hands it to the
  * DataSender (the application specific callback for sending data to the remote cluster).
  * <p>
- * The SnapshotReader has a default implementation based on reads at the stream layer
- * (no serialization/deserialization) required.
+ * The sink owns the lifecycle of a snapshot sync (see the snapshot lease). This sender polls the
+ * sink's status, proposes a START using the sink's admission epoch once admission is open, sends
+ * bulk data only after the sink explicitly accepted that START, and cancels locally when the sink
+ * reports the attempt gone. It has no give-up timer of its own: a slow sink is never restarted by
+ * the source, and only the sink's deadline ends an attempt. RPC timeouts and ordinary
+ * retransmission of unacknowledged data remain.
  * <p>
  * DataSender is implemented by the application, as communication channels between sites are out of the scope
  * of CorfuDB.
@@ -60,21 +67,28 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
 @Slf4j
 public class SnapshotSender {
 
-    private CorfuRuntime runtime;
-    private SnapshotReader snapshotReader;
+    private static final long REQUEST_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS);
+    private static final long STATUS_POLL_MS = 2000;
+    private static final long STATUS_POLL_NANOS = TimeUnit.MILLISECONDS.toNanos(STATUS_POLL_MS);
+    // Shortest wait of a step that can neither send nor consume anything right now.
+    private static final long MIN_WAIT_MS = 50;
+
+    private static final ScheduledExecutorService CONTINUATIONS = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("snapshot-admission-poll-%d").build());
+
+    private final CorfuRuntime runtime;
+    private final SnapshotReader snapshotReader;
     @Getter
-    private SenderBufferManager dataSenderBufferManager;
-    private LogReplicationFSM fsm;
+    private final SenderBufferManager dataSenderBufferManager;
+    private final LogReplicationFSM fsm;
     private final DataSender dataSender;
+    private final LongSupplier nanoTime;
 
     @Getter
-    private long baseSnapshotTimestamp;
+    private volatile long baseSnapshotTimestamp;
 
     // The max number of message can be sent over in burst for a snapshot cycle.
     private final int maxNumSnapshotMsgPerBatch;
-
-    // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
-    private boolean startSnapshotSync = true;
 
     @Getter
     @VisibleForTesting
@@ -89,39 +103,30 @@ public class SnapshotSender {
 
     private boolean snapshotCompleted = false;  // Flag indicating the snapshot sync is completed
 
-    // Consecutive genuine (non-busy) mid-transfer stall checks, mirroring the genuineTimeouts counter
-    // in waitForSnapshotSyncAck -- reset as soon as either progress resumes or the sink reports busy.
-    @VisibleForTesting
-    int consecutiveGenuineStallChecks = 0;
-
-    // Wall-clock time of the last mid-transfer stall check, so a tight SNAPSHOT_SYNC_CONTINUE
-    // self-loop (pending buffer permanently full) can't hammer the sink with metadata-poll requests
-    // more often than the final-ack path already does.
-    @VisibleForTesting
-    long lastStallCheckTimeMs = 0;
-
-    private CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
-    private volatile Boolean lifecycleMode;
+    // Identity of this attempt on the wire. The id is chosen here; the generation is granted by the
+    // sink when it accepts the START. Events of another attempt are ignored by the FSM states.
     @Getter
     private volatile UUID wireAttemptId;
     @Getter
     private volatile long wireAttemptGeneration;
-    private boolean admitted;
-    private boolean ownedTransferFinished;
+
+    // Written by the FSM worker that runs the steps, read by stop(), which the FSM consumer calls.
+    private volatile boolean admitted;
+    private volatile boolean transferFinished;
+    private volatile boolean cancelSent;
+    // This run gave up and asked the FSM for a new one; nothing of it runs any more.
+    private volatile boolean cancelled;
+    private boolean unsupportedSinkReported;
+    private CompletableFuture<Object> replySignal;
     private CompletableFuture<LogReplicationMetadataResponseMsg> statusFuture;
     private CompletableFuture<LogReplicationEntryMsg> admissionFuture;
-    private final LongSupplier nanoTime;
-    private static final long REQUEST_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(DEFAULT_TIMEOUT_MS);
     private long statusRequestNanos;
     private long admissionRequestNanos;
+    private long lastStatusPollNanos;
     private SnapshotSyncLeaseRecord remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
     private LogReplicationEntryMsg admissionRequest;
-    private long lastStatusPollNanos;
     private long runGeneration;
-    private java.util.concurrent.ScheduledFuture<?> continuation;
-    private static final java.util.concurrent.ScheduledExecutorService CONTINUATIONS =
-            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new com.google.common.util.concurrent.ThreadFactoryBuilder()
-                    .setDaemon(true).setNameFormat("snapshot-admission-poll-%d").build());
+    private ScheduledFuture<?> continuation;
 
     // Retain the public constructor signature for existing callers; snapshot reads do not use a ReadProcessor.
     @SuppressWarnings("PMD.UnusedFormalParameter")
@@ -147,144 +152,88 @@ public class SnapshotSender {
                         new AtomicLong(0)));
     }
 
-    public boolean usesSnapshotLifecycle() {
-        return Boolean.TRUE.equals(lifecycleMode);
-    }
-
     @VisibleForTesting
     void pollStatusNow() {
         lastStatusPollNanos = 0;
     }
 
     /**
-     * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
+     * Run one step of the snapshot sync and yield the FSM worker. Every wait (for the sink's status,
+     * for admission, for acknowledgements) is a scheduled continuation rather than a blocked thread,
+     * since several state machines share the same worker pool.
      *
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
-        if (stopSnapshotSync.get()) { return; }
-        if (!Boolean.FALSE.equals(lifecycleMode)) {
-            try {
-                if (transmitWithLifecycle(snapshotSyncEventId, forcedSnapshotSync)) { return; }
-            } catch (RuntimeException e) {
-                log.warn("Snapshot transport operation failed; reconcile without renewing the sink lease", e);
-                scheduleContinuation(snapshotSyncEventId, 2000);
-                return;
-            }
-        }
-        if (snapshotCompleted) {
-            // Since FSM is a perpetually running machine, InSnapshotSync.onEntry() is called even when an incoming
-            // event is ignored for any reason.
-            // This translates to transmit() being called even if the data has been successfully transferred. So we check
-            // the flag and return immediately to avoid sending any un-required data
-            log.info("The snapshot sync data for {} has already been sent to remote.", snapshotSyncEventId);
+        if (stopSnapshotSync.get() || transferFinished || cancelled) {
             return;
         }
-
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
-                baseSnapshotTimestamp);
-
-        boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
-        int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
-        // is because by design several state machines can share the same thread pool,
-        // therefore, we need to hand the thread for other workers to execute.
-        SnapshotReadMessage snapshotReadMessage;
-
-        // Skip if no data is present in the log
-        if (Address.isAddress(baseSnapshotTimestamp)) {
-            // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
-            // or snapshot sync is stopped
-            dataSenderBufferManager.resend();
-
-            while (messagesSent < maxNumSnapshotMsgPerBatch && !dataSenderBufferManager.getPendingMessages().isFull() &&
-                    !snapshotCompleted && !stopSnapshotSync.get()) {
-
-                try {
-                    snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
-                    snapshotCompleted = snapshotReadMessage.isEndRead();
-                    // Data Transformation / Processing
-                    // readProcessor.process(snapshotReadMessage.getMessages())
-                } catch (TrimmedException te) {
-                    log.warn("Cancel snapshot sync due to trimmed exception.", te);
-                    dataSenderBufferManager.reset(Address.NON_ADDRESS);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, forcedSnapshotSync);
-                    cancel = true;
-                    break;
-                } catch (Exception e) {
-                    log.error("Caught exception during snapshot sync", e);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
-                    cancel = true;
-                    break;
-                }
-
-                messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotCompleted);
-                final long messagesSentSnapshot = messagesSent;
-                messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
-                observedCounter.setValue(messagesSent);
+        try {
+            if (wireAttemptId == null) {
+                reset(); // Never started: the state that drives this sender always resets it first.
             }
-
-            if (snapshotCompleted) {
-                // Block until ACK from last sent message is received
-                try {
-                    LogReplicationEntryMsg ack = waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
-                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
-                            ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
-                        // Snapshot Sync Transfer Completed
-                        log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
-                        snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
-                    } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
-                        throw new Exception("Wrong base snapshot ack");
-                    }
-                } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
-                            snapshotSyncEventId, baseSnapshotTimestamp, e);
-                    if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("Snapshot Sync completed exceptionally", e);
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
-                } finally {
-                    snapshotSyncAck = null;
-                }
-            } else if (!cancel && !stopSnapshotSync.get()) {
-                if (checkForGenuineMidTransferStall(snapshotSyncEventId, forcedSnapshotSync)) {
-                    // Cancellation already triggered for this attempt; do not also continue it.
-                    return;
-                }
-
-                // Maximum number of batch messages sent. This snapshot sync needs to continue.
-
-                // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
-                // the shared thread pool could be lower than the number of sites, so we assign resources in
-                // a round robin fashion.
-                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
-                fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
-                        new LogReplicationEventMetadata(snapshotSyncEventId)));
-            }
-        } else {
-            log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
-
-            try {
-                dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
-                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                waitForSnapshotSyncAck(snapshotSyncEventId, snapshotSyncAck);
-                snapshotSyncTransferComplete(snapshotSyncEventId, forcedSnapshotSync);
-            } catch (Exception e) {
-                log.warn("Caught exception while sending data to sink.", e);
-                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
-            }
+            step(snapshotSyncEventId, forcedSnapshotSync);
+        } catch (RuntimeException e) {
+            log.warn("Snapshot transport operation failed; reconcile without renewing the sink lease", e);
+            scheduleContinuation(snapshotSyncEventId, STATUS_POLL_MS);
+        } catch (Error e) {
+            // Without a continuation nothing would ever run this snapshot sync again, and the FSM
+            // would sit in snapshot sync silently: the worker only records the failure in a Future.
+            log.error("Snapshot sync step failed; it is retried", e);
+            scheduleContinuation(snapshotSyncEventId, STATUS_POLL_MS);
+            throw e;
         }
     }
 
-    /** Returns false only after negotiating a legacy sink. Every wait yields the FSM worker. */
-    private boolean transmitWithLifecycle(UUID eventId, boolean forced) {
-        if (ownedTransferFinished) { return true; }
+    private void step(UUID eventId, boolean forced) {
+        pollStatus();
+        if (remoteLease.getSchemaVersion() != SnapshotSyncLease.VERSION) {
+            // No usable status yet: the reply is outstanding, was lost, or the sink has not
+            // initialized its lease (it is not the leader yet).
+            scheduleContinuation(eventId, STATUS_POLL_MS);
+            return;
+        }
+        boolean sameTopology = remoteLease.getTopologyConfigId() == fsm.getTopologyConfigId();
+        // Identity and topology are separate questions: an attempt of this sender that was admitted
+        // under a topology this source has since moved on from is still this sender's to cancel.
+        boolean mine = remoteLease.hasAttemptId() && remoteLease.getAttemptId().equals(getUuidMsg(wireAttemptId))
+                && remoteLease.getSourceSnapshot() == baseSnapshotTimestamp
+                && (!admitted || remoteLease.getGeneration() == wireAttemptGeneration);
+        boolean ours = mine && sameTopology;
+        if ((ours && remoteLease.getOutcome() == Outcome.COMPLETED)
+                || (remoteLease.getPhase() == Phase.APPLYING && (ours || (sameTopology && !forced && !admitted)))) {
+            // The transfer is already durable on the sink (our END reply was lost, or a previous
+            // leader of this source completed it): follow that apply instead of sending it again.
+            wireAttemptId = CorfuProtocolCommon.getUUID(remoteLease.getAttemptId());
+            wireAttemptGeneration = remoteLease.getGeneration();
+            baseSnapshotTimestamp = remoteLease.getSourceSnapshot();
+            fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
+            transferFinished = true;
+            snapshotSyncTransferComplete(eventId, forced);
+            return;
+        }
+        if ((mine && (remoteLease.getOutcome() == Outcome.ABORTED || !sameTopology))
+                || (admitted && remoteLease.getGeneration() > wireAttemptGeneration)) {
+            // The sink abandoned this attempt (deadline, failure, ownership or topology change), or
+            // the topology changed under it: every message would now carry a topology the attempt
+            // was not admitted for, and the sink would reject it forever.
+            snapshotSyncCancel(eventId, LogReplicationError.UNKNOWN, forced);
+            return;
+        }
+        if (!admitted && !negotiateAdmission(eventId, ours)) {
+            scheduleContinuation(eventId, STATUS_POLL_MS);
+            return;
+        }
+        transfer(eventId, forced);
+    }
+
+    /**
+     * DataSender implementations need not complete lost RPCs themselves. Expire the local wait, not
+     * the snapshot attempt: a late reply cannot authorize this run, and a lost START reply must be
+     * reconciled/retried using the identical proposal.
+     */
+    private void pollStatus() {
         long now = nanoTime.getAsLong();
-        // DataSender implementations need not complete lost RPCs themselves. Expire the
-        // local wait, not the snapshot attempt: a late reply cannot authorize this run,
-        // and a lost START reply must be reconciled/retried using the identical proposal.
         if (statusFuture != null && !statusFuture.isDone() && now - statusRequestNanos >= REQUEST_TIMEOUT_NANOS) {
             statusFuture = null;
             lastStatusPollNanos = 0;
@@ -292,102 +241,109 @@ public class SnapshotSender {
         if (admissionFuture != null && !admissionFuture.isDone() && now - admissionRequestNanos >= REQUEST_TIMEOUT_NANOS) {
             admissionFuture = null;
         }
-        if (statusFuture == null && (lastStatusPollNanos == 0
-                || now - lastStatusPollNanos >= TimeUnit.SECONDS.toNanos(2))) {
+        if (statusFuture == null && (lastStatusPollNanos == 0 || now - lastStatusPollNanos >= STATUS_POLL_NANOS)) {
             lastStatusPollNanos = now;
             statusRequestNanos = now;
             statusFuture = observeReply(dataSender.sendMetadataRequest(), statusRequestNanos);
         }
-        if (statusFuture != null && statusFuture.isDone()) {
-            try {
-                LogReplicationMetadataResponseMsg response = statusFuture.join();
-                snapshotReader.setSnapshotBatchSizeHint(response.getSnapshotTransferWriteSize());
-                if (!Boolean.TRUE.equals(lifecycleMode)) { lifecycleMode = response.hasSnapshotLease(); }
-                remoteLease = response.getSnapshotLease();
-            } catch (CompletionException e) {
-                log.debug("Snapshot status unavailable; retry after transport recovery", e);
-            } finally {
-                statusFuture = null;
-            }
-        }
-        if (Boolean.FALSE.equals(lifecycleMode)) { return false; }
-        if (lifecycleMode == null || remoteLease.getSchemaVersion() != SnapshotSyncLease.VERSION) {
-            scheduleContinuation(eventId, 2000);
-            return true;
-        }
-        boolean sameTopology = remoteLease.getTopologyConfigId() == fsm.getTopologyConfigId();
-        boolean ours = remoteLease.hasAttemptId() && remoteLease.getAttemptId().equals(getUuidMsg(wireAttemptId))
-                && sameTopology && remoteLease.getSourceSnapshot() == baseSnapshotTimestamp
-                && (!admitted || remoteLease.getGeneration() == wireAttemptGeneration);
-        if ((ours && remoteLease.getOutcome() == Outcome.COMPLETED)
-                || (remoteLease.getPhase() == Phase.APPLYING && (ours || (sameTopology && !forced && !admitted)))) {
-            wireAttemptId = org.corfudb.protocols.CorfuProtocolCommon.getUUID(remoteLease.getAttemptId());
-            wireAttemptGeneration = remoteLease.getGeneration();
-            baseSnapshotTimestamp = remoteLease.getSourceSnapshot();
-            fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
-            ownedTransferFinished = true;
-            snapshotSyncTransferComplete(eventId, forced);
-            return true;
-        }
-        if ((ours && remoteLease.getOutcome() == Outcome.ABORTED)
-                || (admitted && remoteLease.getGeneration() > wireAttemptGeneration)) {
-            snapshotSyncCancel(eventId, LogReplicationError.UNKNOWN, forced);
-            return true;
-        }
-        if (!admitted) {
-            if (admissionFuture != null && admissionFuture.isDone()) {
-                try {
-                    LogReplicationEntryMsg accepted = admissionFuture.join();
-                    if (accepted.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START_ACCEPTED
-                            && accepted.getMetadata().getSyncRequestId().equals(getUuidMsg(wireAttemptId))
-                            && accepted.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp
-                            && accepted.getMetadata().getTopologyConfigID() == fsm.getTopologyConfigId()
-                            && accepted.getMetadata().getAttemptGeneration() > 0) {
-                        wireAttemptGeneration = accepted.getMetadata().getAttemptGeneration();
-                        ((SnapshotSenderBufferManager) dataSenderBufferManager).beginLease(wireAttemptId, wireAttemptGeneration);
-                        admitted = true;
-                        startSnapshotSync = false;
-                    }
-                } catch (CompletionException e) {
-                    log.debug("START not yet accepted; reconcile and retry the same proposal", e);
-                } finally {
-                    admissionFuture = null;
-                }
-            }
-            if (!admitted) {
-                if (remoteLease.getPhase() == Phase.READY && (admissionRequest == null
-                        || admissionRequest.getMetadata().getAdmissionEpoch() != remoteLease.getAdmissionEpoch())) {
-                    // Choose a usable source cut after sink recovery, not at the beginning of its cooldown.
-                    baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
-                    snapshotReader.reset(baseSnapshotTimestamp);
-                    fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
-                    admissionRequest = getSnapshotSyncStartMarker(wireAttemptId).toBuilder().setMetadata(
-                            getSnapshotSyncStartMarker(wireAttemptId).getMetadata().toBuilder()
-                                    .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
-                                    .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
-                }
-                if (admissionFuture == null && admissionRequest != null
-                        && (remoteLease.getPhase() == Phase.READY || ours)) {
-                    admissionRequestNanos = nanoTime.getAsLong();
-                    admissionFuture = observeReply(dataSender.send(admissionRequest), admissionRequestNanos);
-                }
-                scheduleContinuation(eventId, 2000);
-                return true;
-            }
+        if (statusFuture == null || !statusFuture.isDone()) {
+            return;
         }
         try {
-            LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
+            LogReplicationMetadataResponseMsg response = statusFuture.join();
+            if (response.hasSnapshotLease()) {
+                unsupportedSinkReported = false;
+                snapshotReader.setSnapshotBatchSizeHint(response.getSnapshotTransferWriteSize());
+                remoteLease = response.getSnapshotLease();
+            } else {
+                // Negotiation refuses such a sink, so this is only reachable when replication is
+                // driven without it. Keep polling: nothing is ever sent without admission.
+                if (!unsupportedSinkReported) {
+                    log.error("The sink does not report a snapshot lease; it predates the snapshot lease "
+                            + "protocol and cannot admit a snapshot sync from this source");
+                    unsupportedSinkReported = true;
+                }
+                remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
+            }
+        } catch (CompletionException e) {
+            log.debug("Snapshot status unavailable; retry after transport recovery", e);
+        } finally {
+            statusFuture = null;
+        }
+    }
+
+    /** @return true once the sink has explicitly accepted this attempt's START. */
+    private boolean negotiateAdmission(UUID eventId, boolean ours) {
+        if (consumeAdmissionReply(eventId)) {
+            return true;
+        }
+        if (remoteLease.getPhase() == Phase.READY && (admissionRequest == null
+                || admissionRequest.getMetadata().getAdmissionEpoch() != remoteLease.getAdmissionEpoch()
+                || admissionRequest.getMetadata().getTopologyConfigID() != fsm.getTopologyConfigId())) {
+            // Choose a usable source cut after sink recovery, not at the beginning of its cooldown.
+            baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+            snapshotReader.reset(baseSnapshotTimestamp);
+            fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
+            LogReplicationEntryMsg start = getSnapshotSyncStartMarker(wireAttemptId);
+            admissionRequest = start.toBuilder().setMetadata(start.getMetadata().toBuilder()
+                    .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
+                    .setAdmissionEpoch(remoteLease.getAdmissionEpoch()).setExternalRequestId(getUuidMsg(eventId))).build();
+        }
+        if (admissionFuture == null && admissionRequest != null && (remoteLease.getPhase() == Phase.READY || ours)) {
+            admissionRequestNanos = nanoTime.getAsLong();
+            admissionFuture = observeReply(dataSender.send(admissionRequest), admissionRequestNanos);
+            // A transport that answers synchronously already has the reply.
+            return consumeAdmissionReply(eventId);
+        }
+        return false;
+    }
+
+    private boolean consumeAdmissionReply(UUID eventId) {
+        if (admitted) {
+            return true;
+        }
+        if (admissionFuture == null || !admissionFuture.isDone()) {
+            return false;
+        }
+        try {
+            LogReplicationEntryMsg accepted = admissionFuture.join();
+            if (accepted.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START_ACCEPTED
+                    && accepted.getMetadata().getSyncRequestId().equals(getUuidMsg(wireAttemptId))
+                    && accepted.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp
+                    && accepted.getMetadata().getTopologyConfigID() == fsm.getTopologyConfigId()
+                    && accepted.getMetadata().getAttemptGeneration() > 0) {
+                wireAttemptGeneration = accepted.getMetadata().getAttemptGeneration();
+                ((SnapshotSenderBufferManager) dataSenderBufferManager).beginLease(wireAttemptId, wireAttemptGeneration);
+                admitted = true;
+                log.info("Snapshot sync {} admitted by the sink as generation {} on baseSnapshot {}",
+                        eventId, wireAttemptGeneration, baseSnapshotTimestamp);
+            }
+        } catch (CompletionException | java.util.concurrent.CancellationException e) {
+            log.debug("START not yet accepted; reconcile and retry the same proposal", e);
+        } finally {
+            admissionFuture = null;
+        }
+        return admitted;
+    }
+
+    private void transfer(UUID eventId, boolean forced) {
+        try {
+            // Take every acknowledgement that has arrived, then resend what waited too long. Neither
+            // blocks: a step never holds the worker while it waits for the sink.
+            LogReplicationEntryMsg ack = dataSenderBufferManager.pollAcks();
+            dataSenderBufferManager.resendTimedOut();
             if (ack != null && ack.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE
                     && ack.getMetadata().getSyncRequestId().equals(getUuidMsg(wireAttemptId))
                     && ack.getMetadata().getAttemptGeneration() == wireAttemptGeneration) {
-                ownedTransferFinished = true;
+                transferFinished = true;
                 snapshotSyncTransferComplete(eventId, forced);
-                return true;
+                return;
             }
             int sent = 0;
             while (!snapshotCompleted && !stopSnapshotSync.get() && sent < maxNumSnapshotMsgPerBatch
                     && !dataSenderBufferManager.getPendingMessages().isFull()) {
                 if (!Address.isAddress(baseSnapshotTimestamp)) {
+                    log.info("Snapshot sync {} has no data in the log; sending the end marker only", eventId);
                     snapshotCompleted = true;
                     dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(wireAttemptId));
                     break;
@@ -395,8 +351,23 @@ public class SnapshotSender {
                 SnapshotReadMessage batch = snapshotReader.read(wireAttemptId);
                 snapshotCompleted = batch.isEndRead();
                 sent += processReads(batch.getMessages(), wireAttemptId, snapshotCompleted);
+                final long sentSoFar = sent;
+                messageCounter.ifPresent(counter -> counter.addAndGet(sentSoFar));
+                observedCounter.setValue(sent);
             }
-            scheduleContinuation(eventId, snapshotCompleted || dataSenderBufferManager.getPendingMessages().isFull() ? 2000 : 0);
+            if ((!snapshotCompleted && !dataSenderBufferManager.getPendingMessages().isFull())
+                    || dataSenderBufferManager.hasArrivedReplies()) {
+                // More to send, or replies that arrived while this step was sending (on a fast link,
+                // or an in-process transport, every one of them has): the next step takes them.
+                scheduleContinuation(eventId, 0);
+            } else {
+                // Nothing more can go out until a reply frees the window, or, with everything sent,
+                // until the end marker is acknowledged. The next step runs as soon as the first
+                // outstanding reply arrives; the timer only covers status polls and resends.
+                scheduleContinuation(eventId, Math.max(MIN_WAIT_MS,
+                        Math.min(STATUS_POLL_MS, dataSenderBufferManager.getResendTimerMs())));
+                continueOnReply(eventId);
+            }
         } catch (TrimmedException e) {
             log.warn("Source snapshot cut became unusable", e);
             snapshotSyncCancel(eventId, LogReplicationError.TRIM_SNAPSHOT_SYNC, forced);
@@ -404,7 +375,6 @@ public class SnapshotSender {
             log.warn("Source snapshot cut became unusable", e);
             snapshotSyncCancel(eventId, LogReplicationError.UNKNOWN, forced);
         }
-        return true;
     }
 
     private <T> CompletableFuture<T> observeReply(CompletableFuture<T> reply, long sentAtNanos) {
@@ -416,6 +386,31 @@ public class SnapshotSender {
             }
             return value;
         });
+    }
+
+    /**
+     * Transfer speed must follow the sink's acknowledgements, not a timer: a window of a few
+     * messages refilled once per timer period could never move a large snapshot inside its budget.
+     */
+    private synchronized void continueOnReply(UUID eventId) {
+        if (replySignal != null && !replySignal.isDone()) {
+            return; // Still waiting on requests that are older than anything sent since.
+        }
+        List<CompletableFuture<LogReplicationEntryMsg>> outstanding = dataSenderBufferManager.outstandingRequests();
+        if (outstanding.isEmpty()) {
+            return;
+        }
+        long captured = runGeneration;
+        replySignal = CompletableFuture.anyOf(outstanding.toArray(new CompletableFuture<?>[0]));
+        replySignal.whenComplete((reply, failure) -> continueNow(eventId, captured));
+    }
+
+    private synchronized void continueNow(UUID eventId, long captured) {
+        if (captured != runGeneration || stopSnapshotSync.get()) {
+            return;
+        }
+        if (continuation != null) { continuation.cancel(false); continuation = null; }
+        scheduleContinuation(eventId, 0);
     }
 
     private synchronized void scheduleContinuation(UUID eventId, long delayMs) {
@@ -431,155 +426,10 @@ public class SnapshotSender {
         }, delayMs, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * Wait for the ack of the final snapshot sync message, tolerating a busy-but-alive sink instead
-     * of giving up on the first timeout. On each timeout with no ack, poll the sink directly: if it
-     * reports it's still actively processing this snapshot sync, keep waiting without counting it
-     * against the retry budget; a sink that stays genuinely silent (no ack, and either no response
-     * or a not-busy response to the poll) for SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts is
-     * treated as stalled and the caller cancels the sync.
-     *
-     * @param snapshotSyncEventId identifier of the snapshot sync being waited on, for logging only
-     * @param ackFuture completes with the ack for the last message sent for this attempt
-     * @return the received ack
-     * @throws Exception if the ack does not arrive and the sink is not reporting activity for
-     *                    SNAPSHOT_SYNC_ACK_MAX_RETRIES consecutive attempts, or some other failure occurs
-     */
-    LogReplicationEntryMsg waitForSnapshotSyncAck(UUID snapshotSyncEventId,
-                                                  CompletableFuture<LogReplicationEntryMsg> ackFuture) throws Exception {
-        int genuineTimeouts = 0;
-        while (true) {
-            if (stopSnapshotSync.get()) {
-                // A stop was requested (e.g. a new cancellation/request) while waiting on this
-                // attempt's ack. Without this check, a sink that always reports busy=true would keep
-                // this loop (and, transitively, cancelSnapshotSync()'s blocking wait on
-                // transmitFuture) alive indefinitely, since genuineTimeouts only advances on a
-                // non-busy timeout.
-                throw new InterruptedException("Snapshot sync " + snapshotSyncEventId
-                        + " stopped while waiting for ack.");
-            }
-            try {
-                return ackFuture.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            } catch (TimeoutException te) {
-                if (isSinkStillProcessing()) {
-                    log.info("Sink reported busy while waiting for ack for snapshot sync {}; extending wait.",
-                            snapshotSyncEventId);
-                    continue;
-                }
-                genuineTimeouts++;
-                log.warn("Ack timeout {}/{} waiting for snapshot sync {} to be acked; sink not reporting activity.",
-                        genuineTimeouts, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
-                if (genuineTimeouts >= SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
-                    throw te;
-                }
-            }
-        }
-    }
-
-    /**
-     * Actively poll the sink for whether it is still working on the current snapshot sync. Used only
-     * to extend patience on an otherwise-unexplained ack timeout, so any failure to determine this
-     * (including the poll itself timing out) is conservatively treated as "not processing".
-     *
-     * isProcessing alone is sink-wide, not attempt-scoped: it's true whenever the sink is busy on
-     * *any* snapshot-sync work, including a stale attempt this source has already canceled and
-     * moved past (e.g. the sink is still resuming an old, abandoned apply after its own restart --
-     * see LogReplicationSinkManager.resumeSnapshotApply()). Trusting it blindly in that case would
-     * let this source wait indefinitely on someone else's progress for an attempt it isn't even
-     * asking about, compounding the (separately tracked, deliberately unrecoverable-without-an-
-     * operator) risk of a genuinely hung apply: instead of that hang bounding just the one stuck
-     * attempt, it would also stall every subsequent attempt's transfer phase forever, since
-     * genuineTimeouts/consecutiveGenuineStallChecks never advance while isProcessing reports true.
-     * A sink new enough to report processingSnapshotTimestamp lets this be resolved: only honor the
-     * busy signal when it names *this* attempt's baseSnapshotTimestamp. An old sink (field absent)
-     * is trusted at face value, matching the pre-existing behavior -- not a regression, just not
-     * yet able to make the distinction.
-     */
-    private boolean isSinkStillProcessing() {
-        try {
-            LogReplicationMetadataResponseMsg response = dataSender.sendMetadataRequest()
-                    .get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            if (!response.getIsProcessing()) {
-                return false;
-            }
-            if (response.hasProcessingSnapshotTimestamp()
-                    && response.getProcessingSnapshotTimestamp() != baseSnapshotTimestamp) {
-                log.warn("Sink reports busy, but on a different attempt (its baseSnapshot={}, ours={}); " +
-                                "treating as not processing our attempt.",
-                        response.getProcessingSnapshotTimestamp(), baseSnapshotTimestamp);
-                return false;
-            }
-            return true;
-        } catch (Exception e) {
-            log.warn("Failed to query sink status while waiting for snapshot sync ack.", e);
-            return false;
-        }
-    }
-
-    /**
-     * If the pending buffer has been genuinely stalled (no ack has advanced maxAckTimestamp) for at
-     * least as long as the final-ack path's own genuine-silence bound, and the sink isn't reporting
-     * activity on a paced busy-signal poll, treat this as a stalled mid-transfer attempt and cancel
-     * it -- the same busy-aware give-up waitForSnapshotSyncAck applies to the final ack, just
-     * triggered from the buffer-full self-loop instead of the tail-end blocking wait. Without this,
-     * a sink that stops acking before the source finishes reading all data never reaches
-     * waitForSnapshotSyncAck at all (snapshotCompleted never becomes true), so the final-ack fix
-     * never engages and SenderBufferManager.resend() -- which has no retry cap of its own -- would
-     * retry forever with no path to cancellation.
-     *
-     * Paces its own busy-signal polls at DEFAULT_TIMEOUT_MS so a tight SNAPSHOT_SYNC_CONTINUE
-     * self-loop (buffer permanently full) can't hammer the sink with metadata requests every
-     * iteration.
-     *
-     * @return true if a cancellation was triggered this cycle (caller must not also fire
-     *         SNAPSHOT_SYNC_CONTINUE)
-     */
-    @VisibleForTesting
-    boolean checkForGenuineMidTransferStall(UUID snapshotSyncEventId, boolean forcedSnapshotSync) {
-        if (dataSenderBufferManager.getMillisSinceLastAckAdvance()
-                < SNAPSHOT_SYNC_ACK_MAX_RETRIES * DEFAULT_TIMEOUT_MS) {
-            consecutiveGenuineStallChecks = 0;
-            return false;
-        }
-
-        long now = System.currentTimeMillis();
-        if (now - lastStallCheckTimeMs < DEFAULT_TIMEOUT_MS) {
-            return false; // paced -- don't poll more often than the final-ack path does
-        }
-        lastStallCheckTimeMs = now;
-
-        if (isSinkStillProcessing()) {
-            log.info("Sink reported busy while its oldest pending snapshot entry is unacked for {}; extending patience.",
-                    snapshotSyncEventId);
-            consecutiveGenuineStallChecks = 0;
-            return false;
-        }
-
-        consecutiveGenuineStallChecks++;
-        log.warn("Mid-transfer stall {}/{} for snapshot sync {}: no ack has advanced and sink not reporting activity.",
-                consecutiveGenuineStallChecks, SNAPSHOT_SYNC_ACK_MAX_RETRIES, snapshotSyncEventId);
-        if (consecutiveGenuineStallChecks < SNAPSHOT_SYNC_ACK_MAX_RETRIES) {
-            return false;
-        }
-
-        log.error("Canceling snapshot sync {}: mid-transfer stall persisted for {} genuine checks.",
-                snapshotSyncEventId, consecutiveGenuineStallChecks);
-        consecutiveGenuineStallChecks = 0;
-        snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN, forcedSnapshotSync);
-        return true;
-    }
-
     private int processReads(List<LogReplicationEntryMsg> logReplicationEntries,
                              UUID snapshotSyncEventId,
                              boolean completed) {
         int numMessages = 0;
-
-        // If we are starting a snapshot sync, send a start marker.
-        if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
-            startSnapshotSync = false;
-            numMessages++;
-        }
 
         if (MeterRegistryProvider.getInstance().isPresent()) {
             dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
@@ -593,7 +443,7 @@ public class SnapshotSender {
         if (completed) {
             LogReplicationEntryMsg endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
             log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
-            snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
+            dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
 
@@ -647,7 +497,7 @@ public class SnapshotSender {
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                 new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)
-                        .setSnapshotAttempt(usesSnapshotLifecycle() ? wireAttemptId : null, wireAttemptGeneration)));
+                        .setSnapshotAttempt(wireAttemptId, wireAttemptGeneration)));
     }
 
     /**
@@ -658,17 +508,15 @@ public class SnapshotSender {
      */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error, boolean forcedSnapshotSync) {
         if (stopSnapshotSync.get()) { return; }
-        if (usesSnapshotLifecycle() && admitted) {
-            LogReplicationEntryMsg cancel = getSnapshotSyncEndMarker(wireAttemptId).toBuilder().setMetadata(
-                    getSnapshotSyncEndMarker(wireAttemptId).getMetadata().toBuilder()
-                            .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)
-                            .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION).setAttemptGeneration(wireAttemptGeneration)).build();
-            try {
-                dataSender.send(cancel).exceptionally(failure -> null);
-            } catch (RuntimeException e) {
-                log.debug("Cancellation delivery failed; the sink deadline still applies", e);
-            }
+        synchronized (this) {
+            runGeneration++;
+            if (continuation != null) { continuation.cancel(false); continuation = null; }
         }
+        cancelled = true;
+        cancelAdmittedAttempt();
+        // Nothing of this attempt will be resent: do not keep its window of messages in memory
+        // until the next attempt replaces it.
+        dataSenderBufferManager.reset(Address.NON_ADDRESS);
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
 
@@ -677,7 +525,30 @@ public class SnapshotSender {
         // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncEventId, forcedSnapshotSync)
-                        .setSnapshotAttempt(usesSnapshotLifecycle() ? wireAttemptId : null, wireAttemptGeneration)));
+                        .setSnapshotAttempt(wireAttemptId, wireAttemptGeneration)));
+    }
+
+    /**
+     * Tells the sink that an admitted transfer will not be finished, so that it releases its
+     * protection right away instead of noticing the silence minutes later. Best effort: if this is
+     * lost, the sink's own inactivity and deadline checks still end the attempt. An apply that is
+     * already running on the sink is never cancelled: it does not need the source any more.
+     */
+    private void cancelAdmittedAttempt() {
+        UUID attemptId = wireAttemptId;
+        if (!admitted || transferFinished || cancelSent || attemptId == null) {
+            return;
+        }
+        cancelSent = true;
+        LogReplicationEntryMsg end = getSnapshotSyncEndMarker(attemptId);
+        LogReplicationEntryMsg cancel = end.toBuilder().setMetadata(end.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)
+                .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION).setAttemptGeneration(wireAttemptGeneration)).build();
+        try {
+            dataSender.send(cancel).exceptionally(failure -> null);
+        } catch (RuntimeException e) {
+            log.debug("Cancellation delivery failed; the sink deadline still applies", e);
+        }
     }
 
     /**
@@ -687,19 +558,25 @@ public class SnapshotSender {
         synchronized (this) {
             runGeneration++;
             if (continuation != null) { continuation.cancel(false); continuation = null; }
+            replySignal = null;
         }
-        lifecycleMode = null;
+        // The identity below is about to be replaced, after which the attempt could never be
+        // cancelled or resumed by anyone.
+        cancelAdmittedAttempt();
         wireAttemptId = UUID.randomUUID();
         wireAttemptGeneration = 0;
         admitted = false;
-        ownedTransferFinished = false;
+        transferFinished = false;
+        cancelSent = false;
+        cancelled = false;
         statusFuture = null;
         admissionFuture = null;
         admissionRequest = null;
         lastStatusPollNanos = 0;
         remoteLease = SnapshotSyncLeaseRecord.getDefaultInstance();
         // TODO: Do we need to persist the lastTransferDone in the event of failover?
-        // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
+        // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data.
+        // It is chosen again when the sink opens admission, so that it is not older than the wait.
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
         fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
 
@@ -708,10 +585,7 @@ public class SnapshotSender {
         dataSenderBufferManager.reset(Address.NON_ADDRESS);
 
         stopSnapshotSync.set(false);
-        startSnapshotSync = true;
         snapshotCompleted = false;
-        consecutiveGenuineStallChecks = 0;
-        lastStallCheckTimeMs = 0;
     }
 
     /**
@@ -723,6 +597,9 @@ public class SnapshotSender {
             runGeneration++;
             if (continuation != null) { continuation.cancel(false); continuation = null; }
         }
+        // A stop (connection flap, forced sync, leadership loss, shutdown) abandons the transfer
+        // from the source's side; the identity is discarded by the next reset().
+        cancelAdmittedAttempt();
     }
 
     public void updateTopologyConfigId(long topologyConfigId) {

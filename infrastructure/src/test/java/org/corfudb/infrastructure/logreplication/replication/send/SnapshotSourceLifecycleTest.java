@@ -32,6 +32,11 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
 
+/**
+ * The source side of the snapshot lease: it polls the sink's status, proposes START with the sink's
+ * admission epoch, sends bulk data only after explicit acceptance, and has no give-up timer of its
+ * own. There is no fallback protocol for a sink that does not report a lease.
+ */
 class SnapshotSourceLifecycleTest {
     private CorfuRuntime runtime;
     private DataSender transport;
@@ -39,7 +44,7 @@ class SnapshotSourceLifecycleTest {
     private SnapshotReader reader;
     private LogReplicationFSM fsm;
     private final UUID eventId = UUID.randomUUID();
-    private final AtomicReference<SnapshotSyncLeaseRecord> status = new AtomicReference<>(SnapshotSyncLease.initial("sink"));
+    private final AtomicReference<SnapshotSyncLeaseRecord> status = new AtomicReference<>(SnapshotSyncLease.seedIdle("sink", -1, 0));
     private final List<LogReplicationEntryMsg> sent = new ArrayList<>();
     private CompletableFuture<LogReplicationEntryMsg> admission;
     private final AtomicLong nanoTime = new AtomicLong(1);
@@ -131,7 +136,7 @@ class SnapshotSourceLifecycleTest {
         drive();
         assertTrue(sent.isEmpty());
         verify(reader, never()).read(any());
-        status.set(SnapshotSyncLease.initial("sink"));
+        status.set(SnapshotSyncLease.seedIdle("sink", -1, 0));
         drive();
         drive();
         assertEquals(1, sent.size());
@@ -165,7 +170,7 @@ class SnapshotSourceLifecycleTest {
     }
 
     @Test
-    void unfinishedMetadataRequestExpiresAndLateLegacyReplyCannotBypassRecovery() {
+    void unfinishedMetadataRequestExpiresAndALateLeaselessReplyCannotBypassRecovery() {
         CompletableFuture<LogReplicationMetadataResponseMsg> lost = new CompletableFuture<>();
         status.set(status.get().toBuilder().setPhase(SnapshotSyncLeaseRecord.Phase.RECOVERING).build());
         when(transport.sendMetadataRequest()).thenReturn(lost).thenAnswer(call -> CompletableFuture.completedFuture(
@@ -181,11 +186,10 @@ class SnapshotSourceLifecycleTest {
         verify(transport, times(2)).sendMetadataRequest();
         lost.complete(LogReplicationMetadataResponseMsg.getDefaultInstance());
         drive();
-        assertTrue(source.usesSnapshotLifecycle());
         assertTrue(sent.isEmpty());
         verify(reader, never()).read(any());
 
-        status.set(SnapshotSyncLease.initial("sink"));
+        status.set(SnapshotSyncLease.seedIdle("sink", -1, 0));
         drive();
         assertEquals(1, sent.size());
         assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
@@ -239,7 +243,7 @@ class SnapshotSourceLifecycleTest {
     }
 
     @Test
-    void metadataReplyArrivingAfterDeadlineCannotSelectLegacyModeBeforeTheNextPoll() {
+    void aMetadataReplyArrivingAfterItsDeadlineIsIgnored() {
         CompletableFuture<LogReplicationMetadataResponseMsg> lateReply = new CompletableFuture<>();
         status.set(status.get().toBuilder().setPhase(SnapshotSyncLeaseRecord.Phase.RECOVERING).build());
         when(transport.sendMetadataRequest()).thenReturn(lateReply).thenAnswer(call -> CompletableFuture.completedFuture(
@@ -251,9 +255,72 @@ class SnapshotSourceLifecycleTest {
         assertTrue(sent.isEmpty());
         verify(reader, never()).setSnapshotBatchSizeHint(1);
         drive();
-        assertTrue(source.usesSnapshotLifecycle());
         assertTrue(sent.isEmpty());
         verify(reader, never()).read(any());
+    }
+
+    @Test
+    void aSinkThatReportsNoLeaseIsNeverSentAnything() {
+        // A sink that predates the snapshot lease. Negotiation already refuses it; if replication is
+        // driven without negotiation, the sender must still never fall back to an unadmitted transfer.
+        when(transport.sendMetadataRequest()).thenAnswer(call -> CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotStart(40).setSnapshotTransferred(40)
+                        .setSnapshotApplied(40).setLastLogEntryTimestamp(40).build()));
+        for (int poll = 0; poll < 4; poll++) {
+            drive();
+        }
+        assertTrue(sent.isEmpty());
+        verify(reader, never()).read(any());
+        verify(fsm, never()).input(any());
+
+        // Once the sink is upgraded and reports a lease, the same attempt proceeds.
+        when(transport.sendMetadataRequest()).thenAnswer(call -> CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(status.get()).build()));
+        drive();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
+    }
+
+    @Test
+    void aSynchronousAcceptanceIsUsedInTheSameStep() {
+        // An in-process or very fast transport answers START before send() returns.
+        when(transport.send(any(LogReplicationEntryMsg.class))).thenAnswer(invocation -> {
+            LogReplicationEntryMsg message = invocation.getArgument(0);
+            sent.add(message);
+            LogReplicationEntryType type = message.getMetadata().getEntryType();
+            if (type == LogReplicationEntryType.SNAPSHOT_START) {
+                SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), message.getMetadata(),
+                        1000, 10000, 20, "protection");
+                status.set(SnapshotSyncLease.prepared(reserved));
+                return CompletableFuture.completedFuture(message.toBuilder().setMetadata(message.getMetadata().toBuilder()
+                        .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
+                        .setAttemptGeneration(reserved.getGeneration())).build());
+            }
+            return CompletableFuture.completedFuture(message.toBuilder().setMetadata(message.getMetadata().toBuilder()
+                    .setEntryType(type == LogReplicationEntryType.SNAPSHOT_END
+                            ? LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE : LogReplicationEntryType.SNAPSHOT_REPLICATED)).build());
+        });
+        drive();
+        assertEquals(3, sent.size(), "START, one data message and END went out in a single step");
+        assertEquals(1, source.getWireAttemptGeneration());
+        assertEquals(2, source.getObservedCounter().getValue(), "data and END of this step are observable");
+    }
+
+    @Test
+    void aStoppedOrFinishedSenderDoesNothing() {
+        accept();
+        drive(); // the data message's acknowledgement
+        drive(); // the END acknowledgement completes the transfer
+        verify(fsm, times(1)).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE));
+        int count = sent.size();
+        clearInvocations(transport);
+        drive();
+        assertEquals(count, sent.size());
+        verify(transport, never()).sendMetadataRequest();
+
+        source.reset();
+        source.stop();
+        drive();
+        verify(transport, never()).sendMetadataRequest();
     }
 
     @Test
@@ -464,6 +531,161 @@ class SnapshotSourceLifecycleTest {
         assertEquals(2, sent.size());
         assertEquals(LogReplicationEntryType.SNAPSHOT_END, sent.get(1).getMetadata().getEntryType());
         assertEquals(0, sent.get(1).getMetadata().getSnapshotSyncSeqNum());
+    }
+
+    // ---------------------------------------------------------------- topology changes
+
+    /**
+     * The topology id can be bumped without a role change, so the snapshot FSM keeps running. Every
+     * message would then carry a topology the attempt was not admitted for, the sink would answer
+     * each of them STALE_ATTEMPT, and a BUSY reply alone never cancels anything.
+     */
+    @Test
+    void aTopologyChangeUnderAnAdmittedAttemptCancelsItInsteadOfResendingForever() {
+        accept();
+        int count = sent.size();
+        when(fsm.getTopologyConfigId()).thenReturn(7L);
+
+        drive();
+
+        assertEquals(count + 1, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(count).getMetadata().getEntryType());
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+        drive();
+        assertEquals(count + 1, sent.size(), "nothing of a run that gave up is sent any more");
+    }
+
+    @Test
+    void aProposalBuiltUnderAnOlderTopologyIsRebuilt() {
+        drive();
+        assertEquals(0, sent.get(0).getMetadata().getTopologyConfigID());
+        admission.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.getDefaultInstance()));
+        admission = new CompletableFuture<>();
+        // The lease is READY with the same admission epoch: only the topology moved on.
+        when(fsm.getTopologyConfigId()).thenReturn(7L);
+
+        drive();
+
+        assertEquals(2, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(1).getMetadata().getEntryType());
+        assertEquals(7, sent.get(1).getMetadata().getTopologyConfigID());
+        assertEquals(sent.get(0).getMetadata().getSyncRequestId(), sent.get(1).getMetadata().getSyncRequestId());
+    }
+
+    // ---------------------------------------------------------------- transfer pacing
+
+    /**
+     * The window holds a handful of messages. Refilling it once per timer period would move about
+     * one message every two seconds, and no large snapshot could ever finish inside its budget.
+     */
+    @Test
+    void aFullWindowIsRefilledAsSoonAsAReplyArrivesNotOnATimer() throws Exception {
+        List<CompletableFuture<LogReplicationEntryMsg>> replies = new ArrayList<>();
+        when(reader.read(any())).thenReturn(new SnapshotReadMessage(Collections.singletonList(
+                LogReplicationEntryMsg.newBuilder().setMetadata(LogReplicationEntryMetadataMsg.newBuilder()
+                        .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)).build()), false));
+        when(transport.send(any(LogReplicationEntryMsg.class))).thenAnswer(invocation -> {
+            LogReplicationEntryMsg message = invocation.getArgument(0);
+            sent.add(message);
+            if (message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START) { return admission; }
+            CompletableFuture<LogReplicationEntryMsg> reply = new CompletableFuture<>();
+            replies.add(reply);
+            return reply;
+        });
+        accept();
+        while (!source.getDataSenderBufferManager().getPendingMessages().isFull()) {
+            drive();
+        }
+        int whenFull = sent.size();
+        drive();
+        assertEquals(whenFull, sent.size(), "a full window sends nothing");
+        TimeUnit.MILLISECONDS.sleep(200); // Let continuations of the earlier steps fire.
+        clearInvocations(fsm);
+
+        LogReplicationEntryMsg first = sent.get(1);
+        replies.get(0).complete(first.toBuilder().setMetadata(first.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_REPLICATED)).build());
+
+        // Well inside the status poll period, which is the only timer a waiting step has.
+        verify(fsm, timeout(1000).atLeastOnce()).input(argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE));
+        drive();
+        assertEquals(whenFull + 1, sent.size(), "the freed slot is used by the next step");
+    }
+
+    @Test
+    void everyReplyThatHasArrivedIsConsumedInOneStep() {
+        accept(); // The data message and the end marker went out, and both replies are already there.
+        drive();
+        verify(fsm, times(1)).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE));
+        assertEquals(0, source.getDataSenderBufferManager().getPendingMessages().getSize());
+    }
+
+    // ---------------------------------------------------------------- giving an admitted transfer up
+
+    /**
+     * A stop (connection flap, forced sync, leadership loss) discards the attempt's identity with
+     * the next reset, so nobody could cancel it later: the sink would stay protected until it
+     * notices the silence, minutes later.
+     */
+    @Test
+    void stoppingAnAdmittedTransferTellsTheSink() {
+        accept();
+        int count = sent.size();
+        source.stop();
+        assertEquals(count + 1, sent.size());
+        LogReplicationEntryMetadataMsg cancel = sent.get(count).getMetadata();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, cancel.getEntryType());
+        assertEquals(status.get().getAttemptId(), cancel.getSyncRequestId());
+        assertEquals(status.get().getGeneration(), cancel.getAttemptGeneration());
+        source.stop();
+        assertEquals(count + 1, sent.size(), "once");
+    }
+
+    @Test
+    void replacingAnAdmittedTransferTellsTheSinkBeforeItsIdentityIsDiscarded() {
+        accept();
+        int count = sent.size();
+        UUID replaced = source.getWireAttemptId();
+        source.reset();
+        assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, sent.get(count).getMetadata().getEntryType());
+        assertEquals(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(replaced), sent.get(count).getMetadata().getSyncRequestId());
+        assertNotEquals(replaced, source.getWireAttemptId());
+    }
+
+    @Test
+    void anApplyThatRunsOnTheSinkIsNeverCancelledByAStop() {
+        accept();
+        drive(); // The end marker is acknowledged: the transfer is durable and the sink applies it alone.
+        int count = sent.size();
+        source.stop();
+        assertEquals(count, sent.size());
+    }
+
+    @Test
+    void aProposalThatWasNeverAcceptedHasNothingToCancel() {
+        drive();
+        source.stop();
+        assertEquals(1, sent.size());
+        assertEquals(LogReplicationEntryType.SNAPSHOT_START, sent.get(0).getMetadata().getEntryType());
+    }
+
+    /** The worker only records a failure in a Future nobody reads: a step must reschedule itself. */
+    @Test
+    void aStepThatDiesWithAnErrorIsStillRetried() {
+        when(reader.read(any())).thenThrow(new AssertionError("unexpected"));
+        drive();
+        LogReplicationEntryMsg start = sent.get(0);
+        SnapshotSyncLeaseRecord reserved = SnapshotSyncLease.reserve(status.get(), start.getMetadata(), 1000, 10000, 20, "protection");
+        status.set(SnapshotSyncLease.prepared(reserved));
+        admission.complete(start.toBuilder().setMetadata(start.getMetadata().toBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED).setAttemptGeneration(reserved.getGeneration())).build());
+        clearInvocations(fsm);
+
+        assertThrows(AssertionError.class, this::drive);
+
+        verify(fsm, timeout(5000).atLeastOnce()).input(argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE));
     }
 
     @Test

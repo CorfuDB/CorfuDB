@@ -1,4 +1,6 @@
-# SnapshotSyncLeaseRecord from PR head 53f070c548cb8ad17a5191784e82c2eb0b8a262c.
+# SnapshotSyncLeaseRecord schema version 1. Fields 1 to 26 are from PR head
+# 53f070c548cb8ad17a5191784e82c2eb0b8a262c; field 27 was added before the first release.
+# Fields may only be appended: never renumber, retype or remove an entry in this file.
 name: "SnapshotSyncLeaseRecord"
 field {
   name: "schemaVersion"
@@ -159,6 +161,12 @@ field {
   number: 26
   label: LABEL_OPTIONAL
   type: TYPE_INT64
+}
+field {
+  name: "consecutiveAborts"
+  number: 27
+  label: LABEL_OPTIONAL
+  type: TYPE_UINT32
 }
 enum_type {
   name: "Phase"

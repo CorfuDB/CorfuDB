@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
 import org.corfudb.runtime.CorfuCompactorManagement.StringKey;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -15,6 +16,7 @@ import org.corfudb.runtime.proto.RpcCommon;
 
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -27,6 +29,9 @@ public class DistributedCheckpointerHelper {
     private final CompactorMetadataTables compactorMetadataTables;
 
     private static final long COMPACTION_TRIGGER_INTERVAL = 10;
+
+    private static final long EXPIRED_PROTECTION_WARN_INTERVAL_MS = TimeUnit.MINUTES.toMillis(10);
+    private static final AtomicLong EXPIRED_PROTECTION_WARNED_AT = new AtomicLong();
 
     public DistributedCheckpointerHelper(CorfuStore corfuStore) throws Exception {
         this.corfuStore = corfuStore;
@@ -145,6 +150,19 @@ public class DistributedCheckpointerHelper {
                                               StringKey stringKey,
                                               UpdateAction action) {
         if (action == UpdateAction.PUT) {
+            if (CompactorMetadataTables.FREEZE_TOKEN.equals(stringKey)) {
+                CorfuStoreEntry<StringKey, RpcCommon.TokenMsg, Message> existing =
+                        txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, stringKey);
+                if (existing != null && existing.getPayload() != null) {
+                    // The patience that bounds a freeze is counted from when it began. Restarting it
+                    // on every repeated request is what let a caller that kept asking (a snapshot
+                    // sync that kept restarting) freeze checkpointing for as long as it kept failing.
+                    // To freeze for longer on purpose, unfreeze and freeze again.
+                    log.info("Checkpointing is already frozen since {}; the freeze keeps its start time",
+                            new Date(existing.getPayload().getSequence()));
+                    return;
+                }
+            }
             txn.putRecord(checkpointTable, stringKey,
                     RpcCommon.TokenMsg.newBuilder().setSequence(System.currentTimeMillis()).build(), null);
         } else if (action == UpdateAction.DELETE) {
@@ -162,25 +180,43 @@ public class DistributedCheckpointerHelper {
     }
 
     public boolean isCheckpointFrozen(TxnContext txn) {
-        // Owned protection has no independent expiry. Only the LR lifecycle can release it.
-        // An older running cycle may still complete using its pre-reservation safe cutoff.
-        CorfuCompactorManagement.SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.read(txn);
-        if (lease.getProtectionHeld()) {
+        return isCheckpointFrozen(txn, System.currentTimeMillis());
+    }
+
+    /**
+     * The snapshot lease freezes checkpointing while its protection is in force. The log replication
+     * sink normally releases it, at the latest when the attempt's deadline passes. As a backstop
+     * that does not depend on the sink being alive, protection older than its deadline plus a grace
+     * is ignored here, so a hung sink worker or a sink cluster without a leader can never keep the
+     * log from being trimmed. An older running cycle may still complete using its pre-reservation
+     * safe cutoff.
+     */
+    public boolean isCheckpointFrozen(TxnContext txn, long now) {
+        CorfuCompactorManagement.SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.readForRetention(txn);
+        if (SnapshotSyncLeaseStore.protectionActive(lease, now)) {
             CheckpointingStatus manager = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             RpcCommon.TokenMsg cutoff = (RpcCommon.TokenMsg) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
             if (manager == null || manager.getStatus() != StatusType.STARTED || cutoff == null
-                    || !SnapshotSyncLeaseStore.permitsTrim(lease, cutoff.getSequence())) {
+                    || !SnapshotSyncLeaseStore.permitsTrim(lease, cutoff.getSequence(), now)) {
                 return true;
+            }
+        } else if (lease.getProtectionHeld()) {
+            // This runs on every pass of the orchestrator and in every checkpointer: say it rarely.
+            long lastWarned = EXPIRED_PROTECTION_WARNED_AT.get();
+            if (now - lastWarned >= EXPIRED_PROTECTION_WARN_INTERVAL_MS
+                    && EXPIRED_PROTECTION_WARNED_AT.compareAndSet(lastWarned, now)) {
+                log.warn("Ignoring snapshot protection held past its deadline: generation={}, phase={}, deadlineMs={}, "
+                                + "graceMs={}. The log replication sink did not release it.", lease.getGeneration(),
+                        lease.getPhase(), lease.getDeadlineMs(), SnapshotSyncLeaseStore.expiryGraceMs());
             }
         }
         RpcCommon.TokenMsg freezeToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                 CompactorMetadataTables.FREEZE_TOKEN).getPayload();
         final long patience = 2 * 60 * 60 * 1000;
         if (freezeToken != null) {
-            long now = System.currentTimeMillis();
             long frozeAt = freezeToken.getSequence();
             Date frozeAtDate = new Date(frozeAt);
             if (now - frozeAt > patience) {

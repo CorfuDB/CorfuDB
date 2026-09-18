@@ -100,14 +100,46 @@ public class DynamicTriggerPolicyUnitTest {
         assertFalse(controls.containsKey(CompactorMetadataTables.FREEZE_TOKEN));
     }
 
+    /**
+     * The sink releases protection at the attempt's deadline at the latest. If it cannot (hung
+     * worker, no log replication leader), the checkpointer must not stay frozen forever: it stops
+     * honoring the protection once it is older than the deadline plus the grace.
+     */
     @Test
-    public void ownedProtectionBlocksForcedCheckpointEvenAfterItsDeadline() throws Exception {
+    public void ownedProtectionBlocksAForcedCheckpointOnlyUntilItsDeadlinePlusTheGrace() throws Exception {
         controls.put(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, RpcCommon.TokenMsg.getDefaultInstance());
-        SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
-                .setProtectionHeld(true).setProtectedAfter(20).setDeadlineMs(1).build();
+        long now = System.currentTimeMillis();
+        long grace = SnapshotSyncLeaseStore.expiryGraceMs();
+        SnapshotSyncLeaseRecord.Builder lease = SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
+                .setProtectionHeld(true).setProtectedAfter(20);
+
+        // Not yet at its deadline.
+        holdLease(lease.setDeadlineMs(now + TimeUnit.MINUTES.toMillis(10)).build());
+        assertFalse(dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore)));
+
+        // Past its deadline but inside the grace: the sink is still expected to release it.
+        holdLease(lease.setDeadlineMs(now - grace + TimeUnit.MINUTES.toMillis(1)).build());
+        assertFalse(dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore)));
+
+        // Past its deadline and the grace: nothing of that attempt can commit any more.
+        holdLease(lease.setDeadlineMs(now - grace - 1).build());
+        assertTrue(dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore)));
+    }
+
+    /** Expired snapshot protection does not switch off the operator's own freeze token. */
+    @Test
+    public void expiredProtectionStillLeavesTheOperatorFreezeTokenInForce() throws Exception {
+        controls.put(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM, RpcCommon.TokenMsg.getDefaultInstance());
+        controls.put(CompactorMetadataTables.FREEZE_TOKEN, RpcCommon.TokenMsg.newBuilder()
+                .setSequence(System.currentTimeMillis()).build());
+        holdLease(SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1).setProtectionHeld(true)
+                .setProtectedAfter(20).setDeadlineMs(1).build());
+        assertFalse(dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore)));
+    }
+
+    private void holdLease(SnapshotSyncLeaseRecord lease) {
         when(txn.getRecord(SnapshotSyncLeaseStore.TABLE_NAME, SnapshotSyncLeaseStore.DOMAIN))
                 .thenReturn(new CorfuStoreEntry<>(SnapshotSyncLeaseStore.DOMAIN, lease, null));
-        assertFalse(dynamicTriggerPolicy.shouldTrigger(INTERVAL, corfuStore, new DistributedCheckpointerHelper(corfuStore)));
     }
 
     @Test

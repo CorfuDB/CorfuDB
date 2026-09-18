@@ -120,6 +120,12 @@ public class LogReplicationMetadataManager {
         }
     }
 
+    /**
+     * Whether the pre-lease protocol left a snapshot unfinished. That protocol stamps the started
+     * timestamp and resets the applied one on every SNAPSHOT_START, and only stamps applied when the
+     * apply finishes, so started greater than applied means: mid-transfer, transferred but not
+     * applied, or cancelled and never retried. Only meaningful while no lease record exists yet.
+     */
     public boolean legacySnapshotPending(TxnContext txn) {
         Map<LogReplicationMetadataType, Long> values = queryMetadata(txn,
                 LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
@@ -128,12 +134,14 @@ public class LogReplicationMetadataManager {
     }
 
     public void initializeSnapshot(TxnContext txn, LogReplication.LogReplicationEntryMetadataMsg start) {
-        Map<LogReplicationMetadataType, Long> values = queryMetadata(txn,
-                LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        if (values.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) != start.getTopologyConfigID()
-                || values.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED) > start.getSnapshotTimestamp()) {
-            throw new SnapshotSyncLease.LeaseRejectedException("Snapshot topology or source cut is stale");
+        // A delayed or duplicate proposal is fenced by the admission epoch it quotes. The source's
+        // snapshot timestamp is deliberately not compared with the previous one: it is a position in
+        // the source's log, which starts over when the source is rebuilt or restored, and refusing
+        // every proposal below the old position would close replication for good, silently.
+        if (persistedTopologyConfigId(txn) != start.getTopologyConfigID()) {
+            throw new SnapshotSyncLease.LeaseRejectedException("Snapshot topology is stale");
         }
+        fenceIncrementalWriters(txn);
         appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, start.getSnapshotTimestamp());
         for (LogReplicationMetadataType type : new LogReplicationMetadataType[]{
                 LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED,
@@ -142,12 +150,51 @@ public class LogReplicationMetadataManager {
                 LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS}) {
             appendUpdate(txn, type, Address.NON_ADDRESS);
         }
+        // The data-consistent flag is deliberately left alone here. Transfer only writes shadow
+        // streams, so the regular streams still hold the last consistent state and stay readable
+        // until apply begins: see transferSnapshot().
+    }
+
+    /**
+     * Transfer is complete and apply is about to rewrite the regular streams, so readers must stop
+     * trusting them until the snapshot is fully applied. Committed with the lease's move to
+     * APPLYING, which precedes the first regular-stream mutation.
+     */
+    public void transferSnapshot(TxnContext txn, long snapshot) {
+        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, snapshot);
         txn.putRecord(replicationStatusTable, ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build(),
                 ReplicationStatusVal.newBuilder().setDataConsistent(false).setStatus(SyncStatus.UNAVAILABLE).build(), null);
     }
 
-    public void transferSnapshot(TxnContext txn, long snapshot) {
-        appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, snapshot);
+    /**
+     * Makes every incremental (log entry) transaction that is in flight conflict with {@code txn}.
+     * Each of them touches TOPOLOGY_CONFIG_ID, so rewriting it here aborts the ones that read the
+     * lease before this transaction commits; on retry they read the new lease and stop. This is what
+     * lets the incremental writer validate the lease without writing it. Without the key no
+     * incremental transaction can commit at all (its touch fails), so there is nothing to fence.
+     */
+    public void fenceIncrementalWriters(TxnContext txn) {
+        long topology = persistedTopologyConfigId(txn);
+        if (topology != Address.NON_ADDRESS) {
+            appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topology);
+        }
+    }
+
+    /** Source timestamp of the snapshot that was last started on this sink, by any protocol. */
+    public long lastStartedSnapshot(TxnContext txn) {
+        return queryMetadata(txn, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED)
+                .get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+    }
+
+    /** Snapshot this sink last applied in full, or {@link Address#NON_ADDRESS} if it never did. */
+    public long lastAppliedSnapshot(TxnContext txn) {
+        return queryMetadata(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED)
+                .get(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+    }
+
+    public long persistedTopologyConfigId(TxnContext txn) {
+        return queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID)
+                .get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
     }
 
     public void abandonSnapshot(TxnContext txn) {
@@ -324,95 +371,14 @@ public class LogReplicationMetadataManager {
         return queryMetadata(LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED);
     }
 
+    /**
+     * The same transactional view the sink publishes to source polls, read fresh. Transport
+     * callbacks use {@link #getCachedSnapshotStatus()} instead so that they never block.
+     */
     public ResponseMsg getMetadataResponse(HeaderMsg header) {
-        return getMetadataResponse(header, false);
-    }
-
-    /**
-     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
-     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
-     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
-     */
-    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing) {
-        return getMetadataResponse(header, isProcessing, Address.NON_ADDRESS);
-    }
-
-    /**
-     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
-     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
-     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
-     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
-     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
-     *                      so a source new enough to check can tell "the sink is busy on the
-     *                      attempt I'm asking about" apart from "the sink is busy on a different,
-     *                      already-abandoned attempt" -- both look identical as a bare boolean.
-     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
-     *                      when isProcessing is false, where it's simply unused by the source.
-     */
-    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp) {
-        return getMetadataResponse(header, isProcessing, processingSnapshotTimestamp, false);
-    }
-
-    /**
-     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
-     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
-     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
-     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
-     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
-     *                      so a source new enough to check can tell "the sink is busy on the
-     *                      attempt I'm asking about" apart from "the sink is busy on a different,
-     *                      already-abandoned attempt" -- both look identical as a bare boolean.
-     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
-     *                      when isProcessing is false, where it's simply unused by the source.
-     * @param applyRetriesExhausted whether the sink has given up automatically retrying the
-     *                      pending apply reflected in snapshotStart/snapshotTransferred (see
-     *                      LogReplicationSinkManager.isApplyRetriesExhausted()), so the source can
-     *                      cancel and restart immediately instead of waiting out the much longer
-     *                      SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound meant to catch a generic hang.
-     */
-    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp,
-                                           boolean applyRetriesExhausted) {
-        return getMetadataResponse(header, isProcessing, processingSnapshotTimestamp, applyRetriesExhausted, 0);
-    }
-
-    /**
-     * @param isProcessing whether the sink is currently actively writing/applying an in-progress
-     *                      snapshot sync, so the source can tell a busy-but-alive sink apart from a
-     *                      genuinely stalled one instead of relying solely on a fixed ack timeout.
-     * @param processingSnapshotTimestamp the baseSnapshotTimestamp of the attempt isProcessing
-     *                      refers to (see LogReplicationSinkManager.getBaseSnapshotTimestamp()),
-     *                      so a source new enough to check can tell "the sink is busy on the
-     *                      attempt I'm asking about" apart from "the sink is busy on a different,
-     *                      already-abandoned attempt" -- both look identical as a bare boolean.
-     *                      Always set (like expectedSeqNum elsewhere in this protocol), including
-     *                      when isProcessing is false, where it's simply unused by the source.
-     * @param applyRetriesExhausted whether the sink has given up automatically retrying the
-     *                      pending apply reflected in snapshotStart/snapshotTransferred (see
-     *                      LogReplicationSinkManager.isApplyRetriesExhausted()), so the source can
-     *                      cancel and restart immediately instead of waiting out the much longer
-     *                      SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound meant to catch a generic hang.
-     * @param checkpointerGracePeriodMs meaningful only when applyRetriesExhausted is true: the
-     *                      minimum time (ms) the sink wants before the source's next SNAPSHOT_START
-     *                      (see LogReplicationSinkManager.getCheckpointerGracePeriodMs()).
-     */
-    public ResponseMsg getMetadataResponse(HeaderMsg header, boolean isProcessing, long processingSnapshotTimestamp,
-                                           boolean applyRetriesExhausted, long checkpointerGracePeriodMs) {
-        LogReplication.LogReplicationMetadataResponseMsg metadataMsg = LogReplication.LogReplicationMetadataResponseMsg
-                .newBuilder()
-                .setTopologyConfigID(getTopologyConfigId())
-                .setVersion(getVersion())
-                .setSnapshotStart(getLastStartedSnapshotTimestamp())
-                .setSnapshotTransferred(getLastTransferredSnapshotTimestamp())
-                .setSnapshotApplied(getLastAppliedSnapshotTimestamp())
-                .setLastLogEntryTimestamp(getLastProcessedLogEntryBatchTimestamp())
-                .setIsProcessing(isProcessing)
-                .setProcessingSnapshotTimestamp(processingSnapshotTimestamp)
-                .setApplyRetriesExhausted(applyRetriesExhausted)
-                .setCheckpointerGracePeriodMs(checkpointerGracePeriodMs)
-                .setSnapshotTransferWriteSize(runtime.getParameters().getMaxWriteSize())
-                .build();
+        refreshSnapshotStatus();
         CorfuMessage.ResponsePayloadMsg payload = CorfuMessage.ResponsePayloadMsg.newBuilder()
-                .setLrMetadataResponse(metadataMsg).build();
+                .setLrMetadataResponse(getCachedSnapshotStatus()).build();
         return getResponseMsg(header, payload);
     }
 

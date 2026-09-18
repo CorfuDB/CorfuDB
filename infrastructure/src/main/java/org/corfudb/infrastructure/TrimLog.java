@@ -4,6 +4,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.proto.RpcCommon;
@@ -31,8 +32,10 @@ public class TrimLog {
             if (managerStatus.getStatus() == CheckpointingStatus.StatusType.COMPLETED) {
                 RpcCommon.TokenMsg trimToken = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                         CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
-                if (trimToken != null && org.corfudb.runtime.SnapshotSyncLeaseStore.permitsTrim(
-                        org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn), trimToken.getSequence())) {
+                // A snapshot sync protects everything written after its reservation. Protection
+                // that outlived its deadline plus the grace no longer blocks the trim.
+                if (trimToken != null && SnapshotSyncLeaseStore.permitsTrim(
+                        SnapshotSyncLeaseStore.readForRetention(txn), trimToken.getSequence(), System.currentTimeMillis())) {
                     trimAddress = Optional.of(trimToken.getSequence());
                 }
             } else {

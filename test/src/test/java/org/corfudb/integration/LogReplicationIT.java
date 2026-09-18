@@ -20,22 +20,27 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationS
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.SnapshotLeaseCoordinator;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.DistributedCheckpointerHelper;
 import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.SnapshotSyncPluginValue;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Address;
@@ -61,6 +66,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,7 +77,6 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -415,10 +420,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
 
     /**
-     * This test simulates dropping all SNAPSHOT_START messages.  It verifies that null ACKs were received on the
-     * sender and no data generated as part of snapshot sync is accepted by the receiver.  The test waits for a
-     * default number of null ACKs(TestConfig.DEFAULT_NULL_ACKS_TO_WAIT_FOR) and also verifies that no data was
-     * applied on the receiver.
+     * A snapshot sync only starts once the sink has accepted the source's proposal (SNAPSHOT_START).
+     * This test drops every proposal. It verifies that the source keeps proposing, that it never
+     * sends snapshot data it was not admitted for, and that the sink never froze its checkpointer.
      * @throws Exception
      */
     @Test
@@ -427,9 +431,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * This test simulates dropping a certain number of SNAPSHOT_START messages and recovers after that.  It verifies
-     * that null ACKs were received on the sender until SNAPSHOT_START was dropped.  After recovery, snapshot sync
-     * completed successfully and data was replicated on the receiver.
+     * This test drops a certain number of proposals (SNAPSHOT_START) and lets the next one through.
+     * It verifies that the source proposes again after each lost one, and that snapshot sync then
+     * completes and the data is replicated on the receiver.
      * @throws Exception
      */
     @Test
@@ -451,31 +455,32 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testConfig.clear().setDropSnapshotStartMsg(true);
         testConfig.setNumDropsForSnapshotStart(numDrops);
 
-        Set<WAIT> waitSet = new HashSet<>();
-        // If a limited number of START messages will get dropped, wait for equal number of null ACKs.  Otherwise,
-        // the test waits for a default number of null ACKs.
-        // Also wait for metadata from the receiver indicating completion of snapshot sync eventually
         if (numDrops != Integer.MAX_VALUE) {
-            testConfig.setNumNullAcksToWaitFor(numDrops);
-            waitSet.add(WAIT.ON_METADATA_RESPONSE);
-        }
+            // Wait for metadata from the receiver indicating completion of snapshot sync eventually
+            startSnapshotSync(Collections.singleton(WAIT.ON_METADATA_RESPONSE));
 
-        // Acquire the semaphore to block for null ACKs
-        blockForNullAck.acquire();
-
-        // Start snapshot sync.  On receiving the required number of null ACKs, the semaphore will get released
-        startSnapshotSync(waitSet);
-
-        // Acquire the same semaphore again to validate that it got released in the previous step
-        blockForNullAck.acquire();
-
-        if (numDrops == Integer.MAX_VALUE) {
-            // Verify the absence of data on the destination
-            verifyNoData(dstCorfuTables);
-        } else {
+            assertThat(sourceDataSender.getNumStartMsgsDropped()).isEqualTo(numDrops);
+            assertThat(sourceDataSender.getSinkManager().getSnapshotLease().getGeneration()).isEqualTo(1);
             // Snapshot Sync was successful
             verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
+            return;
         }
+
+        startSnapshotSync(new HashSet<>());
+
+        long deadline = System.currentTimeMillis() + PARAMETERS.TIMEOUT_LONG.toMillis();
+        while (sourceDataSender.getNumStartMsgsDropped() < TestConfig.DEFAULT_NULL_ACKS_TO_WAIT_FOR) {
+            assertThat(System.currentTimeMillis()).as("the source stopped proposing").isLessThan(deadline);
+            sleep(WAIT_STATE_CHANGE);
+        }
+
+        // No proposal was accepted: nothing was admitted, protected or transferred
+        SnapshotSyncLeaseRecord lease = sourceDataSender.getSinkManager().getSnapshotLease();
+        assertThat(lease.getGeneration()).isZero();
+        assertThat(lease.getProtectionHeld()).isFalse();
+        assertThat(logReplicationMetadataManager.getLastStartedSnapshotTimestamp()).isEqualTo(Address.NON_ADDRESS);
+        // Verify the absence of data on the destination
+        verifyNoData(dstCorfuTables);
     }
 
     /**
@@ -974,14 +979,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * Test the case where the ack for the final snapshot-transfer message (SNAPSHOT_TRANSFER_COMPLETE)
-     * is delayed past the source's ack-wait timeout, while the sink reports (via the metadata poll)
-     * that it is still actively processing. The source must extend its patience instead of canceling
-     * and restarting the snapshot sync, and the sync must still complete successfully with correct
-     * data on the destination once the delayed ack finally arrives.
+     * Test the case where the acknowledgement of the end of the transfer (SNAPSHOT_TRANSFER_COMPLETE)
+     * is delayed far past the source's patience for a reply, while the sink carries on and applies
+     * the snapshot. The transfer is durable on the sink and its lease says so, so the source must
+     * follow the apply through the sink's status instead of cancelling and restarting the snapshot.
      */
     @Test
-    public void testSnapshotSyncSurvivesSlowFinalAckViaBusySignal() throws Exception {
+    public void testSnapshotSyncSurvivesSlowFinalAck() throws Exception {
         openStreams(srcCorfuTables, srcCorfuStore, NUM_STREAMS);
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcCorfuStore, NUM_KEYS);
 
@@ -992,143 +996,107 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         log.debug("****** Verify No Data in Destination");
         verifyNoData(dstCorfuTables);
 
-        // Delay the final transfer ack well past DEFAULT_TIMEOUT_MS, so the source is guaranteed to
-        // hit at least one ack-wait timeout and fall back to polling the sink directly. As long as
-        // the sink keeps reporting isProcessing=true on that poll, the source must not cancel.
         testConfig.setDelayTransferCompleteAckMs(LogReplicationConfig.DEFAULT_TIMEOUT_MS + 2000);
-        testConfig.setReportSinkBusyOnMetadataPoll(true);
 
         log.debug("****** Start Snapshot Sync with delayed final ack");
-        startSnapshotSync(Collections.singleton(WAIT.ON_METADATA_RESPONSE));
+        LogReplicationSourceManager sourceManager = startSnapshotSync(new HashSet<>());
+        LogReplicationSinkManager sinkManager = sourceDataSender.getSinkManager();
+        waitForLease(sinkManager, lease -> lease.getOutcome() == SnapshotSyncLeaseRecord.Outcome.COMPLETED,
+                PARAMETERS.TIMEOUT_LONG.toMillis());
+        checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         log.debug("****** Snapshot Sync COMPLETE despite delayed final ack");
 
-        // Verify isDataConsistent is true and data was correctly and fully replicated -- i.e. the
-        // sync genuinely completed, it wasn't canceled and silently abandoned.
+        // Verify isDataConsistent is true and data was correctly and fully replicated by the first and
+        // only attempt -- i.e. the sync genuinely completed, it wasn't cancelled and started over.
+        assertThat(sinkManager.getSnapshotLease().getGeneration()).isEqualTo(1);
+        assertThat(sinkManager.getSnapshotLease().getConsecutiveAborts()).isZero();
         sourceDataSender.checkStatusOnStandby(true);
         verifyData(dstCorfuStore, dstCorfuTables, srcDataForVerification);
-
-        // Count only polls while the final transfer ACK is outstanding; startup capability
-        // negotiation and normal apply-status polls must not satisfy this assertion.
-        assertThat(sourceDataSender.getBusyMetadataPolls().get()).isGreaterThan(0);
     }
 
     /**
-     * Test the case where the source disappears (e.g. a network partition or crash) immediately after
-     * SNAPSHOT_START, having frozen local checkpointing on the sink, and is never heard from again --
-     * no SYNC_CANCEL, no retry. The sink must notice the prolonged silence on its own and unfreeze
-     * local checkpointing without depending on any further message from the source.
+     * The scenario behind the original incident. The source disappears (e.g. a network partition or a
+     * crash) right after its snapshot sync was admitted, having frozen local checkpointing on the
+     * sink, and is never heard from again -- no cancellation, no retry. The sink must notice the
+     * silence on its own and release the checkpointer, without depending on any further message
+     * from the source and long before the attempt's budget is used up.
      */
     @Test
-    public void testSinkSelfUnfreezesOnProlongedSilenceDuringTransfer() throws Exception {
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
-        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
-                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
-                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+    public void testSinkReleasesCheckpointerWhenSourceGoesSilentMidTransfer() throws Exception {
+        final long budgetMs = 120_000;
+        final long idleMs = 3_000;
+        LogReplicationSinkManager sinkManager = leadingSink(new SnapshotLeaseCoordinator.Timing(budgetMs, 0, 60_000, idleMs, 3));
 
         try {
-            LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(UUID.randomUUID()))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(100L)
-                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                    .build();
-            LogReplicationEntryMsg snapshotStart = LogReplicationEntryMsg.newBuilder().setMetadata(metadata).build();
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable = openPluginTable();
 
-            log.debug("****** Deliver SNAPSHOT_START, then go silent forever");
-            sinkManager.receive(snapshotStart);
+            log.debug("****** Get a snapshot sync admitted, then go silent forever");
+            long silentSince = System.currentTimeMillis();
+            SnapshotSyncLeaseRecord attempt = admit(sinkManager, UUID.randomUUID(), 100L);
+            assertThat(attempt.getProtectionHeld()).isTrue();
 
-            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
-                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
-                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
-                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
-            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
-                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
-                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
-                    .build();
+            log.debug("****** Confirm checkpointing was frozen on admission");
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
+            assertThat(new DistributedCheckpointerHelper(dstCorfuStore).isCheckpointFrozen()).isTrue();
 
-            log.debug("****** Confirm checkpointing was frozen on SNAPSHOT_START");
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
+            log.debug("****** Wait for the sink to notice the silence on its own");
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_END_VALUE, 60_000);
+            waitForLease(sinkManager, lease -> !lease.getProtectionHeld(), 30_000);
 
-            log.debug("****** Wait past the self-unfreeze timeout for the sink to notice the silence on its own");
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE,
-                    LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS + 15_000);
+            SnapshotSyncLeaseRecord released = sinkManager.getSnapshotLease();
+            assertThat(released.getOutcome()).isEqualTo(SnapshotSyncLeaseRecord.Outcome.ABORTED);
+            assertThat(released.getGeneration()).isEqualTo(attempt.getGeneration());
+            assertThat(System.currentTimeMillis() - silentSince).isLessThan(budgetMs / 2);
+            assertThat(new DistributedCheckpointerHelper(dstCorfuStore).isCheckpointFrozen()).isFalse();
         } finally {
             sinkManager.shutdown();
         }
     }
 
     /**
-     * Regression test for the sink's liveness signal keying off real progress rather than raw
-     * message receipt (LogReplicationSinkManager.processReceivedMessage()). Before this fix, ANY
-     * received message -- including a duplicate or out-of-order one that never advances
-     * lastProcessedSeq -- reset the self-unfreeze idle timer. A source that keeps blindly resending
-     * an unacked entry (SenderBufferManager.resend() has no retry cap of its own) could therefore
-     * keep the sink's checkpointer frozen forever, even though no real forward progress was ever
-     * being made.
+     * A source that keeps blindly resending an entry which never advances the transfer (there is no
+     * retry cap on a resend) is alive as far as the sink can tell, so the silence detection above
+     * does not apply. What bounds this case is the attempt's budget, which is fixed at admission and
+     * which no traffic, progress or retry can renew.
      */
     @Test
-    public void testSinkSelfUnfreezesDespiteContinuousNonAdvancingTraffic() throws Exception {
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
-        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
-                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
-                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+    public void testSinkReleasesCheckpointerAtItsBudgetDespiteContinuousNonAdvancingTraffic() throws Exception {
+        final long budgetMs = 10_000;
+        LogReplicationSinkManager sinkManager = leadingSink(new SnapshotLeaseCoordinator.Timing(budgetMs, 0, 60_000, 5_000, 3));
 
-        UUID syncId = UUID.randomUUID();
         ScheduledExecutorService nonAdvancingResends = Executors.newSingleThreadScheduledExecutor();
         try {
-            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(syncId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(100L)
-                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                    .build();
-            log.debug("****** Deliver SNAPSHOT_START");
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable = openPluginTable();
+            UUID attemptId = UUID.randomUUID();
+            SnapshotSyncLeaseRecord attempt = admit(sinkManager, attemptId, 100L);
 
-            // Out-of-order relative to whatever the sink expects next: gets buffered, never applied,
-            // so lastProcessedSeq never advances -- yet it's still a message the sink genuinely
-            // received, which is exactly what the old, unconditional top-of-receive() bump couldn't
-            // distinguish from real progress.
-            LogReplication.LogReplicationEntryMetadataMsg staleMessageMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(syncId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(100L)
-                    .setSnapshotSyncSeqNum(99999L)
-                    .build();
-            LogReplicationEntryMsg staleMessage = LogReplicationEntryMsg.newBuilder().setMetadata(staleMessageMetadata).build();
+            // Out-of-order relative to what the sink expects next: never applied, so the transfer
+            // never advances -- yet it is a message of the admitted attempt that the sink accepts.
+            LogReplicationEntryMsg staleMessage = LogReplicationEntryMsg.newBuilder().setMetadata(
+                    leaseHeader(LogReplicationEntryType.SNAPSHOT_MESSAGE, attemptId, 100L)
+                            .setAttemptGeneration(attempt.getGeneration()).setSnapshotSyncSeqNum(99999L)).build();
+            AtomicLong accepted = new AtomicLong();
+            nonAdvancingResends.scheduleWithFixedDelay(() -> {
+                try {
+                    sinkManager.receive(staleMessage);
+                    accepted.incrementAndGet();
+                } catch (LogReplicationBusyException e) {
+                    log.debug("The sink no longer serves the abandoned attempt: {}", e.getResponse().getReason());
+                }
+            }, 1, 1, TimeUnit.SECONDS);
 
-            // Simulate a source that keeps blindly resending an unacked, out-of-order entry every 2s
-            // -- far more often than the 5s liveness-check interval -- so if any received message
-            // still reset the idle timer, self-unfreeze would never fire.
-            nonAdvancingResends.scheduleWithFixedDelay(() -> sinkManager.receive(staleMessage), 2, 2, TimeUnit.SECONDS);
+            log.debug("****** Confirm checkpointing was frozen on admission");
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
 
-            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
-                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
-                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
-                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
-            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
-                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
-                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
-                    .build();
+            log.debug("****** Wait for the budget to end the attempt, despite continuous non-advancing traffic");
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_END_VALUE, budgetMs + 30_000);
+            waitForLease(sinkManager, lease -> !lease.getProtectionHeld(), 30_000);
 
-            log.debug("****** Confirm checkpointing was frozen on SNAPSHOT_START");
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
-
-            log.debug("****** Wait past the self-unfreeze timeout, despite continuous non-advancing traffic");
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE,
-                    LogReplicationConfig.SINK_SELF_UNFREEZE_TIMEOUT_MS + 15_000);
+            assertThat(accepted.get()).as("the traffic did reach the sink while the attempt was live").isGreaterThan(2);
+            assertThat(sinkManager.getSnapshotLease().getOutcome()).isEqualTo(SnapshotSyncLeaseRecord.Outcome.ABORTED);
+            assertThat(sinkManager.getSnapshotLease().getDeadlineMs()).isEqualTo(attempt.getDeadlineMs());
+            assertThat(new DistributedCheckpointerHelper(dstCorfuStore).isCheckpointFrozen()).isFalse();
         } finally {
             nonAdvancingResends.shutdownNow();
             sinkManager.shutdown();
@@ -1136,118 +1104,47 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * Regression test for LogReplicationSinkManager.startSnapshotApply()'s exception safety. Before
-     * this fix, an uncaught exception during apply (most notably a TrimmedException -- e.g. an
-     * external, LR-unaware safety valve like the checkpointer's own freeze-token auto-expiry running
-     * a checkpoint+trim concurrently) left ongoingApply permanently true, which permanently blocked
-     * every future snapshot sync attempt (receive() drops a new attempt's SNAPSHOT_START while
-     * ongoingApply is true) -- a silent, total, unrecoverable deadlock of the whole replication
-     * session, with the source's WaitSnapshotApplyState polling forever for a completion that could
-     * never come.
-     *
-     * Also verifies checkpointing deliberately stays frozen across the failure itself, unlike the
-     * very first version of this fix: unfreezing on every individual failed attempt let a
-     * compaction cycle both start and complete in the gap before the next retry, and its global,
-     * address-based trim would discard this attempt's (unregistered, unprotected) shadow-stream
-     * data as collateral -- see LogReplicationSinkManager.applyRetrySequenceActive's Javadoc. The
-     * deliberate unfreeze now happens only once resumeSnapshotApply() truly gives up.
+     * An apply that finds its shadow-stream data gone (a TrimmedException -- e.g. a checkpoint and
+     * trim that ran because the attempt had outlived its budget and the grace) cannot succeed by
+     * retrying. The sink must not stall on it: the attempt is abandoned, the checkpointer released,
+     * and a fresh snapshot sync is admitted instead of being refused forever.
      */
     @Test
-    public void testSinkRecoversFromApplyFailureInsteadOfPermanentlyStalling() throws Exception {
-        LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
-        LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
-                MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
-        LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
-                DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
-        // A cap of 0 means the very first call to resumeSnapshotApply() after a failure already
-        // finds the sequence exhausted, so this test doesn't have to wait out real retry backoff.
-        sinkManager.setMaxSnapshotApplyResumeRetries(0);
+    public void testSinkAbandonsAnApplyThatLostItsShadowDataAndAdmitsAFreshAttempt() throws Exception {
+        LogReplicationSinkManager sinkManager = leadingSink(new SnapshotLeaseCoordinator.Timing(120_000, 0, 60_000, 0, 3));
 
         try {
             // There's no way to force a real concurrent trim deterministically in a test, so this
-            // injects the one otherwise-untriggerable failure directly: the apply call itself
-            // throwing, exactly as it would if a concurrent trim removed shadow-stream data mid-read.
+            // injects the failure directly: the apply call itself throwing, exactly as it would if
+            // the shadow-stream data had been trimmed.
             StreamsSnapshotWriter failingWriter = mock(StreamsSnapshotWriter.class);
-            when(failingWriter.getPhase()).thenReturn(StreamsSnapshotWriter.Phase.TRANSFER_PHASE);
-            doThrow(new TrimmedException("shadow stream data trimmed concurrently"))
+            doThrow(new TrimmedException("shadow stream data trimmed"))
                     .when(failingWriter).startSnapshotSyncApply();
             sinkManager.setSnapshotWriter(failingWriter);
-
-            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable =
-                    dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
-                            ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
-                            TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
-            ExampleSchemas.Uuid pluginKey = ExampleSchemas.Uuid.newBuilder()
-                    .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
-                    .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
-                    .build();
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable = openPluginTable();
 
             UUID firstAttemptId = UUID.randomUUID();
-            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(firstAttemptId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(100L)
-                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                    .build();
-            log.debug("****** Deliver SNAPSHOT_START for the doomed first attempt");
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
+            log.debug("****** Get the doomed first attempt admitted");
+            SnapshotSyncLeaseRecord first = admit(sinkManager, firstAttemptId, 100L);
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_START_VALUE, 10_000);
 
-            LogReplication.LogReplicationEntryMetadataMsg endMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(firstAttemptId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(100L)
-                    .setSnapshotSyncSeqNum(0L)
-                    .build();
             log.debug("****** Deliver SNAPSHOT_END, triggering apply, which fails via the injected TrimmedException");
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(endMetadata).build());
+            LogReplicationEntryMsg ack = sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(
+                    leaseHeader(LogReplicationEntryType.SNAPSHOT_END, firstAttemptId, 100L)
+                            .setAttemptGeneration(first.getGeneration()).setSnapshotSyncSeqNum(0L)).build());
+            assertThat(ack.getMetadata().getEntryType()).isEqualTo(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE);
 
-            log.debug("****** Confirm ongoingApply resets instead of staying stuck permanently true");
-            long deadline = System.currentTimeMillis() + 10_000;
-            while (sinkManager.getOngoingApply().get() && System.currentTimeMillis() < deadline) {
-                sleep(200);
-            }
+            log.debug("****** Confirm the attempt is abandoned and checkpointing released, instead of stalling");
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_END_VALUE, 30_000);
+            waitForLease(sinkManager, lease -> lease.getPhase() == SnapshotSyncLeaseRecord.Phase.READY, 30_000);
             assertThat(sinkManager.getOngoingApply().get()).isFalse();
+            assertThat(sinkManager.getSnapshotLease().getOutcome()).isEqualTo(SnapshotSyncLeaseRecord.Outcome.ABORTED);
+            assertThat(sinkManager.getSnapshotLease().getConsecutiveAborts()).isEqualTo(1);
+            assertThat(sinkManager.isIncrementalSyncAdmitted()).isFalse();
 
-            log.debug("****** Confirm checkpointing is still frozen despite the failure -- this attempt's " +
-                    "shadow-stream data may still be retried in place, so nothing should have unfrozen yet");
-            try (TxnContext txn = dstCorfuStore.txn(DefaultSnapshotSyncPlugin.NAMESPACE)) {
-                CorfuStoreEntry<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> entry =
-                        txn.getRecord(pluginTable, pluginKey);
-                txn.commit();
-                assertThat(entry.getPayload().getValue()).isEqualTo(DefaultSnapshotSyncPlugin.ON_START_VALUE);
-            }
-            assertThat(sinkManager.isApplyRetriesExhausted()).isFalse();
-
-            log.debug("****** Simulate the source's metadata poll driving the auto-retry, which (with the " +
-                    "cap set to 0) immediately finds the sequence exhausted");
-            sinkManager.resumeSnapshotApply();
-
-            log.debug("****** Confirm checkpointing is now explicitly unfrozen, now that the sequence is truly " +
-                    "abandoned, rather than staying frozen indefinitely since phase is stuck at APPLY_PHASE " +
-                    "(checkSnapshotSyncLiveness()'s self-unfreeze only fires in TRANSFER phase)");
-            waitForPluginValue(pluginTable, pluginKey, DefaultSnapshotSyncPlugin.ON_END_VALUE, 10_000);
-            assertThat(sinkManager.isApplyRetriesExhausted()).isTrue();
-
-            log.debug("****** Confirm a fresh snapshot sync attempt is accepted instead of dropped");
-            UUID secondAttemptId = UUID.randomUUID();
-            LogReplication.LogReplicationEntryMetadataMsg freshStartMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(secondAttemptId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(200L)
-                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                    .build();
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(freshStartMetadata).build());
-
+            log.debug("****** Confirm a fresh snapshot sync attempt is admitted");
+            SnapshotSyncLeaseRecord second = admit(sinkManager, UUID.randomUUID(), 200L);
+            assertThat(second.getGeneration()).isEqualTo(first.getGeneration() + 1);
             assertThat(logReplicationMetadataManager.getLastStartedSnapshotTimestamp()).isEqualTo(200L);
         } finally {
             sinkManager.shutdown();
@@ -1255,68 +1152,120 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * Regression test for isProcessingSnapshotSync()'s windowed activity signal
-     * (LogReplicationSinkManager.PROCESSING_ACTIVITY_WINDOW_MS). Before this fix,
-     * isProcessingSnapshotSync() was a point-in-time snapshot of a boolean flag that flips back to
-     * false the instant a write finishes -- so a busy-signal poll landing in the gap between two
-     * discrete write bursts could under-report busyness even though the sink was clearly under
-     * continuous load. This verifies the signal stays "busy" for a short window past the write
-     * actually completing, then genuinely goes idle once that window elapses.
+     * A transient apply failure is retried by the sink itself, inside the budget the attempt was
+     * admitted with: checkpointing stays frozen across the retry (the shadow data is still needed),
+     * the deadline does not move, and the snapshot completes without the source starting over.
      */
     @Test
-    public void testIsProcessingReportsBusyWithinActivityWindowAfterWriteCompletes() throws Exception {
+    public void testSinkRetriesATransientApplyFailureInsideTheSameBudget() throws Exception {
+        LogReplicationSinkManager sinkManager = leadingSink(new SnapshotLeaseCoordinator.Timing(120_000, 0, 60_000, 0, 3));
+
+        try {
+            StreamsSnapshotWriter flakyWriter = mock(StreamsSnapshotWriter.class);
+            doThrow(new IllegalStateException("transient failure")).doNothing()
+                    .when(flakyWriter).startSnapshotSyncApply();
+            sinkManager.setSnapshotWriter(flakyWriter);
+            Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> pluginTable = openPluginTable();
+
+            UUID attemptId = UUID.randomUUID();
+            SnapshotSyncLeaseRecord attempt = admit(sinkManager, attemptId, 100L);
+            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(
+                    leaseHeader(LogReplicationEntryType.SNAPSHOT_END, attemptId, 100L)
+                            .setAttemptGeneration(attempt.getGeneration()).setSnapshotSyncSeqNum(0L)).build());
+
+            log.debug("****** The first apply fails: the attempt stays alive and checkpointing stays frozen");
+            waitForLease(sinkManager, lease -> lease.getApplyRetries() == 1, 30_000);
+            assertThat(sinkManager.getSnapshotLease().getPhase()).isEqualTo(SnapshotSyncLeaseRecord.Phase.APPLYING);
+            assertThat(sinkManager.getSnapshotLease().getProtectionHeld()).isTrue();
+            assertThat(getPluginValue(pluginTable)).isEqualTo(DefaultSnapshotSyncPlugin.ON_START_VALUE);
+
+            log.debug("****** The retry succeeds");
+            waitForLease(sinkManager, lease -> lease.getOutcome() == SnapshotSyncLeaseRecord.Outcome.COMPLETED, 60_000);
+            waitForPluginValue(pluginTable, pluginKey(), DefaultSnapshotSyncPlugin.ON_END_VALUE, 30_000);
+            assertThat(sinkManager.getSnapshotLease().getGeneration()).isEqualTo(attempt.getGeneration());
+            assertThat(sinkManager.getSnapshotLease().getDeadlineMs()).isEqualTo(attempt.getDeadlineMs());
+            assertThat(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp()).isEqualTo(100L);
+        } finally {
+            sinkManager.shutdown();
+        }
+    }
+
+    /** A sink like the one a deployment runs, leading, with the lease timing a test needs. */
+    private LogReplicationSinkManager leadingSink(SnapshotLeaseCoordinator.Timing timing) throws Exception {
         LogReplicationConfigManager configManager = new LogReplicationConfigManager(dstTestRuntime);
         LogReplicationConfig config = new LogReplicationConfig(configManager, BATCH_SIZE, SMALL_MSG_SIZE,
                 MAX_CACHE_NUM_ENTRIES, DEFAULT_MAX_SNAPSHOT_ENTRIES_APPLIED);
         LogReplicationSinkManager sinkManager = new LogReplicationSinkManager(
                 DESTINATION_ENDPOINT, config, logReplicationMetadataManager, nettyConfig);
+        sinkManager.configureSnapshotLifecycle(timing);
+        sinkManager.setLeadership(true);
+        waitForLease(sinkManager, lease -> lease.getPhase() == SnapshotSyncLeaseRecord.Phase.READY, 60_000);
+        return sinkManager;
+    }
 
-        try {
-            // Only the busy/idle activity-window bookkeeping in LogReplicationSinkManager itself is
-            // under test here, not actual snapshot-data application -- substitute a no-op writer so an
-            // unserialized/empty SNAPSHOT_MESSAGE payload (this test never constructs a real OpaqueEntry)
-            // doesn't fail deep inside StreamsSnapshotWriter.apply(), which expects one.
-            StreamsSnapshotWriter noOpWriter = mock(StreamsSnapshotWriter.class);
-            when(noOpWriter.getPhase()).thenReturn(StreamsSnapshotWriter.Phase.TRANSFER_PHASE);
-            sinkManager.setSnapshotWriter(noOpWriter);
+    private LogReplication.LogReplicationEntryMetadataMsg.Builder leaseHeader(LogReplicationEntryType type, UUID attemptId,
+                                                                              long snapshotTimestamp) {
+        return LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                .setSnapshotLifecycleVersion(SnapshotSyncLease.VERSION)
+                .setEntryType(type)
+                .setTopologyConfigID(0)
+                .setSyncRequestId(getUuidMsg(attemptId))
+                .setTimestamp(Address.NON_ADDRESS)
+                .setPreviousTimestamp(Address.NON_ADDRESS)
+                .setSnapshotTimestamp(snapshotTimestamp)
+                .setSnapshotSyncSeqNum(Address.NON_ADDRESS);
+    }
 
-            UUID syncId = UUID.randomUUID();
-            LogReplication.LogReplicationEntryMetadataMsg startMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(syncId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(300L)
-                    .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
-                    .build();
-            log.debug("****** Deliver SNAPSHOT_START");
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(startMetadata).build());
+    /**
+     * What a source does to start a snapshot sync: it proposes, is told to come back while the sink
+     * reserves and prepares the attempt, and repeats the same proposal until it is accepted.
+     */
+    private SnapshotSyncLeaseRecord admit(LogReplicationSinkManager sinkManager, UUID attemptId, long snapshotTimestamp)
+            throws InterruptedException {
+        LogReplicationEntryMsg proposal = LogReplicationEntryMsg.newBuilder().setMetadata(
+                leaseHeader(LogReplicationEntryType.SNAPSHOT_START, attemptId, snapshotTimestamp)
+                        .setAdmissionEpoch(sinkManager.getSnapshotLease().getAdmissionEpoch())).build();
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (true) {
+            try {
+                LogReplicationEntryMsg reply = sinkManager.receive(proposal);
+                assertThat(reply.getMetadata().getEntryType()).isEqualTo(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED);
+                return sinkManager.getSnapshotLease();
+            } catch (LogReplicationBusyException busy) {
+                assertThat(System.currentTimeMillis()).as("not admitted: %s", busy.getResponse()).isLessThan(deadline);
+                sleep(WAIT_STATE_CHANGE);
+            }
+        }
+    }
 
-            LogReplication.LogReplicationEntryMetadataMsg dataMetadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
-                    .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
-                    .setTopologyConfigID(0)
-                    .setSyncRequestId(getUuidMsg(syncId))
-                    .setTimestamp(Address.NON_ADDRESS)
-                    .setPreviousTimestamp(Address.NON_ADDRESS)
-                    .setSnapshotTimestamp(300L)
-                    .setSnapshotSyncSeqNum(0L)
-                    .build();
-            log.debug("****** Deliver one SNAPSHOT_MESSAGE, then check busy status immediately after "
-                    + "the (synchronous) write has already completed");
-            sinkManager.receive(LogReplicationEntryMsg.newBuilder().setMetadata(dataMetadata).build());
+    private void waitForLease(LogReplicationSinkManager sinkManager, Predicate<SnapshotSyncLeaseRecord> condition,
+                              long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (!condition.test(sinkManager.getSnapshotLease())) {
+            assertThat(System.currentTimeMillis()).as("lease=%s", sinkManager.getSnapshotLease()).isLessThan(deadline);
+            sleep(WAIT_STATE_CHANGE);
+        }
+    }
 
-            assertThat(sinkManager.isProcessingSnapshotSync())
-                    .as("still within the activity window right after the write completed")
-                    .isTrue();
+    private Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> openPluginTable() throws Exception {
+        return dstCorfuStore.openTable(DefaultSnapshotSyncPlugin.NAMESPACE, DefaultSnapshotSyncPlugin.TABLE_NAME,
+                ExampleSchemas.Uuid.class, SnapshotSyncPluginValue.class, SnapshotSyncPluginValue.class,
+                TableOptions.fromProtoSchema(SnapshotSyncPluginValue.class));
+    }
 
-            log.debug("****** Wait past the activity window and confirm the sink genuinely goes idle");
-            sleep(LogReplicationConfig.PROCESSING_ACTIVITY_WINDOW_MS + 500);
-            assertThat(sinkManager.isProcessingSnapshotSync())
-                    .as("activity window has elapsed with no further writes")
-                    .isFalse();
-        } finally {
-            sinkManager.shutdown();
+    private ExampleSchemas.Uuid pluginKey() {
+        return ExampleSchemas.Uuid.newBuilder()
+                .setMsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getMostSignificantBits())
+                .setLsb(DefaultSnapshotSyncPlugin.DEFAULT_UUID.getLeastSignificantBits())
+                .build();
+    }
+
+    private String getPluginValue(Table<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> table) {
+        try (TxnContext txn = dstCorfuStore.txn(DefaultSnapshotSyncPlugin.NAMESPACE)) {
+            CorfuStoreEntry<ExampleSchemas.Uuid, SnapshotSyncPluginValue, SnapshotSyncPluginValue> entry =
+                    txn.getRecord(table, pluginKey());
+            txn.commit();
+            return entry.getPayload() == null ? null : entry.getPayload().getValue();
         }
     }
 
@@ -1872,9 +1821,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // actually being unresponsive.
         private int delayTransferCompleteAckMs = 0;
 
-        // Force every metadata-poll response to report isProcessing=true, simulating a sink that
-        // tells the source it's still busy whenever asked.
-        private boolean reportSinkBusyOnMetadataPoll = false;
+        // Timing policy of the sink's snapshot lease; null uses what a deployment would use.
+        private SnapshotLeaseCoordinator.Timing leaseTiming = null;
 
         // Silently drop every message except SNAPSHOT_START, simulating a source that vanishes
         // (network partition, crash) right after starting a snapshot sync.
@@ -1893,7 +1841,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             remoteClusterId = null;
             dropSnapshotStartMsg = false;
             delayTransferCompleteAckMs = 0;
-            reportSinkBusyOnMetadataPoll = false;
+            leaseTiming = null;
             dropAllAfterSnapshotStart = false;
             return this;
         }

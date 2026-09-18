@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
@@ -85,8 +87,9 @@ public class SourceForwardingDataSender implements DataSender {
     private int countDelayedApplyCycles = 0;
     private boolean timeoutMetadataResponse = false;
     private volatile CompletableFuture<LogReplicationEntryMsg> snapshotTransferAck;
+    // Typed BUSY replies of the sink that were passed on to the source
     @Getter
-    private final AtomicInteger busyMetadataPolls = new AtomicInteger();
+    private final AtomicInteger busyReplies = new AtomicInteger();
     @Getter
     private final AtomicInteger applyMetadataTimeouts = new AtomicInteger();
     @Getter
@@ -109,13 +112,14 @@ public class SourceForwardingDataSender implements DataSender {
 
     private LogReplicationIT.TestConfig testConfig;
 
-    private int numStartMsgsDropped;
+    @Getter
+    private volatile int numStartMsgsDropped;
 
     private int delayTransferCompleteAckMs;
 
-    private boolean reportSinkBusyOnMetadataPoll;
-
     private boolean dropAllAfterSnapshotStart;
+
+    private static final int SINK_READY_TIMEOUT_MS = 60_000;
 
     @VisibleForTesting
     @Getter
@@ -133,13 +137,19 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config, metadataManager, pluginConfigFilePath);
+        if (testConfig.getLeaseTiming() != null) {
+            this.destinationLogReplicationManager.configureSnapshotLifecycle(testConfig.getLeaseTiming());
+        }
+        // In a deployment the discovery service grants leadership. A sink admits nothing before it
+        // leads, and incremental traffic only once it installed its writer for the state it found.
+        this.destinationLogReplicationManager.setLeadership(true);
+        awaitSinkReady();
         this.ifDropMsg = testConfig.getDropMessageLevel();
         this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
         this.metadataResponseObservable = new ObservableValue<>(null);
         this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.delayTransferCompleteAckMs = testConfig.getDelayTransferCompleteAckMs();
-        this.reportSinkBusyOnMetadataPoll = testConfig.isReportSinkBusyOnMetadataPoll();
         this.dropAllAfterSnapshotStart = testConfig.isDropAllAfterSnapshotStart();
         this.callbackFunction = function;
         this.lastAckDropped = Long.MAX_VALUE;
@@ -154,16 +164,39 @@ public class SourceForwardingDataSender implements DataSender {
         this.testConfig = testConfig;
     }
 
+    private void awaitSinkReady() throws InterruptedException {
+        long deadline = System.currentTimeMillis() + SINK_READY_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            SnapshotSyncLeaseRecord lease = destinationLogReplicationManager.getSnapshotLease();
+            boolean acquired = lease.getPhase() != SnapshotSyncLeaseRecord.Phase.NOT_READY;
+            boolean incrementalPending = lease.getOutcome() == SnapshotSyncLeaseRecord.Outcome.COMPLETED
+                    && !destinationLogReplicationManager.isIncrementalSyncAdmitted();
+            if (acquired && !incrementalPending) {
+                return;
+            }
+            TimeUnit.MILLISECONDS.sleep(50);
+        }
+        throw new IllegalStateException("The sink did not acquire its snapshot lease: "
+                + destinationLogReplicationManager.getSnapshotLease());
+    }
+
+    /**
+     * Emulates the transport. What the sink cannot process right now it answers with a typed BUSY
+     * reply, which the transport hands to the source as a failed request; a dropped message or
+     * acknowledgement is a request that never completes.
+     */
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
-        if (destinationLogReplicationManager.isSnapshotLifecycleEnabled()) {
-            try {
-                LogReplicationEntryMsg response = destinationLogReplicationManager.receive(message);
-                return response == null ? new CompletableFuture<>() : CompletableFuture.completedFuture(response);
-            } catch (org.corfudb.runtime.exceptions.LogReplicationBusyException e) {
-                return CompletableFuture.failedFuture(e);
-            }
+        try {
+            return forward(message);
+        } catch (LogReplicationBusyException busy) {
+            busyReplies.incrementAndGet();
+            log.debug("Sink replied BUSY {} to {}", busy.getResponse().getReason(), message.getMetadata().getEntryType());
+            return CompletableFuture.failedFuture(busy);
         }
+    }
+
+    private CompletableFuture<LogReplicationEntryMsg> forward(LogReplicationEntryMsg message) {
         if (message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
             snapshotTransferAck = null;
         }
@@ -176,16 +209,20 @@ public class SourceForwardingDataSender implements DataSender {
         // Check if the SNAPSHOT_START message must be dropped
         if (testConfig.isDropSnapshotStartMsg() && message.getMetadata().getEntryType() ==
                 LogReplicationEntryType.SNAPSHOT_START) {
-            if (testConfig.getNumDropsForSnapshotStart() != Integer.MAX_VALUE) {
-                // If a limited number of START messages must be dropped, drop them only if the number is yet to be
-                // reached
-                if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
-                    numStartMsgsDropped++;
-                    return new CompletableFuture<>();
-                }
-            } else {
+            // If a limited number of START messages must be dropped, drop them only if the number is yet to be
+            // reached
+            if (numStartMsgsDropped < testConfig.getNumDropsForSnapshotStart()) {
+                numStartMsgsDropped++;
                 return new CompletableFuture<>();
             }
+        }
+
+        if (message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START
+                || message.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_CANCEL) {
+            // Admission and cancellation are control traffic: they are neither subject to the
+            // data-plane fault injection below nor counted as data acknowledgements.
+            LogReplicationEntryMsg reply = destinationLogReplicationManager.receive(message);
+            return reply == null ? new CompletableFuture<>() : CompletableFuture.completedFuture(reply);
         }
 
         log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
@@ -214,11 +251,6 @@ public class SourceForwardingDataSender implements DataSender {
             assertThat(ack.getMetadata().getTimestamp()).isEqualTo(message.getMetadata().getTimestamp());
         } else {
             ack = destinationLogReplicationManager.receive(message);
-        }
-
-        //check is_data_consistent flag is set to false on snapshot_start
-        if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_START)) {
-            checkStatusOnStandby(false);
         }
 
         if (ack != null && ack.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE) {
@@ -275,65 +307,45 @@ public class SourceForwardingDataSender implements DataSender {
         return lastAckMessage;
     }
 
+    /**
+     * The sink publishes a committed view of its status, lease included, once per second and
+     * independently of source polls; a poll only reads that view. The faults injected here are the
+     * ones a transport can cause (a reply that never arrives) and an apply that takes several polls.
+     */
     @Override
     public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
         metadataRequestCount.incrementAndGet();
         if (testConfig.isTimeoutInitialMetadataResponse() && initialMetadataTimeouts.compareAndSet(0, 1)) {
             return new CompletableFuture<>();
         }
-        if (destinationLogReplicationManager.isSnapshotLifecycleEnabled()) {
-            // The sink driver publishes this transactional snapshot independently of source polls.
-            return CompletableFuture.completedFuture(destinationLogReplicationManager
-                    .getLogReplicationMetadataManager().getCachedSnapshotStatus());
-        }
-        CompletableFuture<LogReplicationMetadataResponseMsg> completableFuture = new CompletableFuture<>();
+        LogReplicationMetadataResponseMsg response = destinationLogReplicationManager
+                .getLogReplicationMetadataManager().getCachedSnapshotStatus();
         long baseSnapshotTimestamp = destinationDataSender.getSourceManager().getLogReplicationFSM().getBaseSnapshot();
         boolean transferAcknowledged = isSnapshotTransferAcknowledged(baseSnapshotTimestamp);
-        LogReplicationMetadataResponseMsg response;
 
         if (transferAcknowledged && delayedApplyCycles > 0 && countDelayedApplyCycles < delayedApplyCycles) {
             countDelayedApplyCycles++;
             log.debug("Received query metadata request, count={}", countDelayedApplyCycles);
-            // Reply Snapshot Sync Apply has not completed yet
-            response = LogReplicationMetadataResponseMsg.newBuilder()
-                    .setTopologyConfigID(0)
-                    .setVersion("version")
-                    .setSnapshotStart(baseSnapshotTimestamp)
-                    .setSnapshotTransferred(baseSnapshotTimestamp)
+            // Reply that the apply of this attempt has not completed yet
+            response = response.toBuilder()
                     .setSnapshotApplied(Address.NON_ADDRESS)
                     .setLastLogEntryTimestamp(Address.NON_ADDRESS)
+                    .setSnapshotLease(response.getSnapshotLease().toBuilder()
+                            .setPhase(SnapshotSyncLeaseRecord.Phase.APPLYING)
+                            .setOutcome(SnapshotSyncLeaseRecord.Outcome.NONE)
+                            .setProtectionHeld(true))
                     .build();
-        } else {
-            if (transferAcknowledged && timeoutMetadataResponse) {
-                log.debug("Delay metadata response to cause timeout");
-                // For this purpose return an empty completable future which as never completed will time out
-                // and reset timeoutMetadataResponse so it returns on next call
-                timeoutMetadataResponse = false;
-                applyMetadataTimeouts.incrementAndGet();
-                return new CompletableFuture<>();
-            }
-            // In test implementation emulate the apply has succeeded and return a LogReplicationMetadataResponse
-            response = LogReplicationMetadataResponseMsg.newBuilder()
-                    .setTopologyConfigID(0)
-                    .setVersion("version")
-                    .setSnapshotStart(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastStartedSnapshotTimestamp())
-                    .setSnapshotTransferred(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp())
-                    .setSnapshotApplied(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp())
-                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryBatchTimestamp())
-                    .build();
-        }
-
-        if (reportSinkBusyOnMetadataPoll) {
-            CompletableFuture<LogReplicationEntryMsg> pending = snapshotTransferAck;
-            if (pending != null && !pending.isDone()) {
-                busyMetadataPolls.incrementAndGet();
-            }
-            response = response.toBuilder().setIsProcessing(true).build();
+        } else if (transferAcknowledged && timeoutMetadataResponse) {
+            log.debug("Delay metadata response to cause timeout");
+            // For this purpose return an empty completable future which as never completed will time out
+            // and reset timeoutMetadataResponse so it returns on next call
+            timeoutMetadataResponse = false;
+            applyMetadataTimeouts.incrementAndGet();
+            return new CompletableFuture<>();
         }
 
         metadataResponseObservable.setValue(response);
-        completableFuture.complete(response);
-        return completableFuture;
+        return CompletableFuture.completedFuture(response);
     }
 
     public boolean isSnapshotTransferAcknowledged(long snapshot) {
@@ -447,7 +459,6 @@ public class SourceForwardingDataSender implements DataSender {
         this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
         this.dropACKLevel = testConfig.getDropAckLevel();
         this.delayTransferCompleteAckMs = testConfig.getDelayTransferCompleteAckMs();
-        this.reportSinkBusyOnMetadataPoll = testConfig.isReportSinkBusyOnMetadataPoll();
         this.dropAllAfterSnapshotStart = testConfig.isDropAllAfterSnapshotStart();
     }
 }

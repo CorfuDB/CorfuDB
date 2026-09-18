@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.health.HealthMonitor;
@@ -7,9 +8,11 @@ import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.runtime.CompactorMetadataTables;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus;
 import org.corfudb.runtime.CorfuCompactorManagement.CheckpointingStatus.StatusType;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.DistributedCheckpointer;
+import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -20,13 +23,18 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.health.Component.COMPACTOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.CHECKPOINT_FROZEN;
 import static org.corfudb.infrastructure.health.Issue.IssueId.CHECKPOINT_STALLED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.SNAPSHOT_RECOVERY_BLOCKED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.SNAPSHOT_SYNC_FAILING;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -66,6 +74,32 @@ public class CompactorLeaderServices {
     private static final String NO_STALLED_CHECKPOINTS_DESC = "No stalled checkpoints";
 
     /**
+     * How long snapshot sync protection may still be held past its own deadline before it is
+     * reported. The log replication sink releases protection at the deadline at the latest, so
+     * anything older means the sink is not reconciling (hung worker, no leader).
+     */
+    private static final Duration OVERDUE_PROTECTION_THRESHOLD = Duration.ofMinutes(5);
+
+    /** How long the operator freeze token may freeze checkpointing before it is reported. */
+    private static final Duration FROZEN_TOKEN_THRESHOLD = Duration.ofMinutes(60);
+
+    private static final String NOT_FROZEN_DESC = "Checkpointing is not frozen for too long";
+
+    /** How long cleanup or recovery after a snapshot sync may keep the next one from being admitted. */
+    private static final Duration BLOCKED_SNAPSHOT_THRESHOLD = Duration.ofMinutes(30);
+
+    /** Snapshot sync attempts abandoned in a row after which snapshot sync is reported as failing. */
+    private static final int FAILING_SNAPSHOT_ATTEMPTS = 3;
+
+    // What this leader currently reports, with the description it was reported with.
+    private final Map<Issue.IssueId, String> reported = new EnumMap<>(Issue.IssueId.class);
+
+    // Progress of the checkpointers in the current cycle, see checkForStalledCheckpoints().
+    private long observedCycle = -1;
+    private int waitingTables;
+    private long lastCheckpointProgressMs;
+
+    /**
      * This enum contains the leader's initCompactionCycle status
      * If the status is SUCCESS, the compaction cycle has been started
      * If the status is FAIL, the compaction cycle startup has failed
@@ -100,13 +134,16 @@ public class CompactorLeaderServices {
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             // CorfuStore is WRITE_AFTER_WRITE: include the shared guard in the write set,
             // not just the read set, to serialize this cycle with snapshot admission.
-            org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease =
-                    org.corfudb.runtime.SnapshotSyncLeaseStore.read(txn);
-            if (lease.getProtectionHeld()) {
+            // Protection that outlived its deadline plus the grace does not block a new cycle:
+            // no writer of that attempt can commit any more, so the cycle only reclaims garbage.
+            SnapshotSyncLeaseRecord lease = SnapshotSyncLeaseStore.readForRetention(txn);
+            if (SnapshotSyncLeaseStore.protectionActive(lease, System.currentTimeMillis())) {
                 txn.commit();
+                log.info("Compaction cycle not started: a log replication snapshot sync protects the log "
+                        + "(generation={}, phase={}, deadlineMs={})", lease.getGeneration(), lease.getPhase(),
+                        lease.getDeadlineMs());
                 return LeaderInitStatus.FAIL;
             }
-            org.corfudb.runtime.SnapshotSyncLeaseStore.write(txn, lease);
             CheckpointingStatus managerStatus = (CheckpointingStatus) txn.getRecord(
                     CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
@@ -116,6 +153,7 @@ public class CompactorLeaderServices {
                 log.warn("Compaction cycle already started");
                 return LeaderInitStatus.FAIL;
             }
+            SnapshotSyncLeaseStore.write(txn, lease);
 
             long newCycleCount = managerStatus == null ? 0 : managerStatus.getCycleCount() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
@@ -190,10 +228,17 @@ public class CompactorLeaderServices {
             }
         }
 
-        checkForStalledCheckpoints(currentTime);
+        checkForStalledCheckpoints(currentTime, !activeCheckpointTables.isEmpty());
     }
 
-    private void checkForStalledCheckpoints(long currentTimeMillis) {
+    /**
+     * A cycle is stalled when tables are still waiting to be checkpointed and nothing has moved for
+     * the threshold: no table is being checkpointed and the number waiting has not gone down.
+     * Checkpointers work through the tables one after another, so tables that wait are what every
+     * healthy cycle looks like for most of its duration; time since the cycle started says nothing.
+     */
+    @VisibleForTesting
+    void checkForStalledCheckpoints(long currentTimeMillis, boolean checkpointsActive) {
         Optional<CheckpointingStatus> managerStatus;
         try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
             managerStatus = Optional.ofNullable((CheckpointingStatus) txn.getRecord(
@@ -207,12 +252,8 @@ public class CompactorLeaderServices {
 
         if (!managerStatus.isPresent() || managerStatus.get().getStatus() != StatusType.STARTED) {
             // No cycle in progress right now, so nothing can be "stalled".
-            HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC));
-            return;
-        }
-
-        long cycleStartTime = managerStatus.get().getTimeTaken();
-        if (currentTimeMillis - cycleStartTime < STALLED_CHECKPOINT_THRESHOLD.toMillis()) {
+            observedCycle = -1;
+            resolve(CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC);
             return;
         }
 
@@ -232,8 +273,15 @@ public class CompactorLeaderServices {
             return;
         }
 
-        if (stalledTables.isEmpty()) {
-            HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC));
+        long cycle = managerStatus.get().getCycleCount();
+        if (cycle != observedCycle || checkpointsActive || stalledTables.size() < waitingTables) {
+            observedCycle = cycle;
+            lastCheckpointProgressMs = currentTimeMillis;
+        }
+        waitingTables = stalledTables.size();
+
+        if (stalledTables.isEmpty() || currentTimeMillis - lastCheckpointProgressMs < STALLED_CHECKPOINT_THRESHOLD.toMillis()) {
+            resolve(CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC);
             return;
         }
 
@@ -241,13 +289,129 @@ public class CompactorLeaderServices {
                 .limit(MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION)
                 .map(t -> t.getNamespace() + "$" + t.getTableName())
                 .collect(Collectors.joining(", "));
-        String description = String.format(
-                "%d table(s) requested for checkpointing but not yet started, %d minutes into the current " +
-                        "compaction cycle (cycle started at epoch millis %d): %s%s",
-                stalledTables.size(), STALLED_CHECKPOINT_THRESHOLD.toMinutes(), cycleStartTime, tableList,
-                stalledTables.size() > MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION ? ", ..." : "");
-        log.warn(description);
-        HealthMonitor.reportIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, description));
+        report(CHECKPOINT_STALLED, String.format(
+                "%d table(s) requested for checkpointing but not started, and no checkpoint has made progress for "
+                        + "%d minutes in the current compaction cycle (cycle started at epoch millis %d): %s%s",
+                stalledTables.size(), STALLED_CHECKPOINT_THRESHOLD.toMinutes(), managerStatus.get().getTimeTaken(),
+                tableList, stalledTables.size() > MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION ? ", ..." : ""));
+    }
+
+    /**
+     * Reports, on every orchestrator pass of the leader, what the snapshot lease and the freeze token
+     * say about checkpointing, whether or not a cycle is active: a freeze prevents a cycle from
+     * starting in the first place.
+     *
+     * <p>The conditions of log replication itself are reported here too. The health monitor only
+     * exists in the Corfu server process, so the log replication process, which detects them first,
+     * can only log them; the lease is durable and shared, and this leader reads it anyway.
+     */
+    public void checkForProlongedFreeze(long currentTimeMillis) {
+        SnapshotSyncLeaseRecord lease;
+        RpcCommon.TokenMsg freezeToken;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            lease = SnapshotSyncLeaseStore.readForRetention(txn);
+            freezeToken = (RpcCommon.TokenMsg) txn.getRecord(
+                    CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.FREEZE_TOKEN).getPayload();
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to evaluate how long checkpointing has been frozen, ", e);
+            return;
+        }
+
+        boolean protectionActive = SnapshotSyncLeaseStore.protectionActive(lease, currentTimeMillis);
+        long pastDeadlineMs = lease.getProtectionHeld() && lease.getDeadlineMs() > 0
+                ? currentTimeMillis - lease.getDeadlineMs() : -1;
+        if (protectionActive && pastDeadlineMs >= OVERDUE_PROTECTION_THRESHOLD.toMillis()) {
+            report(CHECKPOINT_FROZEN, String.format("Snapshot sync protection is still held %d minutes past its deadline "
+                            + "(generation=%d, phase=%s, failure=%s). Checkpointing stays frozen until the log "
+                            + "replication sink releases it or the grace ends.",
+                    Duration.ofMillis(pastDeadlineMs).toMinutes(), lease.getGeneration(), lease.getPhase(), lease.getFailure()));
+        } else if (freezeToken != null
+                && currentTimeMillis - freezeToken.getSequence() >= FROZEN_TOKEN_THRESHOLD.toMillis()) {
+            report(CHECKPOINT_FROZEN, String.format("Checkpointing has been frozen by the freeze token for %d minutes",
+                    Duration.ofMillis(currentTimeMillis - freezeToken.getSequence()).toMinutes()));
+        } else {
+            resolve(CHECKPOINT_FROZEN, NOT_FROZEN_DESC);
+        }
+
+        String blocked = describeBlockedSnapshotSync(lease, protectionActive, pastDeadlineMs, currentTimeMillis);
+        if (blocked != null) {
+            report(SNAPSHOT_RECOVERY_BLOCKED, blocked);
+        } else {
+            resolve(SNAPSHOT_RECOVERY_BLOCKED, "Snapshot sync admission is not blocked");
+        }
+
+        if (lease.getConsecutiveAborts() >= FAILING_SNAPSHOT_ATTEMPTS) {
+            report(SNAPSHOT_SYNC_FAILING, String.format("%d log replication snapshot sync attempts to this cluster were "
+                            + "abandoned in a row (generation=%d, phase=%s, last failure=%s)",
+                    lease.getConsecutiveAborts(), lease.getGeneration(), lease.getPhase(), lease.getFailure()));
+        } else {
+            resolve(SNAPSHOT_SYNC_FAILING, "Snapshot sync is not failing repeatedly");
+        }
+    }
+
+    /** What keeps the next snapshot sync from being admitted for longer than it should, if anything. */
+    private static String describeBlockedSnapshotSync(SnapshotSyncLeaseRecord lease, boolean protectionActive,
+                                                      long pastDeadlineMs, long now) {
+        String state = String.format("generation=%d, phase=%s, recoveryCut=%d, failure=%s",
+                lease.getGeneration(), lease.getPhase(), lease.getRecoveryCut(), lease.getFailure());
+        long blockedMs = BLOCKED_SNAPSHOT_THRESHOLD.toMillis();
+        if (lease.getProtectionHeld() && !protectionActive) {
+            return String.format("Log replication left snapshot sync protection held %d minutes past its deadline (%s). "
+                            + "Checkpointing ignores it. The sink has no log replication leader, or its leader is hung.",
+                    Duration.ofMillis(pastDeadlineMs).toMinutes(), state);
+        }
+        switch (lease.getPhase()) {
+            case FAULTED:
+                return "The log replication sink cannot clean up after a snapshot sync attempt (" + state + ")";
+            case ABORTING:
+                return lease.getAbortedAtMs() > 0 && now - lease.getAbortedAtMs() >= blockedMs
+                        ? "The log replication sink has not cleaned up an abandoned snapshot sync attempt (" + state + ")" : null;
+            case RELEASING:
+                return lease.getCleanupStartedAtMs() > 0 && now - lease.getCleanupStartedAtMs() >= blockedMs
+                        ? "The log replication sink has not released a finished snapshot sync attempt (" + state + ")" : null;
+            case RECOVERING:
+                return lease.getReleasedAtMs() > 0 && now - lease.getReleasedAtMs() >= blockedMs
+                        ? "No snapshot sync is admitted until a compaction cycle completes and the log is trimmed past "
+                        + "the recovery cut, which has not happened for " + Duration.ofMillis(now - lease.getReleasedAtMs()).toMinutes()
+                        + " minutes (" + state + ")" : null;
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * The health status keeps the description an issue was first reported with, so an issue whose
+     * description changed is resolved and reported again. Logged when it appears, not on every pass.
+     */
+    private void report(Issue.IssueId id, String description) {
+        String previous = reported.put(id, description);
+        if (previous == null) {
+            log.warn(description);
+        } else if (!previous.equals(description)) {
+            HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, id, previous));
+        }
+        HealthMonitor.reportIssue(Issue.createIssue(COMPACTOR, id, description));
+    }
+
+    private void resolve(Issue.IssueId id, String description) {
+        if (reported.remove(id) != null) {
+            log.info("{} resolved: {}", id, description);
+        }
+        HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, id, description));
+    }
+
+    /**
+     * What this node reported as the leader stops being its to say once it no longer leads: the new
+     * leader evaluates the same durable state.
+     */
+    public void resolveLeaderIssues() {
+        if (reported.isEmpty()) {
+            return;
+        }
+        for (Issue.IssueId id : new ArrayList<>(reported.keySet())) {
+            resolve(id, "This node no longer leads compaction");
+        }
     }
 
     private boolean checkFailureAndFinishCompactionCycle(TableName table) {

@@ -41,6 +41,18 @@ public class LogEntryWriter extends SinkWriter {
         leaseContext = completed;
     }
 
+    /**
+     * Rejects an incremental write once this writer's snapshot generation, or this node's ownership
+     * of the lease, has been superseded.
+     *
+     * <p>The lease is only read here, deliberately. It is a single record shared with the compactor,
+     * whose cycle start includes it in its write set. Rewriting it for every replicated transaction
+     * would make that cycle start abort under steady replication traffic and starve the
+     * checkpointer on the normal path. The write-write conflict that serializes this transaction
+     * with snapshot admission, ownership takeover and topology changes comes from
+     * TOPOLOGY_CONFIG_ID instead: every transaction of this writer touches it, and those
+     * transitions rewrite it (see LogReplicationMetadataManager#fenceIncrementalWriters).
+     */
     private void fence(TxnContext txn) {
         if (leaseContext == null) { return; }
         SnapshotSyncLeaseRecord current = SnapshotSyncLeaseStore.read(txn);
@@ -51,7 +63,6 @@ public class LogEntryWriter extends SinkWriter {
                 || SnapshotSyncLease.active(current)) {
             throw new SnapshotSyncLease.LeaseRejectedException("Incremental writer superseded by snapshot admission or ownership");
         }
-        SnapshotSyncLeaseStore.write(txn, current);
     }
     // The source snapshot that the transaction logs are based
     private long srcGlobalSnapshot;

@@ -17,6 +17,18 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 public final class SnapshotSyncLeaseStore {
     public static final String TABLE_NAME = "SnapshotSyncLeaseTable";
     public static final StringKey DOMAIN = StringKey.newBuilder().setKey("sink-freeze-domain").build();
+
+    /** System property overriding {@link #DEFAULT_EXPIRY_GRACE_MS} for the checkpointer-side backstop. */
+    public static final String EXPIRY_GRACE_PROPERTY = "corfu.snapshot.lease.expiry.grace.ms";
+
+    /**
+     * How long past its deadline held protection is still honored by the checkpointer. The sink
+     * abandons and releases an attempt at its deadline on its own; this grace only matters when the
+     * sink cannot (hung worker, no log replication leader). It must comfortably exceed the clock
+     * skew between cluster nodes.
+     */
+    public static final long DEFAULT_EXPIRY_GRACE_MS = 30L * 60L * 1000L;
+
     private final CorfuStore store;
 
     public SnapshotSyncLeaseStore(CorfuStore store) {
@@ -33,14 +45,30 @@ public final class SnapshotSyncLeaseStore {
         }
     }
 
+    /**
+     * For whoever drives or follows the lease. A record written by a newer version is refused: its
+     * transitions cannot be reasoned about by this one.
+     */
     public static SnapshotSyncLeaseRecord read(TxnContext txn) {
-        var entry = txn.getRecord(TABLE_NAME, DOMAIN);
-        SnapshotSyncLeaseRecord state = entry == null || entry.getPayload() == null ? SnapshotSyncLeaseRecord.getDefaultInstance()
-                : (SnapshotSyncLeaseRecord) entry.getPayload();
-        if (state.getSchemaVersion() > 1) {
+        SnapshotSyncLeaseRecord state = readForRetention(txn);
+        if (state.getSchemaVersion() > SnapshotSyncLease.VERSION) {
             throw new SnapshotSyncLease.LeaseRejectedException("Unsupported snapshot lease schema");
         }
         return state;
+    }
+
+    /**
+     * For the checkpointer, which only needs to know what must not be trimmed, and until when:
+     * {@code protectionHeld}, {@code protectedAfter} and {@code deadlineMs}, whose meaning every
+     * schema version keeps. Refusing a newer record here would stop compaction altogether, silently,
+     * for as long as the checkpointer is older than the sink (every rolling upgrade, and for good
+     * after a rollback), which is the very failure the lease exists to prevent. Fields this version
+     * does not know survive a rewrite of the record.
+     */
+    public static SnapshotSyncLeaseRecord readForRetention(TxnContext txn) {
+        var entry = txn.getRecord(TABLE_NAME, DOMAIN);
+        return entry == null || entry.getPayload() == null ? SnapshotSyncLeaseRecord.getDefaultInstance()
+                : (SnapshotSyncLeaseRecord) entry.getPayload();
     }
 
     public static void write(TxnContext txn, SnapshotSyncLeaseRecord state) {
@@ -98,8 +126,22 @@ public final class SnapshotSyncLeaseStore {
         });
     }
 
+    public static long expiryGraceMs() {
+        long configured = Long.getLong(EXPIRY_GRACE_PROPERTY, DEFAULT_EXPIRY_GRACE_MS);
+        return configured < 0 ? DEFAULT_EXPIRY_GRACE_MS : configured;
+    }
+
+    /**
+     * Whether the checkpointer must yield to this record at wall-clock time {@code now}. Protection
+     * that outlived its deadline plus the grace is ignored: see
+     * {@link SnapshotSyncLease#protectionExpired}.
+     */
+    public static boolean protectionActive(SnapshotSyncLeaseRecord state, long now) {
+        return state.getProtectionHeld() && !SnapshotSyncLease.protectionExpired(state, now, expiryGraceMs());
+    }
+
     /** A cutoff captured before reservation can finish even while a new snapshot is protected. */
-    public static boolean permitsTrim(SnapshotSyncLeaseRecord state, long cutoff) {
-        return !state.getProtectionHeld() || cutoff <= state.getProtectedAfter();
+    public static boolean permitsTrim(SnapshotSyncLeaseRecord state, long cutoff, long now) {
+        return !protectionActive(state, now) || cutoff <= state.getProtectedAfter();
     }
 }

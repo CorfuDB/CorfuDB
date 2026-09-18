@@ -13,7 +13,7 @@ import java.util.function.UnaryOperator;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SnapshotSyncLeaseTest {
-    private final SnapshotSyncLeaseRecord ready = SnapshotSyncLease.initial("owner");
+    private final SnapshotSyncLeaseRecord ready = SnapshotSyncLease.seedIdle("owner", -1, 0);
     private final LogReplicationEntryMetadataMsg start = LogReplicationEntryMetadataMsg.newBuilder()
             .setSyncRequestId(UuidMsg.newBuilder().setMsb(1).setLsb(2)).setSnapshotTimestamp(25)
             .setTopologyConfigID(3).setSnapshotLifecycleVersion(1).setAdmissionEpoch(1).build();
@@ -27,8 +27,19 @@ class SnapshotSyncLeaseTest {
         assertEquals(abort.getDeadlineMs(), fault.getDeadlineMs());
         assertSame(fault, SnapshotSyncLease.faulted(fault));
         assertSame(ready, SnapshotSyncLease.faulted(ready));
-        assertEquals(Phase.RELEASING, SnapshotSyncLease.drained(fault, 90).getPhase());
         assertEquals(Phase.FAULTED, SnapshotSyncLease.faulted(SnapshotSyncLease.drained(abort, 90)).getPhase());
+
+        // An overdue cleanup does not alternate between two phases: FAULTED stays until the release,
+        // which can then complete however long the cleanup took, and the failure is recorded once.
+        SnapshotSyncLeaseRecord drained = SnapshotSyncLease.drained(fault, 90);
+        assertEquals(Phase.FAULTED, drained.getPhase());
+        assertEquals(90, drained.getRecoveryCut());
+        assertSame(drained, SnapshotSyncLease.faulted(drained));
+        assertEquals(fault.getFailure(), SnapshotSyncLease.drained(drained, 95).getFailure());
+        SnapshotSyncLeaseRecord released = SnapshotSyncLease.released(drained, 300);
+        assertEquals(Phase.RECOVERING, released.getPhase());
+        assertFalse(released.getProtectionHeld());
+        assertThrows(IllegalStateException.class, () -> SnapshotSyncLease.released(fault, 300), "no recovery cut yet");
     }
     private SnapshotSyncLeaseRecord reserve() {
         return SnapshotSyncLease.reserve(ready, start, 100, 1000, 50, "protection");
@@ -121,10 +132,167 @@ class SnapshotSyncLeaseTest {
     @Test
     void oldCheckpointCutCanFinishButNewCutCannotTrimProtectedWrites() {
         SnapshotSyncLeaseRecord state = reserve();
-        assertTrue(SnapshotSyncLeaseStore.permitsTrim(state, 49));
-        assertTrue(SnapshotSyncLeaseStore.permitsTrim(state, 50));
-        assertFalse(SnapshotSyncLeaseStore.permitsTrim(state, 51));
-        assertTrue(SnapshotSyncLeaseStore.permitsTrim(ready, 100000));
+        assertTrue(SnapshotSyncLeaseStore.permitsTrim(state, 49, 500));
+        assertTrue(SnapshotSyncLeaseStore.permitsTrim(state, 50, 500));
+        assertFalse(SnapshotSyncLeaseStore.permitsTrim(state, 51, 500));
+        assertTrue(SnapshotSyncLeaseStore.permitsTrim(ready, 100000, 500));
+    }
+
+    @Test
+    void theCheckpointerIgnoresProtectionOnlyPastItsDeadlinePlusTheGrace() {
+        SnapshotSyncLeaseRecord held = reserve(); // admitted at 100, deadline 1100
+        long grace = SnapshotSyncLeaseStore.expiryGraceMs();
+        assertFalse(SnapshotSyncLease.protectionExpired(held, 1100, grace), "the deadline alone is the sink's business");
+        assertFalse(SnapshotSyncLease.protectionExpired(held, 1100 + grace - 1, grace));
+        assertTrue(SnapshotSyncLease.protectionExpired(held, 1100 + grace, grace));
+        assertTrue(SnapshotSyncLeaseStore.protectionActive(held, 1100 + grace - 1));
+        assertFalse(SnapshotSyncLeaseStore.protectionActive(held, 1100 + grace));
+        assertFalse(SnapshotSyncLeaseStore.permitsTrim(held, 51, 1100 + grace - 1));
+        assertTrue(SnapshotSyncLeaseStore.permitsTrim(held, 51, 1100 + grace));
+
+        // Abandonment and a faulted cleanup keep the original deadline, so the same backstop applies.
+        SnapshotSyncLeaseRecord faulted = SnapshotSyncLease.faulted(SnapshotSyncLease.abandon(held, 1100, "deadline"));
+        assertTrue(faulted.getProtectionHeld());
+        assertTrue(SnapshotSyncLeaseStore.protectionActive(faulted, 1100 + grace - 1));
+        assertFalse(SnapshotSyncLeaseStore.protectionActive(faulted, 1100 + grace));
+
+        assertFalse(SnapshotSyncLease.protectionExpired(ready, Long.MAX_VALUE, grace), "nothing is held");
+        assertFalse(SnapshotSyncLease.protectionExpired(held, Long.MAX_VALUE, -1), "a negative grace never expires");
+        assertFalse(SnapshotSyncLease.protectionExpired(held.toBuilder().setDeadlineMs(0).build(), Long.MAX_VALUE, grace));
+        SnapshotSyncLeaseRecord farFuture = held.toBuilder().setDeadlineMs(Long.MAX_VALUE - 1).build();
+        assertFalse(SnapshotSyncLease.protectionExpired(farFuture, Long.MAX_VALUE - 1, grace), "no overflow");
+        assertTrue(SnapshotSyncLease.protectionExpired(farFuture, Long.MAX_VALUE, grace));
+    }
+
+    @Test
+    void theGraceCanBeOverriddenButNeverMadeNegative() {
+        String previous = System.getProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY);
+        try {
+            System.setProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY, "5000");
+            assertEquals(5000, SnapshotSyncLeaseStore.expiryGraceMs());
+            System.setProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY, "-1");
+            assertEquals(SnapshotSyncLeaseStore.DEFAULT_EXPIRY_GRACE_MS, SnapshotSyncLeaseStore.expiryGraceMs());
+            System.clearProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY);
+            assertEquals(SnapshotSyncLeaseStore.DEFAULT_EXPIRY_GRACE_MS, SnapshotSyncLeaseStore.expiryGraceMs());
+        } finally {
+            if (previous == null) {
+                System.clearProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY);
+            } else {
+                System.setProperty(SnapshotSyncLeaseStore.EXPIRY_GRACE_PROPERTY, previous);
+            }
+        }
+    }
+
+    @Test
+    void anIdleSeedAdmitsTheFirstAttemptAndNeverCollidesWithIt() {
+        SnapshotSyncLeaseRecord idle = SnapshotSyncLease.seedIdle("owner", 40, 3);
+        assertEquals(Phase.READY, idle.getPhase());
+        assertEquals(Outcome.COMPLETED, idle.getOutcome());
+        assertEquals(0, idle.getGeneration());
+        assertEquals(40, idle.getSourceSnapshot());
+        assertEquals(3, idle.getTopologyConfigId());
+        assertFalse(idle.getProtectionHeld());
+        assertFalse(idle.hasAttemptId());
+        assertFalse(SnapshotSyncLease.active(idle));
+        assertFalse(SnapshotSyncLease.matches(idle, start));
+
+        SnapshotSyncLeaseRecord first = SnapshotSyncLease.reserve(idle, start, 100, 1000, 50, "protection");
+        assertEquals(1, first.getGeneration());
+        assertEquals(Outcome.NONE, first.getOutcome());
+        assertTrue(first.getProtectionHeld());
+    }
+
+    @Test
+    void aSupersededLegacyAttemptOwesACheckpointBeforeAdmissionReopens() {
+        SnapshotSyncLeaseRecord seeded = SnapshotSyncLease.seedRecovering("owner", 1000, 80, 70, "superseded");
+        assertEquals(70, seeded.getSourceSnapshot(), "the superseded snapshot is remembered, so it is superseded once");
+        assertFalse(seeded.hasAttemptId());
+        assertEquals(Phase.RECOVERING, seeded.getPhase());
+        assertEquals(Outcome.ABORTED, seeded.getOutcome());
+        assertFalse(seeded.getProtectionHeld());
+        assertEquals(80, seeded.getRecoveryCut());
+        assertEquals(1000, seeded.getReleasedAtMs());
+        assertEquals("superseded", seeded.getFailure());
+        assertThrows(IllegalStateException.class, () -> SnapshotSyncLease.reserve(seeded, start, 1100, 1000, 90, "x"));
+        assertEquals(seeded, SnapshotSyncLease.recovered(seeded, 5000, 60, 79, 81), "the checkpoint predates the cut");
+        assertEquals(seeded, SnapshotSyncLease.recovered(seeded, 5000, 60, 80, 80), "the log was not trimmed past the cut");
+        SnapshotSyncLeaseRecord reopened = SnapshotSyncLease.recovered(seeded, 5000, 60, 80, 81);
+        assertEquals(Phase.READY, reopened.getPhase());
+        assertEquals(Outcome.ABORTED, reopened.getOutcome(), "incremental traffic stays closed until a snapshot completes");
+        assertThrows(IllegalArgumentException.class, () -> SnapshotSyncLease.seedRecovering("owner", 1000, -1, 70, "x"));
+    }
+
+    /**
+     * During a rolling upgrade leadership can return to a node that still runs the pre-lease
+     * protocol and ignores the record. A snapshot it left unfinished is superseded at the next takeover.
+     */
+    @Test
+    void aSnapshotLeftByAPreLeaseLeaderClosesAdmissionAndForcesANewSnapshot() {
+        // Admission was open and the last snapshot complete: both are no longer true.
+        SnapshotSyncLeaseRecord idle = SnapshotSyncLease.supersededByLegacy(ready, 2000, 90, 75, "legacy");
+        assertEquals(Phase.RECOVERING, idle.getPhase());
+        assertEquals(Outcome.ABORTED, idle.getOutcome());
+        assertEquals(90, idle.getRecoveryCut());
+        assertEquals(75, idle.getSourceSnapshot());
+        assertEquals(2000, idle.getReleasedAtMs());
+        assertEquals(2000, idle.getAbortedAtMs());
+        assertFalse(idle.getProtectionHeld());
+        assertEquals("legacy", idle.getFailure());
+        assertEquals(ready.getRevision() + 1, idle.getRevision());
+        assertEquals(0, idle.getConsecutiveAborts(), "it is not a failure of a lease attempt");
+        assertThrows(IllegalStateException.class, () -> SnapshotSyncLease.reserve(idle, start, 2100, 1000, 95, "x"));
+
+        // A recovery that was already owed only moves its cut forward, never back.
+        SnapshotSyncLeaseRecord recovering = SnapshotSyncLease.released(
+                SnapshotSyncLease.drained(SnapshotSyncLease.abandon(reserve(), 500, "cancel"), 80), 600);
+        assertEquals(95, SnapshotSyncLease.supersededByLegacy(recovering, 2000, 95, 75, "legacy").getRecoveryCut());
+        assertEquals(80, SnapshotSyncLease.supersededByLegacy(recovering, 2000, 60, 75, "legacy").getRecoveryCut());
+
+        // Protection that is still held is left to the regular cleanup, which releases it.
+        SnapshotSyncLeaseRecord completed = SnapshotSyncLease.completed(
+                SnapshotSyncLease.transferred(SnapshotSyncLease.prepared(reserve())));
+        SnapshotSyncLeaseRecord releasing = SnapshotSyncLease.supersededByLegacy(completed, 2000, 90, 75, "legacy");
+        assertEquals(Phase.RELEASING, releasing.getPhase());
+        assertEquals(Outcome.ABORTED, releasing.getOutcome());
+        assertTrue(releasing.getProtectionHeld());
+        assertEquals(Phase.RECOVERING, SnapshotSyncLease.released(SnapshotSyncLease.drained(releasing, 99), 2100).getPhase());
+        SnapshotSyncLeaseRecord aborting = SnapshotSyncLease.abandon(reserve(), 500, "ownership");
+        assertEquals(Phase.ABORTING, SnapshotSyncLease.supersededByLegacy(aborting, 2000, 90, 75, "legacy").getPhase());
+
+        assertThrows(IllegalStateException.class, () -> SnapshotSyncLease.supersededByLegacy(reserve(), 2000, 90, 75, "legacy"));
+        assertThrows(IllegalArgumentException.class, () -> SnapshotSyncLease.supersededByLegacy(ready, 2000, -1, 75, "legacy"));
+    }
+
+    @Test
+    void recoveryCanBeBypassedOnlyWhileRecovering() {
+        SnapshotSyncLeaseRecord recovering = SnapshotSyncLease.released(
+                SnapshotSyncLease.drained(SnapshotSyncLease.abandon(reserve(), 500, "cancel"), 80), 600);
+        SnapshotSyncLeaseRecord reopened = SnapshotSyncLease.recoveredWithoutCheckpoint(recovering);
+        assertEquals(Phase.READY, reopened.getPhase());
+        assertEquals(recovering.getAdmissionEpoch() + 1, reopened.getAdmissionEpoch());
+        assertTrue(reopened.getFailure().isEmpty());
+        assertEquals(Outcome.ABORTED, reopened.getOutcome());
+        for (SnapshotSyncLeaseRecord other : Arrays.asList(ready, reserve(), SnapshotSyncLease.abandon(reserve(), 500, "cancel"))) {
+            assertThrows(IllegalStateException.class, () -> SnapshotSyncLease.recoveredWithoutCheckpoint(other));
+        }
+    }
+
+    @Test
+    void abandonedAttemptsAreCountedUntilASnapshotCompletes() {
+        SnapshotSyncLeaseRecord first = SnapshotSyncLease.abandon(reserve(), 500, "first");
+        assertEquals(1, first.getConsecutiveAborts());
+        assertSame(first, SnapshotSyncLease.abandon(first, 600, "duplicate"));
+        SnapshotSyncLeaseRecord reopened = SnapshotSyncLease.recoveredWithoutCheckpoint(
+                SnapshotSyncLease.released(SnapshotSyncLease.drained(first, 80), 700));
+        LogReplicationEntryMetadataMsg retry = start.toBuilder().setAdmissionEpoch(reopened.getAdmissionEpoch()).build();
+        SnapshotSyncLeaseRecord second = SnapshotSyncLease.reserve(reopened, retry, 800, 1000, 90, "protection");
+        assertEquals(1, second.getConsecutiveAborts(), "admission does not forgive earlier failures");
+        assertEquals(2, SnapshotSyncLease.abandon(second, 900, "second").getConsecutiveAborts());
+        SnapshotSyncLeaseRecord done = SnapshotSyncLease.completed(SnapshotSyncLease.transferred(SnapshotSyncLease.prepared(second)));
+        assertEquals(0, done.getConsecutiveAborts());
+        SnapshotSyncLeaseRecord saturated = SnapshotSyncLease.abandon(
+                second.toBuilder().setConsecutiveAborts(Integer.MAX_VALUE - 1).build(), 900, "saturated");
+        assertEquals(Integer.MAX_VALUE, saturated.getConsecutiveAborts());
     }
 
     @Test

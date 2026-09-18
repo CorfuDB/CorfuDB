@@ -21,6 +21,7 @@ import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
 import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
@@ -82,13 +83,8 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
     // regularToShadowStreamId map
     private final Set<UUID> replicatedStreamIds = new HashSet<>();
 
-    // Mutated only while the caller (LogReplicationSinkManager) holds its own synchronized(this)
-    // lock (see startSnapshotApply(), reset()), but read from LogReplicationSinkManager's
-    // snapshotSyncLivenessExecutor thread via getPhase() in checkSnapshotSyncLiveness()'s
-    // unsynchronized fast-path guard clause before that method ever takes the lock -- volatile so
-    // that read has a defined happens-before relationship with the writes instead of relying
-    // entirely on the fast path's own double-checked re-verification under the lock to mask
-    // staleness.
+    // Written by the lease coordinator's worker thread (preparation, apply) and read by the
+    // data-plane thread while it fences transfer writes.
     @Getter
     private volatile Phase phase;
 
@@ -102,6 +98,12 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         serializeClearEntry();
     }
 
+    /**
+     * Binds every subsequent write to one admitted attempt. The sink manager always installs a
+     * context before it lets this writer touch the log; each write then re-validates the lease in
+     * its own transaction and stops at the attempt's deadline. A writer without a context is
+     * unfenced, which only standalone tools and tests use.
+     */
     public void setLeaseContext(SnapshotSyncLeaseRecord attempt) {
         long remaining = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(
                 Math.max(0, attempt.getDeadlineMs() - System.currentTimeMillis()));
@@ -195,6 +197,11 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
                 SnapshotSyncLeaseStore.write(txn, SnapshotSyncLease.next(state).setTransferredSequence(currentSeqNum).build());
             }
             timestamp = txn.commit();
+        } catch (TransactionAbortedException e) {
+            if (leaseContext != null && rejectedBeforeAnyWrite(e.getAbortCause())) {
+                throw new RetryableWriteException(e);
+            }
+            throw e;
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
@@ -210,6 +217,25 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
 
         log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
+    }
+
+    /**
+     * The sequencer refused the transaction (a conflict, or a sequencer that failed over), which it
+     * decides before anything reaches the log: the batch is certainly not written, this writer has
+     * not moved on, and the same message can simply be processed again. Any other failure may have
+     * left the batch written, in part or in whole, and writing it a second time into the same shadow
+     * range is not an option, so the attempt is abandoned instead.
+     */
+    private static boolean rejectedBeforeAnyWrite(AbortCause cause) {
+        return cause == AbortCause.CONFLICT || cause == AbortCause.NEW_SEQUENCER
+                || cause == AbortCause.SEQUENCER_OVERFLOW || cause == AbortCause.SEQUENCER_TRIM;
+    }
+
+    /** A snapshot message that was certainly not written and can be sent again as it is. */
+    public static class RetryableWriteException extends RuntimeException {
+        public RetryableWriteException(Throwable cause) {
+            super("Snapshot batch was not written; it can be resent", cause);
+        }
     }
 
     /**

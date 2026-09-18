@@ -9,7 +9,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
-import org.corfudb.runtime.view.Address;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -22,16 +21,10 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SnapshotSenderBufferManager extends SenderBufferManager {
     private LogReplicationAckReader ackReader;
+    // Identity of the attempt the sink admitted. Every message is stamped with it, and an
+    // acknowledgement of any other attempt is ignored.
     private java.util.UUID leaseAttemptId;
     private long leaseGeneration;
-
-    // The expectedSeqNum most recently reported by the sink, or Address.NON_ADDRESS if none has
-    // been reported yet. expectedSeqNum is always lastProcessedSeq + 1 (see
-    // SnapshotSinkBufferManager.generateAckMetadata()), so by itself it carries no more
-    // information than the ack it rides on -- it only reveals a genuine gap when it fails to
-    // advance across two acks despite the source continuing to send, which is what this field is
-    // used to detect (see expediteResendFrom() callers).
-    private long lastReportedExpectedSeqNum = Address.NON_ADDRESS;
 
     public void beginLease(java.util.UUID attemptId, long generation) {
         leaseAttemptId = attemptId;
@@ -72,7 +65,6 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     public void updateAck(Long newAck) {
         if (maxAckTimestamp < newAck) {
             log.debug("Ack Received for Snapshot Sync {}", newAck);
-            markAckAdvanced();
             maxAckTimestamp = newAck;
             pendingMessages.evictAccordingToSeqNum(maxAckTimestamp);
             pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
@@ -106,37 +98,6 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
                     ReplicationStatusVal.SyncType.SNAPSHOT);
         }
 
-        // A sink new enough to report this has explicitly confirmed what it's still waiting for.
-        // expectedSeqNum is always lastProcessedSeq + 1, so on its own it's just a restatement of
-        // the ack -- it only becomes a genuine "I'm stuck" signal if it fails to advance across two
-        // consecutive acks despite the source continuing to send in between. Only expedite in that
-        // case; otherwise this would fire on every single ack of a perfectly healthy transfer,
-        // resending the entire in-flight window each time. An old sink's acks simply never set this
-        // field (hasExpectedSeqNum() == false), so this is a no-op against a peer that doesn't
-        // support it -- safe during a rolling upgrade in either direction.
-        if (leaseAttemptId == null && entry.getMetadata().hasExpectedSeqNum()) {
-            long reportedExpectedSeqNum = entry.getMetadata().getExpectedSeqNum();
-            if (reportedExpectedSeqNum == lastReportedExpectedSeqNum) {
-                expediteResendFrom(reportedExpectedSeqNum);
-            }
-            lastReportedExpectedSeqNum = reportedExpectedSeqNum;
-        }
-    }
-
-    /**
-     * Mark every pending entry at or after expectedSeqNum as due for resend on the very next
-     * resend() call, bypassing its individual per-entry cadence timer. Uses an explicit flag
-     * (LogReplicationPendingEntry.expedited) rather than manipulating the entry's own timer state:
-     * that class's internal clock advances a fixed amount per call rather than per real elapsed
-     * time, so there is no timer value that reliably forces an "immediate" timeout on the very next
-     * check.
-     */
-    private void expediteResendFrom(long expectedSeqNum) {
-        for (LogReplicationPendingEntry entry : pendingMessages.getPendingEntries()) {
-            if (entry.getData().getMetadata().getSnapshotSyncSeqNum() >= expectedSeqNum) {
-                entry.setExpedited(true);
-            }
-        }
     }
 
     /**
@@ -150,18 +111,12 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
         pendingCompletableFutureForAcks.put(message.getMetadata().getSnapshotSyncSeqNum(), cf);
     }
 
-    /**
-     * In addition to the base reset, clears the previously-reported expectedSeqNum: it's scoped to
-     * a single attempt, and each attempt's sequence numbers restart from Address.NON_ADDRESS (see
-     * SenderBufferManager.reset()), so a stale value from a prior, now-abandoned attempt must not
-     * be compared against this attempt's acks.
-     */
+    /** In addition to the base reset, forgets the admitted attempt: the next one is admitted anew. */
     @Override
     public void reset(long lastAckedTimestamp) {
         leaseAttemptId = null;
         leaseGeneration = 0;
         super.reset(lastAckedTimestamp);
-        lastReportedExpectedSeqNum = Address.NON_ADDRESS;
     }
 
     private static Optional<AtomicLong> configureAcksCounter() {

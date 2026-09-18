@@ -5,13 +5,14 @@ import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.SyncStatus;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -25,16 +26,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public class InSnapshotSyncState implements LogReplicationState {
 
     /**
-     * A SNAPSHOT_SYNC_REQUEST arriving less than this long after the current attempt's last genuine
-     * (non self-loop) entry is treated as part of the same restart storm rather than a deliberate,
-     * externally-triggered new request, and backs off instead of restarting unthrottled.
-     */
-    @VisibleForTesting
-    static final long MIN_ATTEMPT_AGE_FOR_UNTHROTTLED_RESTART_MS = 3000;
-
-    /**
      * Log Replication Finite State Machine Instance
      */
+    // Pause before the reset of the snapshot sender is tried again after it failed.
+    private static final long RESET_RETRY_DELAY_MS = 1000;
+
     private final LogReplicationFSM fsm;
 
     private final Optional<AtomicLong> snapshotSyncAcksCounter;
@@ -60,14 +56,13 @@ public class InSnapshotSyncState implements LogReplicationState {
      * A future on the send, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
-    private java.util.concurrent.ScheduledFuture<?> delayedTransmit;
+
+    // A restart is requested by the FSM thread and applied by the FSM worker right before the next
+    // transmit, behind whatever the cancelled task was still doing. A queued continuation that was
+    // superseded in the meantime must not consume the pending reset.
     private volatile long requestedReset;
     private long appliedReset;
-    private long retryNotBeforeNanos;
     private volatile long transmitGeneration;
-    private static final java.util.concurrent.ScheduledExecutorService RETRIES =
-            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new com.google.common.util.concurrent.ThreadFactoryBuilder()
-                    .setDaemon(true).setNameFormat("snapshot-retry-%d").build());
 
     /**
      * Indicates if the snapshot sync was forced by the caller (instead of determined by negotiation)
@@ -76,24 +71,12 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     /**
      * Number of consecutive cancellations/restarts of this snapshot sync, without a fresh externally
-     * requested attempt or a full completion in between. Drives the exponential backoff.
+     * requested attempt or a full completion in between. It is only reported (see SnapshotSyncInfo):
+     * the source does not pace its restarts, because the sink does. A restarted attempt is not
+     * admitted until the sink has cleaned up the previous one and its checkpointer has caught up.
      */
     @VisibleForTesting
     int consecutiveCancellations = 0;
-
-    /**
-     * Backoff to apply, in onEntry(), before retrying the next attempt after a cancellation. Zero
-     * means no pending backoff (e.g. a plain SNAPSHOT_SYNC_CONTINUE self-loop).
-     */
-    @VisibleForTesting
-    long retryBackoffMs = 0;
-
-    /**
-     * Wall-clock time of the last genuine (from != this) entry into this state, used to tell a fresh,
-     * externally-requested SNAPSHOT_SYNC_REQUEST apart from one arriving mid-restart-storm.
-     */
-    @VisibleForTesting
-    long lastEntryTimeMs = 0;
 
     /**
      * Constructor
@@ -115,31 +98,18 @@ public class InSnapshotSyncState implements LogReplicationState {
         }
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-
-                // A request arriving shortly after the last genuine entry looks like part of the same
-                // restart storm (e.g. a caller repeatedly invoking enforceSnapshotSync()) rather than a
-                // deliberate new request, and should back off like a cancellation instead of restarting
-                // unthrottled.
-                boolean looksLikeRestartStorm =
-                        (System.currentTimeMillis() - lastEntryTimeMs) < MIN_ATTEMPT_AGE_FOR_UNTHROTTLED_RESTART_MS;
-
                 // Cancel ongoing snapshot sync, if it is still in progress.
                 setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 String cancelCause = forcedSnapshotSync ? "incoming forced snapshot sync." : "another snapshot sync request.";
                 cancelSnapshotSync(cancelCause);
-
-                if (looksLikeRestartStorm) {
-                    registerCancellationAndComputeBackoff();
-                } else {
-                    resetBackoff();
-                }
-                lastEntryTimeMs = System.currentTimeMillis();
+                // A deliberate new request starts a new run of attempts.
+                resetCancellations();
 
                 // Set the id of the new snapshot sync request causing the transition.
                 // This will be taken onEntry of this state to initiate a snapshot send for this given request.
                 this.setTransitionSyncId(event.getMetadata().getSyncId());
                 requestedReset++;
-                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId, consecutiveCancellations);
+                publishOngoing(false);
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*
@@ -184,11 +154,10 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // If a force snapshot sync gets cancelled due to ACK timeout, a new snapshot sync is triggered.
                     // Retain the 'forced' information in the subsequent snapshot syncs
                     ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
-                    ((InSnapshotSyncState)inSnapshotSyncState).registerCancellationAndComputeBackoff();
-                    ((InSnapshotSyncState)inSnapshotSyncState).lastEntryTimeMs = System.currentTimeMillis();
+                    ((InSnapshotSyncState)inSnapshotSyncState).registerCancellation();
                     requestedReset++;
-                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId,
-                            ((InSnapshotSyncState) inSnapshotSyncState).consecutiveCancellations);
+                    // inSnapshotSyncState is this state: the count registered above is published.
+                    publishOngoing(false);
                     return inSnapshotSyncState;
                 }
 
@@ -199,12 +168,12 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 cancelSnapshotSync("of a request to stop replication.");
-                // A stop is a clean boundary; a later, unrelated session must not inherit this backoff.
-                resetBackoff();
+                // A stop is a clean boundary; a later, unrelated session must not inherit this count.
+                resetCancellations();
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 cancelSnapshotSync("replication terminated.");
-                resetBackoff();
+                resetCancellations();
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 if (!fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -222,81 +191,71 @@ public class InSnapshotSyncState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         if (from != this) {
-            fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
+            // The restart must be requested whatever happens to the status update below.
             requestedReset++;
-            fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId, consecutiveCancellations);
+            publishOngoing(true);
             snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
-            lastEntryTimeMs = System.currentTimeMillis();
         }
-        if (retryBackoffMs > 0) {
-            retryNotBeforeNanos = Math.max(retryNotBeforeNanos,
-                    System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(retryBackoffMs));
-        }
-        long delay = Math.max(0, retryNotBeforeNanos - System.nanoTime());
-        retryBackoffMs = 0;
         long generation = ++transmitGeneration;
         long reset = requestedReset;
         UUID syncId = transitionSyncId;
         boolean forced = forcedSnapshotSync;
-        Runnable dispatch = () -> {
-            if (generation != transmitGeneration) { return; }
+        try {
             transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> {
                 if (generation != transmitGeneration) { return; }
-                // Reset on the same worker as transmit, after any cancelled old task returns.
-                // A superseded queued continuation must not consume the pending reset.
-                if (appliedReset != reset) {
-                    snapshotSender.reset();
-                    appliedReset = reset;
+                try {
+                    // Reset on the same worker as transmit, after any cancelled old task returns.
+                    // A superseded queued continuation must not consume the pending reset.
+                    if (appliedReset != reset) {
+                        snapshotSender.reset();
+                        appliedReset = reset;
+                    }
+                } catch (RuntimeException e) {
+                    // The worker only records a failure in a Future nobody reads. Without another
+                    // entry the state would sit here silently, so ask for one after a pause.
+                    log.error("Could not reset the snapshot sender for {}; retrying", syncId, e);
+                    CompletableFuture.runAsync(() -> fsm.input(new LogReplicationEvent(
+                                    LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                                    new LogReplicationEventMetadata(syncId))),
+                            CompletableFuture.delayedExecutor(RESET_RETRY_DELAY_MS, TimeUnit.MILLISECONDS));
+                    return;
                 }
                 if (generation != transmitGeneration) { return; }
                 snapshotSender.transmit(syncId, forced);
             });
-        };
-        if (delay > 0) {
-            delayedTransmit = RETRIES.schedule(dispatch, delay, TimeUnit.NANOSECONDS);
-        } else {
-            dispatch.run();
+        } catch (Throwable t) {
+            log.error("Error on entry of InSnapshotSyncState.", t);
         }
     }
 
     /**
-     * Register another cancellation/restart of the current attempt and compute the next backoff:
-     * INITIAL_RETRY_BACKOFF_MS on the first, doubling (capped at MAX_RETRY_BACKOFF_MS) on each
-     * subsequent one.
+     * Publishes the status of this run of attempts. It is informational, and it runs on the FSM's
+     * consumer thread, which does not survive an exception: a failure to publish is logged, never
+     * propagated.
      */
-    void registerCancellationAndComputeBackoff() {
-        registerCancellationAndComputeBackoff(0);
+    private void publishOngoing(boolean enteringSnapshotSync) {
+        try {
+            if (enteringSnapshotSync) {
+                fsm.getAckReader().setSyncType(SyncType.SNAPSHOT);
+            }
+            fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId, consecutiveCancellations);
+        } catch (Throwable e) {
+            // Errors included: the status update gives up with one when its retries are interrupted.
+            log.error("Could not publish the status of snapshot sync {}", transitionSyncId, e);
+        }
     }
 
-    /**
-     * As above, but the resulting backoff is floored at minBackoffMs -- deliberately *not* itself
-     * capped at MAX_RETRY_BACKOFF_MS, unlike the normal exponential computation, since this floor
-     * exists for a different purpose (letting the sink's checkpointer, just unfrozen because
-     * isApplyRetriesExhausted() -- see LogReplicationSinkManager's Javadoc -- actually get a sized
-     * window) than the general restart-storm throttling MAX_RETRY_BACKOFF_MS is tuned for, and the
-     * two aren't necessarily meant to have the same ceiling. Zero (the default from every other
-     * call site) is a no-op: the normal computed backoff always wins over a zero floor.
-     */
-    void registerCancellationAndComputeBackoff(long minBackoffMs) {
-        if (snapshotSender.usesSnapshotLifecycle()) {
-            retryBackoffMs = 0;
-            retryNotBeforeNanos = 0;
-            return;
-        }
+    /** Another cancellation/restart of the current run of attempts. */
+    void registerCancellation() {
         consecutiveCancellations = Math.min(Integer.MAX_VALUE - 1, consecutiveCancellations) + 1;
-        long computed = Math.min(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS
-                * (1L << Math.min(30, consecutiveCancellations - 1)), LogReplicationConfig.MAX_RETRY_BACKOFF_MS);
-        retryBackoffMs = Math.max(computed, minBackoffMs);
     }
 
     /**
-     * Clear the backoff state, e.g. on a full completion, a genuinely fresh externally-requested
-     * sync, or a clean stop/shutdown boundary.
+     * A full completion, a genuinely fresh externally-requested sync, or a clean stop/shutdown
+     * boundary ends the current run of attempts.
      */
-    void resetBackoff() {
+    void resetCancellations() {
         consecutiveCancellations = 0;
-        retryBackoffMs = 0;
-        retryNotBeforeNanos = 0;
     }
 
     @Override
@@ -329,7 +288,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     private void cancelSnapshotSync(String cancelCause) {
         transmitGeneration++;
         snapshotSender.stop();
-        if (delayedTransmit != null) { delayedTransmit.cancel(false); }
         if (transmitFuture != null) { transmitFuture.cancel(true); }
         // A cancelled Future is not proof of termination. The single worker serializes
         // the next reset behind old work; the FSM itself does not block waiting for it.

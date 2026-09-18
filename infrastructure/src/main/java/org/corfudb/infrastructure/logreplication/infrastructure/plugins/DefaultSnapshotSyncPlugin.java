@@ -34,22 +34,21 @@ public class DefaultSnapshotSyncPlugin implements ISnapshotSyncPlugin {
     public DefaultSnapshotSyncPlugin(CorfuRuntime runtime) {
     }
 
-    @Override
-    public boolean supportsOwnedSnapshotLifecycle() {
-        return true;
-    }
-
+    /**
+     * Checkpointing is paused by the snapshot lease itself. This sample only leaves the same
+     * observable marker the pre-lease start hook left, so tests can tell the hook ran.
+     */
     @Override
     public void acquireSnapshot(CorfuRuntime runtime,
                                 org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease) {
-        // In-repository protection is enforced transactionally by SnapshotSyncLeaseStore.
-        // This sample has no additional external effect requiring reconciliation.
+        updateDummyTable(runtime, ON_START_VALUE);
     }
 
+    /** The coordinator clears the lease's protection after this hook returns. */
     @Override
     public void releaseSnapshot(CorfuRuntime runtime,
                                 org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord lease) {
-        // The coordinator releases the matching durable guard after this hook returns.
+        updateDummyTable(runtime, ON_END_VALUE);
     }
 
     @Override

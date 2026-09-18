@@ -18,16 +18,13 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     private long snapshotEndSeq = Long.MAX_VALUE;
 
     // Identity of the snapshot-sync attempt this buffer manager instance belongs to. A fresh
-    // instance is constructed for every new attempt (see LogReplicationSinkManager.
-    // processSnapshotStart()), but SNAPSHOT_MESSAGE/SNAPSHOT_END are otherwise matched purely by
-    // numeric snapshotSyncSeqNum below -- and since every attempt's sender-side sequence numbers
-    // restart from Address.NON_ADDRESS (SenderBufferManager.reset()), two successive attempts are
-    // numbered on the same scale. A straggler message from a prior, already-cancelled attempt
-    // (still in flight when it was cancelled -- cancellation can't retract an in-flight RPC) could
-    // otherwise coincidentally match this attempt's buffer/lastProcessedSeq state purely by seqNum
-    // and get applied into this attempt's shadow streams as if it were current data. Rejecting
-    // anything whose syncRequestId doesn't match this attempt's closes that gap, mirroring the
-    // identity check LogReplicationSinkManager.isValidSnapshotStart() already does for SNAPSHOT_START.
+    // instance is constructed for every admitted attempt, but SNAPSHOT_MESSAGE/SNAPSHOT_END are
+    // otherwise matched purely by numeric snapshotSyncSeqNum below, and every attempt numbers its
+    // messages on the same scale. A straggler from a prior, already-cancelled attempt (cancellation
+    // cannot retract an in-flight RPC) could otherwise match this attempt's buffer purely by seqNum
+    // and get applied into its shadow streams as if it were current data. The sink manager and the
+    // writer already reject foreign attempts by identity and generation; this is the same check at
+    // the last point before buffering, so that a buffered message can never be a foreign one.
     private final UUID activeSyncRequestId;
 
     /**
@@ -94,10 +91,6 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
 
         metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
-        // Explicitly state what's still needed, so the source can target retransmission precisely
-        // instead of blindly resending on a fixed cadence -- see the field's Javadoc in the .proto
-        // for why this needs to always be set (not just on a detected gap) and why it's a oneof.
-        metadata.setExpectedSeqNum(lastProcessedSeq + 1);
         log.debug("SnapshotSinkBufferManager send ACK {} for {}",
                 lastProcessedSeq, TextFormat.shortDebugString(metadata));
         return metadata.build();

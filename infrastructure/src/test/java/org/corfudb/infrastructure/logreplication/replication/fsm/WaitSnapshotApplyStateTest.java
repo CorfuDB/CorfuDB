@@ -2,38 +2,41 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Verifies that a SYNC_CANCEL or SNAPSHOT_SYNC_REQUEST arriving while waiting for snapshot apply to
- * complete (i.e. transfer already finished, only the sink's apply confirmation is pending) routes
- * through the same backoff accounting InSnapshotSyncState applies to its own SYNC_CANCEL, instead of
- * restarting the snapshot sync unthrottled. Before this fix (this is a fresh implementation, not a
- * regression against prior behavior, since master has no backoff at all), a cancellation reaching
- * this state would bypass any backoff, making this path another avenue for a restart storm.
- *
- * Also verifies the backoff is cleared on a full completion (SNAPSHOT_APPLY_COMPLETE) and on a clean
- * stop/shutdown boundary, so a later, unrelated session doesn't inherit it.
+ * While the sink applies a transferred snapshot the source has no timer of its own. It follows the
+ * sink's snapshot lease: the attempt completes, or the sink reports that it abandoned it (its
+ * deadline, a failed apply, a change of owner or topology), and only then does the source cancel
+ * and ask for a new attempt.
  */
 @Slf4j
 public class WaitSnapshotApplyStateTest {
@@ -42,115 +45,6 @@ public class WaitSnapshotApplyStateTest {
     private InSnapshotSyncState inSnapshotSyncState;
     private WaitSnapshotApplyState state;
     private DataSender dataSender;
-
-    private org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord ownedStatus() {
-        UUID wireId = new UUID(11, 22);
-        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptId()).thenReturn(wireId);
-        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptGeneration()).thenReturn(7L);
-        when(inSnapshotSyncState.getSnapshotSender().usesSnapshotLifecycle()).thenReturn(true);
-        state.setTransitionSyncId(UUID.randomUUID());
-        state.setBaseSnapshotTimestamp(100);
-        return org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
-                .setAttemptId(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(wireId)).setGeneration(7)
-                .setSourceSnapshot(100).setPhase(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase.APPLYING).build();
-    }
-
-    @Test
-    public void delayedCompletionCannotFinishAnotherAttemptWithTheSameForcedRequestId() throws Exception {
-        setup();
-        ownedStatus();
-        LogReplicationEventMetadata oldAttempt = new LogReplicationEventMetadata(state.getTransitionSyncId(), 100, 100, true)
-                .setSnapshotAttempt(new UUID(11, 23), 7);
-        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
-                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, oldAttempt)));
-        oldAttempt.setSnapshotAttempt(new UUID(11, 22), 6);
-        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
-                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, oldAttempt)));
-        verify(fsm.getAckReader(), never()).markLogEntrySyncOngoing(org.mockito.ArgumentMatchers.anyBoolean());
-    }
-
-    @org.junit.After
-    public void cancelCallbacks() {
-        if (state != null) {
-            LogReplicationState stopped = mock(LogReplicationState.class);
-            when(stopped.getType()).thenReturn(LogReplicationStateType.INITIALIZED);
-            state.onExit(stopped);
-        }
-    }
-
-    @Test
-    public void ownedApplyDoesNotUseTheSourcesIndependentGiveUpTimer() {
-        setup();
-        var lease = ownedStatus();
-        state.applyWaitStartTimeMs = 0;
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
-                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
-        state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm, never()).input(any());
-    }
-
-    @Test
-    public void ownedCompletionSurvivesCleanupAndRecovery() {
-        setup();
-        var lease = ownedStatus().toBuilder().setPhase(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase.RECOVERING)
-                .setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
-                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
-        state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
-                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE));
-    }
-
-    @Test
-    public void fullUuidMismatchAndAbandonmentCancelEvenWhenTimestampsMatch() {
-        setup();
-        var lease = ownedStatus().toBuilder().setAttemptId(
-                org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(new UUID(11, 23))).build();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
-                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
-        state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
-                event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
-        org.mockito.Mockito.clearInvocations(fsm);
-        lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.ABORTED).build();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
-                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
-        state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm).input(org.mockito.ArgumentMatchers.argThat(event ->
-                event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
-    }
-
-    @Test
-    public void notReadyAndTransportFailureDoNotTurnIntoLifecycleTimeouts() {
-        setup();
-        ownedStatus();
-        LogReplicationState initial = mock(LogReplicationState.class);
-        when(initial.getType()).thenReturn(LogReplicationStateType.INITIALIZED);
-        state.onEntry(initial);
-        state.applyWaitStartTimeMs = 0;
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("disconnected")));
-        state.verifyStatusOfSnapshotSyncApply();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
-                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(
-                        org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.getDefaultInstance()).build()));
-        state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm, never()).input(any());
-    }
-
-    @Test
-    public void replyAfterExitCannotCompleteAStoppedAttempt() throws Exception {
-        setup();
-        var lease = ownedStatus().toBuilder().setOutcome(org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome.COMPLETED).build();
-        CompletableFuture<LogReplicationMetadataResponseMsg> reply = new CompletableFuture<>();
-        java.util.concurrent.CountDownLatch queried = new java.util.concurrent.CountDownLatch(1);
-        when(dataSender.sendMetadataRequest()).thenAnswer(call -> { queried.countDown(); return reply; });
-        CompletableFuture<Void> verifying = CompletableFuture.runAsync(state::verifyStatusOfSnapshotSyncApply);
-        Assert.assertTrue(queried.await(2, java.util.concurrent.TimeUnit.SECONDS));
-        cancelCallbacks();
-        reply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build());
-        verifying.get(2, java.util.concurrent.TimeUnit.SECONDS);
-        verify(fsm, never()).input(any());
-    }
 
     private void setup() {
         fsm = mock(LogReplicationFSM.class);
@@ -172,204 +66,196 @@ public class WaitSnapshotApplyStateTest {
         when(fsm.getLogReplicationFSMWorkers()).thenReturn(mock(ExecutorService.class));
     }
 
-    private LogReplicationMetadataResponseMsg notYetAppliedResponse() {
-        // Deliberately doesn't match baseSnapshotTimestamp, so verifyStatusOfSnapshotSyncApply()
-        // takes the "still in progress" branch rather than firing SNAPSHOT_APPLY_COMPLETE.
-        return LogReplicationMetadataResponseMsg.newBuilder()
-                .setSnapshotApplied(0L)
-                .setLastLogEntryTimestamp(0L)
-                .build();
+    @After
+    public void cancelCallbacks() {
+        if (state != null) {
+            LogReplicationState stopped = mock(LogReplicationState.class);
+            when(stopped.getType()).thenReturn(LogReplicationStateType.INITIALIZED);
+            state.onExit(stopped);
+        }
+    }
+
+    /** The lease of the attempt this source is waiting on, still being applied by the sink. */
+    private SnapshotSyncLeaseRecord ownedStatus() {
+        UUID wireId = new UUID(11, 22);
+        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptId()).thenReturn(wireId);
+        when(inSnapshotSyncState.getSnapshotSender().getWireAttemptGeneration()).thenReturn(7L);
+        state.setTransitionSyncId(UUID.randomUUID());
+        state.setBaseSnapshotTimestamp(100);
+        return SnapshotSyncLeaseRecord.newBuilder().setSchemaVersion(1)
+                .setAttemptId(CorfuProtocolCommon.getUuidMsg(wireId)).setGeneration(7)
+                .setSourceSnapshot(100).setPhase(Phase.APPLYING).build();
+    }
+
+    private void sinkReports(SnapshotSyncLeaseRecord lease) {
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
+    }
+
+    // ---------------------------------------------------------------- following the lease
+
+    @Test
+    public void anApplyInProgressIsFollowedForAsLongAsTheSinkRunsIt() {
+        setup();
+        sinkReports(ownedStatus());
+        for (int poll = 0; poll < 5; poll++) {
+            state.verifyStatusOfSnapshotSyncApply();
+        }
+        // No source-side bound exists: only the sink's deadline can end this attempt.
+        verify(fsm, never()).input(any());
     }
 
     @Test
-    public void syncCancelAppliesBackoffBeforeRestarting() throws IllegalTransitionException {
+    public void completionSurvivesTheSinksCleanupAndRecovery() {
+        setup();
+        sinkReports(ownedStatus().toBuilder().setPhase(Phase.RECOVERING).setOutcome(Outcome.COMPLETED).build());
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(argThat(event ->
+                event.getType() == LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE
+                        && new UUID(11, 22).equals(event.getMetadata().getSnapshotAttemptId())
+                        && event.getMetadata().getSnapshotAttemptGeneration() == 7));
+    }
+
+    @Test
+    public void fullUuidMismatchAndAbandonmentCancelEvenWhenTimestampsMatch() {
+        setup();
+        sinkReports(ownedStatus().toBuilder().setAttemptId(CorfuProtocolCommon.getUuidMsg(new UUID(11, 23))).build());
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+
+        clearInvocations(fsm);
+        sinkReports(ownedStatus().toBuilder().setGeneration(8).build());
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+
+        clearInvocations(fsm);
+        sinkReports(ownedStatus().toBuilder().setPhase(Phase.RECOVERING).setOutcome(Outcome.ABORTED).build());
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm).input(argThat(event -> event.getType() == LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL));
+    }
+
+    @Test
+    public void anUninitializedSinkAndATransportFailureConcludeNothing() {
+        setup();
+        ownedStatus();
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.failedFuture(new IllegalStateException("disconnected")));
+        state.verifyStatusOfSnapshotSyncApply();
+        // A sink whose new leader has not initialized its lease yet publishes a placeholder.
+        sinkReports(SnapshotSyncLeaseRecord.getDefaultInstance());
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
+    public void aSinkWithoutALeaseIsNeverMistakenForACompletedOrFailedApply() {
+        setup();
+        ownedStatus();
+        // Matching timestamps from a sink that predates the lease prove nothing about this attempt.
+        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
+                LogReplicationMetadataResponseMsg.newBuilder().setSnapshotStart(100).setSnapshotTransferred(100)
+                        .setSnapshotApplied(100).setLastLogEntryTimestamp(100).build()));
+        state.verifyStatusOfSnapshotSyncApply();
+        state.verifyStatusOfSnapshotSyncApply();
+        verify(fsm, never()).input(any());
+    }
+
+    @Test
+    public void replyAfterExitCannotCompleteAStoppedAttempt() throws Exception {
+        setup();
+        SnapshotSyncLeaseRecord lease = ownedStatus().toBuilder().setOutcome(Outcome.COMPLETED).build();
+        CompletableFuture<LogReplicationMetadataResponseMsg> reply = new CompletableFuture<>();
+        CountDownLatch queried = new CountDownLatch(1);
+        when(dataSender.sendMetadataRequest()).thenAnswer(call -> { queried.countDown(); return reply; });
+        CompletableFuture<Void> verifying = CompletableFuture.runAsync(state::verifyStatusOfSnapshotSyncApply);
+        Assert.assertTrue(queried.await(2, TimeUnit.SECONDS));
+        cancelCallbacks();
+        reply.complete(LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build());
+        verifying.get(2, TimeUnit.SECONDS);
+        verify(fsm, never()).input(any());
+    }
+
+    // ---------------------------------------------------------------- events
+
+    @Test
+    public void delayedCompletionCannotFinishAnotherAttemptWithTheSameForcedRequestId() throws Exception {
+        setup();
+        ownedStatus();
+        LogReplicationEventMetadata oldAttempt = new LogReplicationEventMetadata(state.getTransitionSyncId(), 100, 100, true)
+                .setSnapshotAttempt(new UUID(11, 23), 7);
+        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, oldAttempt)));
+        oldAttempt.setSnapshotAttempt(new UUID(11, 22), 6);
+        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, oldAttempt)));
+        verify(fsm.getAckReader(), never()).markLogEntrySyncOngoing(anyBoolean());
+        Assert.assertEquals(0, inSnapshotSyncState.consecutiveCancellations);
+    }
+
+    @Test
+    public void aQueuedTransferContinuationIsHarmless() throws IllegalTransitionException {
+        setup();
+        state.setTransitionSyncId(UUID.randomUUID());
+        Assert.assertSame(state, state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                new LogReplicationEventMetadata(state.getTransitionSyncId()))));
+    }
+
+    @Test
+    public void syncCancelRestartsAndCountsTheCancellation() throws IllegalTransitionException {
         setup();
         UUID syncId = UUID.randomUUID();
         state.setTransitionSyncId(syncId);
 
-        LogReplicationEvent cancel = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
-                new LogReplicationEventMetadata(syncId));
-
-        LogReplicationState next = state.processEvent(cancel);
+        LogReplicationState next = state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, new LogReplicationEventMetadata(syncId)));
 
         Assert.assertSame(inSnapshotSyncState, next);
         Assert.assertEquals(1, inSnapshotSyncState.consecutiveCancellations);
-        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS, inSnapshotSyncState.retryBackoffMs);
+        Assert.assertNotEquals("a cancelled default sync restarts under a new request id",
+                syncId, inSnapshotSyncState.getTransitionSyncId());
     }
 
     @Test
-    public void snapshotSyncRequestWhileWaitingForApplyAppliesBackoff() throws IllegalTransitionException {
+    public void aCancelledForcedSyncKeepsItsRequestId() throws IllegalTransitionException {
         setup();
         UUID syncId = UUID.randomUUID();
         state.setTransitionSyncId(syncId);
 
-        LogReplicationEvent request = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
-                new LogReplicationEventMetadata(UUID.randomUUID()));
+        state.processEvent(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                new LogReplicationEventMetadata(syncId, true)));
 
-        LogReplicationState next = state.processEvent(request);
+        Assert.assertEquals(syncId, inSnapshotSyncState.getTransitionSyncId());
+    }
+
+    @Test
+    public void aSnapshotSyncRequestWhileWaitingStartsANewRunOfAttempts() throws IllegalTransitionException {
+        setup();
+        state.setTransitionSyncId(UUID.randomUUID());
+        inSnapshotSyncState.registerCancellation();
+        UUID requested = UUID.randomUUID();
+
+        LogReplicationState next = state.processEvent(new LogReplicationEvent(
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, new LogReplicationEventMetadata(requested)));
 
         Assert.assertSame(inSnapshotSyncState, next);
-        Assert.assertEquals("a request arriving during apply-wait abandons and restarts the same way " +
-                        "a SYNC_CANCEL does, and must not bypass the backoff accounting",
-                1, inSnapshotSyncState.consecutiveCancellations);
-        Assert.assertEquals(LogReplicationConfig.INITIAL_RETRY_BACKOFF_MS, inSnapshotSyncState.retryBackoffMs);
-    }
-
-    @Test
-    public void replicationStopResetsBackoff() throws IllegalTransitionException {
-        setup();
-        inSnapshotSyncState.registerCancellationAndComputeBackoff();
-        inSnapshotSyncState.registerCancellationAndComputeBackoff();
-        Assert.assertTrue(inSnapshotSyncState.consecutiveCancellations > 0);
-
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        LogReplicationEvent stop = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
-                new LogReplicationEventMetadata(syncId));
-
-        state.processEvent(stop);
-
-        Assert.assertEquals("a stop is a clean boundary; a later, unrelated session must not inherit this backoff",
-                0, inSnapshotSyncState.consecutiveCancellations);
-        Assert.assertEquals(0, inSnapshotSyncState.retryBackoffMs);
-    }
-
-    @Test
-    public void replicationShutdownResetsBackoff() throws IllegalTransitionException {
-        setup();
-        inSnapshotSyncState.registerCancellationAndComputeBackoff();
-        Assert.assertTrue(inSnapshotSyncState.consecutiveCancellations > 0);
-
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        LogReplicationEvent shutdown = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN,
-                new LogReplicationEventMetadata(syncId));
-
-        state.processEvent(shutdown);
-
+        Assert.assertEquals(requested, inSnapshotSyncState.getTransitionSyncId());
         Assert.assertEquals(0, inSnapshotSyncState.consecutiveCancellations);
-        Assert.assertEquals(0, inSnapshotSyncState.retryBackoffMs);
     }
 
     @Test
-    public void snapshotApplyCompleteResetsBackoff() throws IllegalTransitionException {
-        setup();
-        // Simulate a couple of prior retries before this attempt finally succeeds end to end.
-        inSnapshotSyncState.registerCancellationAndComputeBackoff();
-        inSnapshotSyncState.registerCancellationAndComputeBackoff();
-        Assert.assertTrue(inSnapshotSyncState.consecutiveCancellations > 0);
-        Assert.assertTrue(inSnapshotSyncState.retryBackoffMs > 0);
-
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        LogReplicationEvent applyComplete = new LogReplicationEvent(
-                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
-                new LogReplicationEventMetadata(syncId, 0L, 0L, false));
-
-        state.processEvent(applyComplete);
-
-        Assert.assertEquals(0, inSnapshotSyncState.consecutiveCancellations);
-        Assert.assertEquals(0, inSnapshotSyncState.retryBackoffMs);
-    }
-
-    // ------------------------------------------------------------------------------------------
-    // verifyStatusOfSnapshotSyncApply()'s apply-wait bound: previously this polling loop had no
-    // bound at all, so a sink whose apply died silently (e.g. an uncaught exception on its apply
-    // executor -- see LogReplicationSinkManager.startSnapshotApply()) would leave the source polling
-    // forever with no way to notice or recover.
-    // ------------------------------------------------------------------------------------------
-
-    @Test
-    public void applyWaitExceedingMaxBoundCancelsAndRestarts() {
+    public void stopShutdownAndCompletionEndTheRunOfAttempts() throws IllegalTransitionException {
         setup();
         UUID syncId = UUID.randomUUID();
         state.setTransitionSyncId(syncId);
-        state.setBaseSnapshotTimestamp(100L);
-        state.applyWaitStartTimeMs = System.currentTimeMillis() - LogReplicationConfig.SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS - 1000;
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
-
-        state.verifyStatusOfSnapshotSyncApply();
-
-        ArgumentCaptor<LogReplicationEvent> captor = ArgumentCaptor.forClass(LogReplicationEvent.class);
-        verify(fsm).input(captor.capture());
-        Assert.assertEquals("expected the stuck apply to be canceled so the existing backoff/retry " +
-                        "pipeline can restart a fresh snapshot sync",
-                LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, captor.getValue().getType());
-    }
-
-    @Test
-    public void applyWaitWithinBoundDoesNotCancel() {
-        setup();
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        state.setBaseSnapshotTimestamp(100L);
-        state.applyWaitStartTimeMs = System.currentTimeMillis(); // just started
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
-
-        state.verifyStatusOfSnapshotSyncApply();
-
-        verify(fsm, never()).input(any());
-    }
-
-    @Test
-    public void sinkReportingApplyRetriesExhaustedCancelsImmediatelyWithoutWaitingOutTheFullBound() {
-        // The sink has already given up automatically retrying this apply (see
-        // LogReplicationSinkManager.isApplyRetriesExhausted()) -- must cancel right away instead of
-        // waiting out the much longer SNAPSHOT_SYNC_APPLY_MAX_WAIT_MS bound, which exists to catch a
-        // generic hang and has no way, on its own, of knowing the sink already concluded this one is
-        // doomed. applyWaitStartTimeMs is deliberately left at "just started" to prove this doesn't
-        // depend on the elapsed-time bound at all.
-        setup();
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        state.setBaseSnapshotTimestamp(100L);
-        state.applyWaitStartTimeMs = System.currentTimeMillis();
-        final long checkpointerGracePeriodMs = 900_000L;
-        LogReplicationMetadataResponseMsg exhaustedResponse = LogReplicationMetadataResponseMsg.newBuilder()
-                .setSnapshotApplied(0L)
-                .setLastLogEntryTimestamp(0L)
-                .setApplyRetriesExhausted(true)
-                .setCheckpointerGracePeriodMs(checkpointerGracePeriodMs)
-                .build();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(exhaustedResponse));
-
-        state.verifyStatusOfSnapshotSyncApply();
-
-        ArgumentCaptor<LogReplicationEvent> captor = ArgumentCaptor.forClass(LogReplicationEvent.class);
-        verify(fsm).input(captor.capture());
-        Assert.assertEquals(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, captor.getValue().getType());
-        // The sink's requested checkpointer grace period must be carried through on the event so
-        // InSnapshotSyncState.registerCancellationAndComputeBackoff(long) can apply it as a floor.
-        Assert.assertEquals(checkpointerGracePeriodMs, captor.getValue().getMetadata().getMinBackoffMs());
-    }
-
-    @Test
-    public void oldSinkNotSettingApplyRetriesExhaustedIsUnaffected() {
-        // Backward compatibility: proto3 decodes an old sink's response (which never sets this
-        // field) as false, so this must be indistinguishable from the pre-existing "still in
-        // progress, keep waiting" behavior -- not misread as "exhausted".
-        setup();
-        UUID syncId = UUID.randomUUID();
-        state.setTransitionSyncId(syncId);
-        state.setBaseSnapshotTimestamp(100L);
-        state.applyWaitStartTimeMs = System.currentTimeMillis();
-        when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(notYetAppliedResponse()));
-
-        state.verifyStatusOfSnapshotSyncApply();
-
-        verify(fsm, never()).input(any());
-    }
-
-    @Test
-    public void selfLoopReEntryDoesNotRestampApplyWaitStartTime() {
-        setup();
-        state.applyWaitStartTimeMs = 12345L;
-
-        state.onEntry(state); // self-loop re-entry (from == this), as SNAPSHOT_APPLY_IN_PROGRESS produces
-
-        Assert.assertEquals("a stuck apply must not get its wait-start time perpetually refreshed by " +
-                        "its own periodic self-verification loop, or it would never be judged as having " +
-                        "exceeded the bound",
-                12345L, state.applyWaitStartTimeMs);
+        for (LogReplicationEvent.LogReplicationEventType boundary : new LogReplicationEvent.LogReplicationEventType[]{
+                LogReplicationEvent.LogReplicationEventType.REPLICATION_STOP,
+                LogReplicationEvent.LogReplicationEventType.REPLICATION_SHUTDOWN,
+                LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE}) {
+            inSnapshotSyncState.registerCancellation();
+            inSnapshotSyncState.registerCancellation();
+            state.processEvent(new LogReplicationEvent(boundary, new LogReplicationEventMetadata(syncId, 0L, 0L, false)));
+            Assert.assertEquals(boundary + " is a clean boundary; a later session must not inherit this count",
+                    0, inSnapshotSyncState.consecutiveCancellations);
+        }
     }
 }

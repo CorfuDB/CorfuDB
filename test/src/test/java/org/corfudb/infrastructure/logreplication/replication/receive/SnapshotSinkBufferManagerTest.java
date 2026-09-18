@@ -81,7 +81,7 @@ public class SnapshotSinkBufferManagerTest {
     /**
      * Reproduces the exact scenario from the review finding this fix addresses: attempt N is
      * cancelled after seqNum 9 is already in flight; attempt N+1 (a fresh SnapshotSinkBufferManager
-     * instance, since LogReplicationSinkManager.processSnapshotStart() constructs a new one per
+     * instance, since LogReplicationSinkManager constructs a new one when it prepares an admitted
      * attempt) starts from scratch and is only partway through its own, unrelated seqNum sequence
      * when N's straggler for seqNum 10 arrives. Without the identity check, the straggler would
      * satisfy "currentTs > lastProcessedSeq" purely by number and get buffered at key 9 (preTs);
@@ -125,16 +125,17 @@ public class SnapshotSinkBufferManagerTest {
     }
 
     @Test
-    public void ackAlwaysStatesExpectedSeqNum() {
-        // expectedSeqNum must be set on every ack (not just when a gap is detected) -- see its
-        // Javadoc in the .proto for why the source depends on that.
+    public void ackStatesTheLastSequenceProcessedAndTheAttemptItBelongsTo() {
+        // The source resends from the sequence after the acknowledged one, and ignores an
+        // acknowledgement of any attempt other than its current one.
         LogReplicationEntryMsg m = msg(activeSyncId, LogReplicationEntryType.SNAPSHOT_MESSAGE, 0);
 
         LogReplicationEntryMsg ack = buffer.processMsgAndBuffer(m);
 
         Assert.assertNotNull(ack);
-        Assert.assertTrue(ack.getMetadata().hasExpectedSeqNum());
-        Assert.assertEquals(1L, ack.getMetadata().getExpectedSeqNum());
+        Assert.assertEquals(LogReplicationEntryType.SNAPSHOT_REPLICATED, ack.getMetadata().getEntryType());
+        Assert.assertEquals(0L, ack.getMetadata().getSnapshotSyncSeqNum());
+        Assert.assertEquals(activeSyncId, getUUID(ack.getMetadata().getSyncRequestId()));
     }
 
     @Test

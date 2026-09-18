@@ -13,6 +13,8 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 @Data
 @Slf4j
 public class LogReplicationPendingEntry {
+    // Retries measure monotonic elapsed time, so the resend cadence is independent of how often the
+    // source happens to look at the entry.
     private final java.util.function.LongSupplier clock;
 
     @Getter
@@ -23,12 +25,6 @@ public class LogReplicationPendingEntry {
 
     // The number of retries for this entry
     public int retry;
-
-    // Set to force this entry to be resent on the very next resend() call, bypassing timeout()'s
-    // cadence check entirely -- used when the receiver has explicitly confirmed it's still waiting
-    // for this entry (see SnapshotSenderBufferManager.expediteResendFrom()). Ordinary retries
-    // measure monotonic elapsed time and are independent of how often the source polls.
-    private boolean expedited = false;
 
     public LogReplicationPendingEntry(LogReplicationEntryMsg data) {
         this(data, () -> java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));

@@ -64,6 +64,9 @@ message SnapshotSyncLeaseRecord {
   int64 topologyConfigId = 10;
   uint64 admissionEpoch = 11;
   int64 admittedAtMs = 12;
+  // deadlineMs, protectedAfter and protectionHeld are what the checkpointer reads, and it reads them
+  // from records of any schema version (see SnapshotSyncLeaseStore.readForRetention): their numbers
+  // and their meaning must never change.
   int64 deadlineMs = 13;
   // All writes belonging to this reservation are strictly after this sink address.
   int64 protectedAfter = 14;
@@ -79,4 +82,7 @@ message SnapshotSyncLeaseRecord {
   string failure = 24;
   int64 endSequence = 25;
   int64 cleanupStartedAtMs = 26;
+  // Attempts abandoned since the last completed snapshot. Durable so that a restart loop on the
+  // sink cannot hide a run of failures from the alarm that watches it.
+  uint32 consecutiveAborts = 27;
 }

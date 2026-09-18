@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWri
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.SnapshotLeaseCoordinator;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultSnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -52,7 +53,7 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         metadata = new LogReplicationMetadataManager(rt, 1, "sink");
         leases = new SnapshotSyncLeaseStore(metadata.getCorfuStore());
         helper = new DistributedCheckpointerHelper(metadata.getCorfuStore());
-        leases.update((txn, state) -> SnapshotSyncLease.initial("owner"));
+        leases.update((txn, state) -> SnapshotSyncLease.seedIdle("owner", -1, 1));
         config = mock(LogReplicationConfig.class);
         LogReplicationConfigManager manager = mock(LogReplicationConfigManager.class);
         when(config.getConfigManager()).thenReturn(manager);
@@ -111,14 +112,25 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         assertTrue("sink lifecycle did not reach the expected state", condition.getAsBoolean());
     }
 
-    private LogReplicationSinkManager ownedSink() throws Exception {
+    /** A sink whose lease table has no record yet, as after an upgrade from the pre-lease version. */
+    private LogReplicationSinkManager upgradedSink() {
         leases.update((txn, current) -> SnapshotSyncLeaseRecord.getDefaultInstance());
         LogReplicationSinkManager sink = new LogReplicationSinkManager(rt, config, metadata, new DefaultSnapshotSyncPlugin(rt));
-        sink.enableSnapshotLifecycle(60000, 0, 5000);
+        sink.configureSnapshotLifecycle(new SnapshotLeaseCoordinator.Timing(60000, 0, 5000, 0, 3));
         sink.updateTopologyConfigId(1);
+        return sink;
+    }
+
+    private LogReplicationSinkManager ownedSink() throws Exception {
+        LogReplicationSinkManager sink = upgradedSink();
         sink.setLeadership(true);
         await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.READY);
         return sink;
+    }
+
+    /** Emulates a compaction service that is configured: it creates this record on its first pass. */
+    private void compactorIsConfigured() {
+        cycle(CheckpointingStatus.StatusType.IDLE, -1);
     }
 
     private SnapshotSyncLeaseRecord start(LogReplicationSinkManager sink) throws Exception {
@@ -126,16 +138,27 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
                 .setSnapshotLifecycleVersion(1).setEntryType(LogReplicationEntryType.SNAPSHOT_START)
                 .setTopologyConfigID(1).setSnapshotTimestamp(100).setSyncRequestId(getUuidMsg(UUID.randomUUID()))
                 .setAdmissionEpoch(sink.getSnapshotLease().getAdmissionEpoch())).build();
-        assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(start));
-        await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.TRANSFERRING);
-        assertEquals(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED, sink.receive(start).getMetadata().getEntryType());
-        return sink.getSnapshotLease();
+        // What a source does: it is told to come back while the sink is busy, reserves and prepares,
+        // and repeats the same proposal until it is accepted.
+        long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (true) {
+            try {
+                assertEquals(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED, sink.receive(start).getMetadata().getEntryType());
+                return sink.getSnapshotLease();
+            } catch (org.corfudb.runtime.exceptions.LogReplicationBusyException busy) {
+                assertEquals(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, busy.getResponse().getReason());
+                assertTrue("the proposal was never accepted: " + sink.getSnapshotLease(), System.nanoTime() < limit);
+                TimeUnit.MILLISECONDS.sleep(20);
+            }
+        }
     }
 
     @Test
     public void sinkAcceptsBeforeBulkAndReconcilesDuplicateEndAfterApply() throws Exception {
+        compactorIsConfigured(); // Recovery stays pending, so incremental sync is shown to resume during it.
         LogReplicationSinkManager sink = ownedSink();
         try {
+            metadata.setDataConsistentOnStandby(true);
             PersistentCorfuTable<String, String> table = getNewRuntime(getDefaultNode()).connect().getObjectsView().build().setStreamName(streamName)
                     .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {}).setSerializer(Serializers.PRIMITIVE).open();
             SnapshotSyncLeaseRecord captured = start(sink);
@@ -146,6 +169,8 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
             assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(data(captured)
                     .toBuilder().setMetadata(data(captured).getMetadata().toBuilder().setAttemptGeneration(99)).build()));
             sink.receive(data(captured));
+            // Transfer only writes shadow streams: the regular streams stay readable and consistent.
+            assertTrue(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
             LogReplicationEntryMsg end = data(captured).toBuilder().clearData().setMetadata(data(captured).getMetadata().toBuilder()
                     .setEntryType(LogReplicationEntryType.SNAPSHOT_END).setSnapshotSyncSeqNum(1)).build();
             assertEquals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE, sink.receive(end).getMetadata().getEntryType());
@@ -153,6 +178,8 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
             assertEquals("value", table.get("key"));
             assertEquals(1, sink.receive(end).getMetadata().getSnapshotSyncSeqNum());
             await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
+            assertFalse(sink.getSnapshotLease().getProtectionHeld());
+            await(sink::isIncrementalSyncAdmitted);
             sink.receive(delta(captured, 101));
             assertEquals("delta-101", table.get("key"));
             assertTrue(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
@@ -162,32 +189,50 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
 
     @Test
     public void sinkTransferFailureAbandonsAndReleasesWithoutWaitingForSource() throws Exception {
+        compactorIsConfigured();
         LogReplicationSinkManager sink = ownedSink();
         try {
-            assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class,
-                    () -> sink.receive(delta(SnapshotSyncLeaseRecord.getDefaultInstance(), 101)));
+            // A sink that never completed a snapshot admits incremental traffic at the lease level,
+            // exactly as the pre-lease sink did; the incremental writer's own validation rejects it.
+            await(sink::isIncrementalSyncAdmitted);
+            sink.receive(delta(SnapshotSyncLeaseRecord.getDefaultInstance(), 101));
+            assertEquals(-1, metadata.getLastProcessedLogEntryBatchTimestamp());
+
+            metadata.setDataConsistentOnStandby(true);
             SnapshotSyncLeaseRecord captured = start(sink);
+            assertThrows("incremental traffic is closed while a snapshot is in flight",
+                    org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(delta(captured, 101)));
             StreamsSnapshotWriter failing = mock(StreamsSnapshotWriter.class);
             doThrow(new IllegalStateException("shadow write unavailable")).when(failing).apply(any(LogReplicationEntryMsg.class));
             sink.setSnapshotWriter(failing);
             assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(data(captured)));
             await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
             assertEquals(SnapshotSyncLeaseRecord.Outcome.ABORTED, sink.getSnapshotLease().getOutcome());
+            assertEquals(1, sink.getSnapshotLease().getConsecutiveAborts());
             assertFalse(sink.getSnapshotLease().getProtectionHeld());
-            assertFalse(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
+            assertFalse(helper.isCheckpointFrozen());
+            // The failure happened before apply touched the regular streams: they are still consistent.
+            assertTrue(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
+            assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(delta(captured, 101)));
         } finally { sink.shutdown(); }
     }
 
     @Test
-    public void persistedLifecycleActivatesOnRestartAndPreservesRecoveryDebt() throws Exception {
+    public void aRestartedSinkAbandonsTheUnfinishedAttemptAndPreservesItsBudgetAndRecoveryDebt() throws Exception {
+        compactorIsConfigured();
         SnapshotSyncLeaseRecord prior = transferring();
         LogReplicationSinkManager sink = new LogReplicationSinkManager(rt, config, metadata, new DefaultSnapshotSyncPlugin(rt));
         try {
-            assertTrue(sink.isSnapshotLifecycleEnabled());
-            assertThrows(IllegalStateException.class, () -> sink.enableSnapshotLifecycle(1000, 0, 1000));
+            SnapshotLeaseCoordinator.Timing timing = new SnapshotLeaseCoordinator.Timing(60000, 0, 5000, 0, 3);
+            sink.configureSnapshotLifecycle(timing);
             sink.updateTopologyConfigId(1);
+            assertEquals(SnapshotSyncLeaseRecord.Phase.NOT_READY, sink.getSnapshotLease().getPhase());
             sink.setLeadership(true);
+            assertThrows("a live driver is never swapped out", IllegalStateException.class,
+                    () -> sink.configureSnapshotLifecycle(timing));
             await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
+            assertFalse(sink.getSnapshotLease().getProtectionHeld());
+            assertFalse(helper.isCheckpointFrozen());
             assertEquals(SnapshotSyncLeaseRecord.Outcome.ABORTED, sink.getSnapshotLease().getOutcome());
             assertEquals(prior.getGeneration(), sink.getSnapshotLease().getGeneration());
             assertEquals(prior.getDeadlineMs(), sink.getSnapshotLease().getDeadlineMs());
@@ -198,6 +243,7 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
 
     @Test
     public void independentCheckpointAndTrimRecoverAnAbandonedSinkWithoutSourcePolling() throws Exception {
+        compactorIsConfigured();
         LogReplicationSinkManager sink = ownedSink();
         try {
             SnapshotSyncLeaseRecord captured = start(sink);
@@ -213,14 +259,7 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
             // A failed real cycle must leave the snapshot gate closed even after cleanup.
             compactor.finishCompactionCycle();
             assertEquals(SnapshotSyncLeaseRecord.Phase.RECOVERING, sink.getSnapshotLease().getPhase());
-            assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
-            CorfuRuntime cpRuntime = getNewRuntime(getDefaultNode()).connect();
-            ServerTriggeredCheckpointer checkpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
-                    .corfuRuntime(rt).cpRuntime(java.util.Optional.of(cpRuntime)).isClient(false)
-                    .persistedCacheRoot(java.util.Optional.empty()).build(), metadata.getCorfuStore(), helper.getCompactorMetadataTables());
-            try { checkpointer.checkpointTables(); } finally { checkpointer.shutdown(); }
-            compactor.finishCompactionCycle();
-            new TrimLog().invokePrefixTrim(rt, metadata.getCorfuStore());
+            checkpointAndTrim(compactor);
             assertTrue(rt.getAddressSpaceView().getTrimMark().getSequence() > recoveryCut);
             await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.READY);
             assertEquals(captured.getDeadlineMs(), sink.getSnapshotLease().getDeadlineMs());
@@ -228,6 +267,278 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
             SnapshotSyncLeaseRecord next = start(sink);
             assertEquals(captured.getGeneration() + 1, next.getGeneration());
         } finally { sink.shutdown(); }
+    }
+
+    /** One real, successful compaction cycle followed by the trim it allows. */
+    private void checkpointAndTrim(CompactorLeaderServices compactor) throws Exception {
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        CorfuRuntime cpRuntime = getNewRuntime(getDefaultNode()).connect();
+        ServerTriggeredCheckpointer checkpointer = new ServerTriggeredCheckpointer(CheckpointerBuilder.builder()
+                .corfuRuntime(rt).cpRuntime(java.util.Optional.of(cpRuntime)).isClient(false)
+                .persistedCacheRoot(java.util.Optional.empty()).build(), metadata.getCorfuStore(), helper.getCompactorMetadataTables());
+        try { checkpointer.checkpointTables(); } finally { checkpointer.shutdown(); }
+        compactor.finishCompactionCycle();
+        new TrimLog().invokePrefixTrim(rt, metadata.getCorfuStore());
+    }
+
+    /** The state a sink is in after the pre-lease protocol fully applied snapshot 100. */
+    private void legacySnapshotCompleted() {
+        try (TxnContext txn = metadata.getTxnContext()) {
+            for (LogReplicationMetadataManager.LogReplicationMetadataType type : new LogReplicationMetadataManager.LogReplicationMetadataType[]{
+                    LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED,
+                    LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED,
+                    LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED,
+                    LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED,
+                    LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_APPLIED}) {
+                metadata.appendUpdate(txn, type, 100);
+            }
+            txn.commit();
+        }
+    }
+
+    private PersistentCorfuTable<String, String> replicatedTable() {
+        return getNewRuntime(getDefaultNode()).connect().getObjectsView().build().setStreamName(streamName)
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {}).setSerializer(Serializers.PRIMITIVE).open();
+    }
+
+    private LogReplicationEntryMsg startMessage(LogReplicationSinkManager sink) {
+        return startMessage(sink, 100);
+    }
+
+    private LogReplicationEntryMsg startMessage(LogReplicationSinkManager sink, long sourceSnapshot) {
+        return LogReplicationEntryMsg.newBuilder().setMetadata(LogReplicationEntryMetadataMsg.newBuilder()
+                .setSnapshotLifecycleVersion(1).setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                .setTopologyConfigID(1).setSnapshotTimestamp(sourceSnapshot).setSyncRequestId(getUuidMsg(UUID.randomUUID()))
+                .setAdmissionEpoch(sink.getSnapshotLease().getAdmissionEpoch())).build();
+    }
+
+    /**
+     * A snapshot timestamp is a position in the source's log, which starts over when the source is
+     * rebuilt or restored. A proposal below the previous position is not stale: stale proposals are
+     * fenced by the admission epoch. Refusing it would close replication for good, silently.
+     */
+    @Test
+    public void aSourceWhoseLogStartedOverIsStillAdmitted() throws Exception {
+        legacySnapshotCompleted(); // Snapshot 100 of the previous incarnation of the source.
+        LogReplicationSinkManager sink = ownedSink();
+        try {
+            LogReplicationEntryMsg proposal = startMessage(sink, 40);
+            long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            LogReplicationEntryMsg reply = null;
+            while (reply == null) {
+                try {
+                    reply = sink.receive(proposal);
+                } catch (org.corfudb.runtime.exceptions.LogReplicationBusyException busy) {
+                    assertTrue("never admitted: " + sink.getSnapshotLease(), System.nanoTime() < limit);
+                    TimeUnit.MILLISECONDS.sleep(20);
+                }
+            }
+            assertEquals(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED, reply.getMetadata().getEntryType());
+            assertEquals(40, sink.getSnapshotLease().getSourceSnapshot());
+            assertEquals(40, metadata.getLastStartedSnapshotTimestamp());
+        } finally { sink.shutdown(); }
+    }
+
+    // ------------------------------------------------------------ upgrade from the pre-lease version
+
+    /**
+     * The sink cluster is upgraded while the pre-lease protocol is in the middle of a snapshot
+     * sync: the checkpointer is frozen by the freeze token, and the hook that would delete the token
+     * is never called again. This is the state the original incident left clusters in.
+     */
+    @Test
+    public void upgradeSupersedesAPendingPreLeaseSnapshotAndUnfreezesTheCheckpointer() throws Exception {
+        compactorIsConfigured();
+        try (TxnContext txn = metadata.getTxnContext()) {
+            // Snapshot 80 was started by the pre-lease protocol and never applied.
+            metadata.appendUpdate(txn, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, 80);
+            txn.commit();
+        }
+        helper.freezeCompaction();
+        assertTrue(helper.isCheckpointFrozen());
+        LogReplicationSinkManager sink = upgradedSink();
+        try {
+            sink.setLeadership(true);
+            await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
+            SnapshotSyncLeaseRecord seeded = sink.getSnapshotLease();
+            assertEquals(SnapshotSyncLeaseRecord.Outcome.ABORTED, seeded.getOutcome());
+            assertEquals(80, seeded.getSourceSnapshot());
+            assertFalse(seeded.getProtectionHeld());
+            assertTrue(seeded.getRecoveryCut() >= 0);
+            assertFalse("the leftover freeze token is gone", helper.isCheckpointFrozen());
+            assertFalse(sink.isIncrementalSyncAdmitted());
+
+            // Another takeover finds the same unfinished snapshot: it is not superseded a second time.
+            sink.setLeadership(false);
+            sink.setLeadership(true);
+            await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
+            assertEquals(seeded.getRecoveryCut(), sink.getSnapshotLease().getRecoveryCut());
+            assertEquals(seeded.getFailure(), sink.getSnapshotLease().getFailure());
+
+            // Admission reopens only after one checkpoint and trim reclaimed what the old attempt left.
+            assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(startMessage(sink)));
+            assertEquals(SnapshotSyncLeaseRecord.Phase.RECOVERING, sink.getSnapshotLease().getPhase());
+            checkpointAndTrim(new CompactorLeaderServices(rt, "test", metadata.getCorfuStore(), mock(LivenessValidator.class)));
+            await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.READY);
+            assertEquals(SnapshotSyncLeaseRecord.Outcome.ABORTED, sink.getSnapshotLease().getOutcome());
+            assertEquals(1, start(sink).getGeneration());
+        } finally { sink.shutdown(); }
+    }
+
+    /** The common case: the sink is upgraded while it is in incremental sync. Nothing is restarted. */
+    @Test
+    public void upgradeOfAnIdleSinkResumesIncrementalSyncWithoutASnapshot() throws Exception {
+        legacySnapshotCompleted();
+        helper.freezeCompaction(); // An operator's freeze: no pre-lease snapshot is pending, so it is not LR's to delete.
+        PersistentCorfuTable<String, String> table = replicatedTable();
+        LogReplicationSinkManager sink = upgradedSink();
+        try {
+            sink.setLeadership(true);
+            await(sink::isIncrementalSyncAdmitted);
+            SnapshotSyncLeaseRecord seeded = sink.getSnapshotLease();
+            assertEquals(SnapshotSyncLeaseRecord.Phase.READY, seeded.getPhase());
+            assertEquals(SnapshotSyncLeaseRecord.Outcome.COMPLETED, seeded.getOutcome());
+            assertEquals(0, seeded.getGeneration());
+            assertEquals(100, seeded.getSourceSnapshot());
+            assertFalse(seeded.getProtectionHeld());
+            assertTrue("an operator freeze is left to the compactor's own patience", helper.isCheckpointFrozen());
+
+            sink.receive(delta(seeded, 101));
+            assertEquals("delta-101", table.get("key"));
+            assertEquals(101, metadata.getLastProcessedLogEntryBatchTimestamp());
+
+            // Leadership moves away and back: positions are re-read, nothing is replayed or lost.
+            sink.setLeadership(false);
+            assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(delta(seeded, 102)));
+            sink.setLeadership(true);
+            await(sink::isIncrementalSyncAdmitted);
+            sink.receive(delta(seeded, 102));
+            assertEquals("delta-102", table.get("key"));
+        } finally { sink.shutdown(); }
+    }
+
+    // ------------------------------------------------------------ the freeze token
+
+    /**
+     * The token is no longer written by log replication, but operators, tools and plugins can still
+     * write it. Its patience is what bounds it, and it used to restart with every repeated freeze:
+     * a caller that kept asking kept checkpointing frozen for as long as it kept asking.
+     */
+    @Test
+    public void aRepeatedFreezeDoesNotRestartThePatienceThatBoundsIt() throws Exception {
+        helper.freezeCompaction();
+        long since = freezeToken().getSequence();
+        TimeUnit.MILLISECONDS.sleep(20);
+        helper.freezeCompaction();
+        assertEquals(since, freezeToken().getSequence());
+        assertTrue(helper.isCheckpointFrozen());
+
+        // Extending a freeze on purpose stays possible, and explicit.
+        helper.unfreezeCompaction();
+        assertFalse(helper.isCheckpointFrozen());
+        helper.freezeCompaction();
+        assertTrue(freezeToken().getSequence() > since);
+    }
+
+    private RpcCommon.TokenMsg freezeToken() {
+        try (TxnContext txn = metadata.getTxnContext()) {
+            RpcCommon.TokenMsg token = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                    CompactorMetadataTables.FREEZE_TOKEN).getPayload();
+            txn.commit();
+            return token;
+        }
+    }
+
+    // ------------------------------------------------------------ the lease and the compactor
+
+    /**
+     * The lease is one record shared with the compactor, whose cycle start writes it. If the
+     * incremental writer rewrote it for every replicated transaction, a cycle could practically
+     * never start on a sink under steady replication, and the log would grow without bound on the
+     * normal path.
+     */
+    @Test
+    public void aCycleStartIsNotAbortedByIncrementalReplication() throws Exception {
+        legacySnapshotCompleted();
+        PersistentCorfuTable<String, String> table = replicatedTable();
+        SnapshotSyncLeaseRecord idle = leases.read();
+        LogEntryWriter incremental = new LogEntryWriter(config, metadata);
+        incremental.setLeaseContext(idle);
+        org.corfudb.runtime.collections.CorfuStore racing = spy(metadata.getCorfuStore());
+        doAnswer(call -> {
+            // A replicated transaction commits while the cycle start is in flight.
+            assertTrue(CompletableFuture.supplyAsync(() -> incremental.apply(delta(idle, 101))).get(10, TimeUnit.SECONDS));
+            return metadata.getCorfuStore().listTables(null);
+        }).when(racing).listTables(null);
+        CompactorLeaderServices leader = new CompactorLeaderServices(rt, "test", racing, mock(LivenessValidator.class));
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, leader.initCompactionCycle());
+        assertEquals("delta-101", table.get("key"));
+        assertEquals(idle, leases.read());
+    }
+
+    /** The other half of that design: admission still fences an incremental write that is in flight. */
+    @Test
+    public void snapshotAdmissionFencesAnIncrementalTransactionThatAlreadyValidatedTheLease() throws Exception {
+        legacySnapshotCompleted();
+        PersistentCorfuTable<String, String> table = replicatedTable();
+        SnapshotSyncLeaseRecord idle = leases.read();
+        LogReplicationMetadataManager observed = spy(metadata);
+        java.util.concurrent.atomic.AtomicBoolean raced = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(call -> {
+            call.callRealMethod();
+            if (raced.compareAndSet(false, true)) {
+                CompletableFuture.runAsync(this::reserve).get(10, TimeUnit.SECONDS);
+            }
+            return null;
+        }).when(observed).touch(any(TxnContext.class), any());
+        LogEntryWriter incremental = new LogEntryWriter(config, observed);
+        incremental.setLeaseContext(idle);
+
+        // Two replicated transactions in one message. The first one is not the last of its batch,
+        // so the only key it shares with the admission transaction is TOPOLOGY_CONFIG_ID.
+        java.util.List<OpaqueEntry> batch = new java.util.ArrayList<>();
+        for (long version : new long[]{101, 102}) {
+            batch.add(new OpaqueEntry(version, Map.of(stream, Collections.singletonList(
+                    new SMREntry("put", new Object[] {"key", "delta-" + version}, Serializers.PRIMITIVE)))));
+        }
+        LogReplicationEntryMsg message = CorfuProtocolLogReplication.getLrEntryMsg(ByteString.copyFrom(
+                CorfuProtocolLogReplication.generatePayload(batch)), delta(idle, 102).getMetadata().toBuilder()
+                .setPreviousTimestamp(100).build());
+
+        assertFalse(incremental.apply(message));
+        assertTrue(raced.get());
+        assertNull(table.get("key"));
+        assertEquals(SnapshotSyncLeaseRecord.Phase.PREPARING, leases.read().getPhase());
+    }
+
+    /**
+     * The backstop that does not depend on the sink. A sink that is hung, or has no leader, never
+     * releases its protection; the checkpointer stops honoring it once it is past its deadline plus
+     * the grace, and nothing of that attempt can commit any more.
+     */
+    @Test
+    public void protectionThatOutlivedItsDeadlineAndGraceNoLongerFreezesTheCheckpointer() throws Exception {
+        long grace = SnapshotSyncLeaseStore.expiryGraceMs();
+        long now = System.currentTimeMillis();
+        reserve();
+        SnapshotSyncLeaseRecord captured = leases.updateOwned("owner", (txn, current) -> SnapshotSyncLease.prepared(current));
+        CompactorLeaderServices leader = new CompactorLeaderServices(rt, "test", metadata.getCorfuStore(), mock(LivenessValidator.class));
+
+        // Past the deadline but inside the grace: the sink is still expected to release it.
+        SnapshotSyncLeaseRecord late = captured.toBuilder().setAdmittedAtMs(now - grace).setDeadlineMs(now - 1000).build();
+        leases.update((txn, current) -> late);
+        assertTrue(helper.isCheckpointFrozen());
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.FAIL, leader.initCompactionCycle());
+
+        // Past the grace as well.
+        SnapshotSyncLeaseRecord expired = late.toBuilder().setAdmittedAtMs(now - 2 * grace - 2000).setDeadlineMs(now - grace - 1000).build();
+        leases.update((txn, current) -> expired);
+        assertFalse(helper.isCheckpointFrozen());
+        assertThrows(SnapshotSyncLease.LeaseRejectedException.class, () -> writer(expired, metadata).apply(data(expired)));
+        long before = rt.getAddressSpaceView().getTrimMark().getSequence();
+        checkpointAndTrim(leader);
+        assertTrue(rt.getAddressSpaceView().getTrimMark().getSequence() > before);
+        assertTrue("the record itself is the sink's to settle", leases.read().getProtectionHeld());
     }
 
     private void cycle(CheckpointingStatus.StatusType status, long cutoff) {
@@ -254,10 +565,13 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         assertEquals(0, transferred.getTransferredSequence());
         assertTrue(transferred.getFirstShadowAddress() > transferred.getProtectedAfter());
         assertEquals("old", table.get("obsolete"));
+        metadata.setDataConsistentOnStandby(true);
         SnapshotSyncLeaseRecord applying = leases.updateOwned("owner", (txn, current) -> {
             metadata.transferSnapshot(txn, 100);
             return SnapshotSyncLease.transferred(current);
         });
+        // Apply is about to rewrite the regular streams: from here on readers must not trust them.
+        assertFalse(metadata.getDataConsistentOnStandby().get("sink").getDataConsistent());
         writer.setLeaseContext(applying);
         writer.clearLocalStreams();
         writer.startSnapshotSyncApply();
@@ -343,6 +657,37 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         }
         assertThrows(SnapshotSyncLease.LeaseRejectedException.class, () -> current.apply(data(captured)));
         assertEquals(-1, leases.read().getTransferredSequence());
+    }
+
+    /**
+     * The sequencer refuses a transaction (a conflict, or a sequencer that failed over) before
+     * anything reaches the log. The batch is certainly not written and the writer has not moved on,
+     * so the same message can simply be processed again: no reason to abandon the transfer.
+     */
+    @Test
+    public void aShadowWriteTheSequencerRefusedLeavesNothingBehindAndCanBeRepeated() {
+        SnapshotSyncLeaseRecord captured = transferring();
+        LogReplicationMetadataManager observed = spy(metadata);
+        java.util.concurrent.atomic.AtomicBoolean raced = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(call -> {
+            call.callRealMethod();
+            if (raced.compareAndSet(false, true)) {
+                // Something else commits a write of the lease while this transaction is in flight.
+                CompletableFuture.runAsync(() -> leases.update((txn, current) -> SnapshotSyncLease.next(current).build()))
+                        .get(10, TimeUnit.SECONDS);
+            }
+            return null;
+        }).when(observed).appendUpdate(any(TxnContext.class),
+                eq(LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER), anyLong());
+        StreamsSnapshotWriter writer = writer(captured, observed);
+
+        assertThrows(StreamsSnapshotWriter.RetryableWriteException.class, () -> writer.apply(data(captured)));
+        assertEquals(-1, leases.read().getTransferredSequence());
+        assertEquals(-1, leases.read().getFirstShadowAddress());
+
+        writer.apply(data(captured));
+        assertEquals(0, leases.read().getTransferredSequence());
+        assertTrue(leases.read().getFirstShadowAddress() > captured.getProtectedAfter());
     }
 
     @Test
@@ -461,14 +806,24 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
     }
 
     @Test
-    public void unknownSchemaAndOldOwnerFailClosed() {
+    public void aLaterSchemaIsRefusedByTheLeaseDriverButStillHonoredByTheCheckpointer() {
         assertThrows(SnapshotSyncLease.LeaseRejectedException.class, () -> leases.updateOwned("old-owner", (txn, state) -> state));
         SnapshotSyncLeaseRecord future = leases.read().toBuilder().setSchemaVersion(2).build();
         try (TxnContext txn = metadata.getTxnContext()) {
             SnapshotSyncLeaseStore.write(txn, future);
             txn.commit();
         }
+        // Whoever drives or follows the lease refuses a record of a later schema...
         assertThrows(SnapshotSyncLease.LeaseRejectedException.class, leases::read);
-        assertThrows(SnapshotSyncLease.LeaseRejectedException.class, helper::isCheckpointFrozen);
+        // ...but the checkpointer keeps working from the fields every schema keeps. Refusing the
+        // record here would stop compaction altogether, silently, until it is upgraded too.
+        assertFalse(helper.isCheckpointFrozen());
+        SnapshotSyncLeaseRecord held = future.toBuilder().setProtectionHeld(true).setProtectedAfter(5)
+                .setDeadlineMs(System.currentTimeMillis() + 60000).build();
+        try (TxnContext txn = metadata.getTxnContext()) {
+            SnapshotSyncLeaseStore.write(txn, held);
+            txn.commit();
+        }
+        assertTrue(helper.isCheckpointFrozen());
     }
 }
