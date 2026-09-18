@@ -80,10 +80,11 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     static final long TRIM_WAIT_MS = TimeUnit.MINUTES.toMillis(2);
 
     /**
-     * What a source is told to wait when its START has been reserved and is being prepared, which
-     * takes a moment, not the seconds any other refusal takes to clear.
+     * What a source is told to wait when what stands in the way of its START only takes a moment: the
+     * START has been reserved and is being prepared, or a step of this driver is running (installing
+     * the incremental writer, a release). Any other refusal takes seconds or more to clear.
      */
-    public static final long PREPARING_RETRY_AFTER_MS = 200;
+    public static final long MOMENTARY_RETRY_AFTER_MS = 200;
 
     static final long RECONCILE_PERIOD_MS = 1000;
 
@@ -343,7 +344,10 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             throw rejected(LogReplicationBusyResponseMsg.Reason.STALE_ATTEMPT);
         }
         if (busy.get() || receiving.get()) {
-            throw rejected(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED);
+            // A source only proposes to a lease it has seen READY, so what is running is a short step
+            // (installing the incremental writer after a takeover or a completion, a release), not
+            // an apply. Should it be one after all, the source's next status poll stops the proposals.
+            throw rejected(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, MOMENTARY_RETRY_AFTER_MS);
         }
         try {
             SnapshotSyncLeaseRecord reserved = store.updateOwned(owner, (txn, state) -> {
@@ -406,8 +410,10 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     }
 
     private void abandonOwned(String reason) {
+        AtomicBoolean abandonedNow = new AtomicBoolean();
         publish(store.updateOwned(owner, (txn, state) -> {
             SnapshotSyncLeaseRecord abandoned = SnapshotSyncLease.abandon(state, clock.getAsLong(), reason);
+            abandonedNow.set(abandoned != state);
             if (abandoned != state) {
                 log.warn("Abandoning snapshot attempt generation={} in phase {}: {}",
                         state.getGeneration(), state.getPhase(), reason);
@@ -415,8 +421,12 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             }
             return abandoned;
         }));
-        interruptWorker();
-        kick(); // Release is due.
+        if (abandonedNow.get()) {
+            // Only then is the worker busy with the attempt. Otherwise (a cancellation that comes
+            // after the attempt ended, for instance) it may be releasing it, which must go on.
+            interruptWorker();
+            kick(); // Release is due.
+        }
     }
 
     public LogReplicationBusyException rejected(LogReplicationBusyResponseMsg.Reason reason) {

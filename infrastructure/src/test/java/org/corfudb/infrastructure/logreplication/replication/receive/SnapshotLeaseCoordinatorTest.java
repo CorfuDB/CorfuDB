@@ -544,6 +544,35 @@ class SnapshotLeaseCoordinatorTest {
      * the period alone, each of them would add up to a second to every snapshot sync, and to the
      * time the checkpointer stays frozen.
      */
+    /** A step of the driver is running: the source is told to come back in a moment, not in seconds. */
+    @Test
+    void aProposalThatMeetsARunningStepIsToldToComeBackSoon() throws Exception {
+        ExecutorService effects = Executors.newSingleThreadExecutor();
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            create(effects, 0, 0);
+            coordinator.start(proposal());
+            doAnswer(invocation -> {
+                running.countDown();
+                release.await(10, TimeUnit.SECONDS);
+                return null;
+            }).when(worker).prepare(any());
+            coordinator.tick(); // Preparation starts, and holds the worker.
+            assertTrue(running.await(10, TimeUnit.SECONDS));
+            attemptLsb++;       // Another proposal than the one being prepared.
+
+            LogReplicationBusyException busy = assertThrows(LogReplicationBusyException.class,
+                    () -> coordinator.start(proposal()));
+            assertEquals(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, busy.getResponse().getReason());
+            assertEquals(SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS, busy.getResponse().getRetryAfterMs());
+        } finally {
+            release.countDown();
+            drain(effects);
+            effects.shutdownNow();
+        }
+    }
+
     @Test
     void aReservationAsksForItsPreparationAtOnce() {
         long before = coordinator.requestedReconciliations.get();
@@ -582,6 +611,12 @@ class SnapshotLeaseCoordinatorTest {
         coordinator.abandon("test");
         assertEquals(Phase.ABORTING, coordinator.status().getPhase());
         assertEquals(before + 1, coordinator.requestedReconciliations.get());
+
+        // A cancellation that comes after the attempt ended abandons nothing: nothing is due, and
+        // the worker, which may be releasing that attempt, is left alone.
+        coordinator.abandon("again");
+        assertEquals(before + 1, coordinator.requestedReconciliations.get());
+        assertEquals("test", coordinator.status().getFailure());
     }
 
     /**
@@ -629,11 +664,11 @@ class SnapshotLeaseCoordinatorTest {
     /** What a source is told when its START is reserved: come back soon, preparation has started. */
     @Test
     void aRefusalCanCarryItsOwnRetryHint() {
-        assertEquals(SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS, coordinator.rejected(
-                LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS)
+        assertEquals(SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS, coordinator.rejected(
+                LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS)
                 .getResponse().getRetryAfterMs());
         assertTrue(coordinator.rejected(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED).getResponse().getRetryAfterMs()
-                > SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS);
+                > SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS);
     }
 
     // ---------------------------------------------------------------- budget and inactivity

@@ -443,7 +443,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             if (state.getPhase() != Phase.TRANSFERRING && state.getPhase() != Phase.APPLYING) {
                 // Reserved, but preparation has not finished. The source retries the same proposal,
                 // and soon: preparation has already been started and only takes a moment.
-                throw lifecycle.rejected(Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.PREPARING_RETRY_AFTER_MS);
+                throw lifecycle.rejected(Reason.ADMISSION_CLOSED, SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS);
             }
             return getLrEntryAckMsg(entry.toBuilder().setEntryType(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)
                     .setAttemptGeneration(state.getGeneration()).build());

@@ -315,10 +315,19 @@ public class SnapshotSender {
         return false;
     }
 
-    /** Until the refused proposal may be sent again, and never longer than until the next status poll. */
-    private long admissionWaitMs() {
-        long untilRetryMs = TimeUnit.NANOSECONDS.toMillis(admissionNotBeforeNanos - nanoTime.getAsLong());
-        return untilRetryMs <= 0 ? STATUS_POLL_MS : Math.max(MIN_WAIT_MS, Math.min(STATUS_POLL_MS, untilRetryMs));
+    /**
+     * Until the refused proposal may be sent again, and never longer than until the next status poll.
+     * Rounded up to the timer's milliseconds: a step that came a fraction of a millisecond early
+     * would find nothing to do, and nothing pending either, and wait a whole poll period.
+     */
+    @VisibleForTesting
+    long admissionWaitMs() {
+        long untilRetryNanos = admissionNotBeforeNanos - nanoTime.getAsLong();
+        if (untilRetryNanos <= 0) {
+            return STATUS_POLL_MS;
+        }
+        long roundedUpMs = TimeUnit.NANOSECONDS.toMillis(untilRetryNanos + TimeUnit.MILLISECONDS.toNanos(1) - 1);
+        return Math.max(MIN_WAIT_MS, Math.min(STATUS_POLL_MS, roundedUpMs));
     }
 
     /** How long the sink asked to be left alone, within what this sender would wait anyway. */

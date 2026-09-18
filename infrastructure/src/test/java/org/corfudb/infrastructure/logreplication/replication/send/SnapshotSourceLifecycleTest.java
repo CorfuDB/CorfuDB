@@ -49,6 +49,9 @@ class SnapshotSourceLifecycleTest {
     private final List<LogReplicationEntryMsg> sent = new ArrayList<>();
     private CompletableFuture<LogReplicationEntryMsg> admission;
     private final AtomicLong nanoTime = new AtomicLong(1);
+    // Stubbed once, in setup. The sender's continuations call this mock from another thread, and a
+    // mock must not be stubbed again while it is being called.
+    private final AtomicLong topology = new AtomicLong(0);
 
     @BeforeEach
     void setup() {
@@ -58,6 +61,7 @@ class SnapshotSourceLifecycleTest {
         when(addressSpace.getLogTail()).thenReturn(50L);
         fsm = mock(LogReplicationFSM.class);
         when(fsm.getAckReader()).thenReturn(mock(LogReplicationAckReader.class));
+        when(fsm.getTopologyConfigId()).thenAnswer(invocation -> topology.get());
         reader = mock(SnapshotReader.class, CALLS_REAL_METHODS);
         transport = mock(DataSender.class);
         when(transport.sendMetadataRequest()).thenAnswer(invocation -> CompletableFuture.completedFuture(
@@ -569,7 +573,7 @@ class SnapshotSourceLifecycleTest {
     void aTopologyChangeUnderAnAdmittedAttemptCancelsItInsteadOfResendingForever() {
         accept();
         int count = sent.size();
-        when(fsm.getTopologyConfigId()).thenReturn(7L);
+        topology.set(7);
 
         drive();
 
@@ -587,7 +591,7 @@ class SnapshotSourceLifecycleTest {
         admission.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.getDefaultInstance()));
         admission = new CompletableFuture<>();
         // The lease is READY with the same admission epoch: only the topology moved on.
-        when(fsm.getTopologyConfigId()).thenReturn(7L);
+        topology.set(7);
 
         drive();
 
@@ -661,6 +665,32 @@ class SnapshotSourceLifecycleTest {
         assertEquals(2, sent.size());
         assertEquals(proposal, sent.get(1), "the identical proposal");
         verify(reader, never()).read(any());
+    }
+
+    /**
+     * The wait is handed to a timer in milliseconds. Cut off instead of rounded up, it would end just
+     * before the START may go out: that step would find nothing to do, see less than a millisecond
+     * left, take that for nothing pending, and come back a whole poll period later.
+     */
+    @Test
+    void theWaitForARefusedStartNeverEndsBeforeTheStartMayGoOut() {
+        drive();
+        admission.completeExceptionally(new LogReplicationBusyException(LogReplicationBusyResponseMsg.newBuilder()
+                .setReason(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED).setRetryAfterMs(200).build()));
+        admission = new CompletableFuture<>();
+        drive(); // Takes the refusal.
+        assertEquals(200, source.admissionWaitMs());
+
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(100) + 1);
+        assertEquals(100, source.admissionWaitMs(), "99.999999 ms are left: not 99");
+
+        nanoTime.addAndGet(TimeUnit.MILLISECONDS.toNanos(100) - 300_001);
+        assertEquals(50, source.admissionWaitMs(), "0.3 ms are left: the shortest wait, not a poll period");
+
+        nanoTime.addAndGet(300_000);
+        assertEquals(2000, source.admissionWaitMs(), "nothing is pending any more");
+        drive();
+        assertEquals(2, sent.size());
     }
 
     @Test
@@ -776,6 +806,7 @@ class SnapshotSourceLifecycleTest {
     void aCancellationTheSinkNeverGotIsRepeatedByTheNextRun() {
         accept();
         source.stop();
+        admission = new CompletableFuture<>(); // The next proposal is not answered by the old acceptance.
         int count = sent.size();
         LogReplicationEntryMsg cancel = sent.get(count - 1);
         assertEquals(LogReplicationEntryType.SNAPSHOT_CANCEL, cancel.getMetadata().getEntryType());
