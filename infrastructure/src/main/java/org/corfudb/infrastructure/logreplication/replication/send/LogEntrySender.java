@@ -9,7 +9,12 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
+import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.SnapshotSyncLease;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
@@ -93,6 +98,15 @@ public class LogEntrySender {
             return;
         }
 
+        if (sinkNeedsSnapshot(dataSenderBufferManager.takeLastBusyReply())) {
+            // Resending could never succeed: the sink only takes log entries on top of a completed
+            // snapshot, and its lease says it does not hold one (an attempt was abandoned, or a
+            // snapshot a pre-lease node left unfinished was superseded). Only a snapshot sync helps.
+            log.warn("The sink holds no completed snapshot to apply log entries to; requesting a snapshot sync");
+            cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+            return;
+        }
+
         while (taskActive && !dataSenderBufferManager.getPendingMessages().isFull()) {
             LogReplicationEntryMsg message;
 
@@ -134,6 +148,20 @@ public class LogEntrySender {
 
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
                 new LogReplicationEventMetadata(logEntrySyncEventId)));
+    }
+
+    /**
+     * A sink that is merely not ready (its leader is still acquiring the lease, or it is overloaded)
+     * is retried. This is only about a sink that is ready and says its last snapshot is not complete.
+     */
+    private static boolean sinkNeedsSnapshot(LogReplicationBusyResponseMsg busy) {
+        if (busy == null || busy.getReason() != LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED
+                || !busy.hasSnapshotLease()) {
+            return false;
+        }
+        SnapshotSyncLeaseRecord lease = busy.getSnapshotLease();
+        return lease.getSchemaVersion() == SnapshotSyncLease.VERSION && lease.getPhase() != Phase.NOT_READY
+                && lease.getOutcome() != Outcome.COMPLETED;
     }
 
     /**

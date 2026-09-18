@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationHandler;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipLossResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
@@ -45,6 +46,83 @@ public class LogReplicationClientTest {
     LogReplicationHandler lrClientHandler;
     ClientResponseHandler responseHandler;
     Map<PayloadCase, Handler> handlerMap;
+
+    @Test
+    public void metadataPollingAdvertisesSnapshotLifecycleSupport() {
+        org.corfudb.runtime.clients.IClientRouter router = mock(org.corfudb.runtime.clients.IClientRouter.class);
+        new LogReplicationClient(router, 0L).sendMetadataRequest();
+        verify(router).sendRequestAndGetCompletable(org.mockito.ArgumentMatchers.argThat(payload ->
+                payload.getLrMetadataRequest().getSupportsSnapshotLifecycle()),
+                org.mockito.ArgumentMatchers.eq(LogReplicationClientRouter.REMOTE_LEADER));
+    }
+
+    private IClientChannelAdapter timedTransport() throws Exception {
+        doReturn(java.util.UUID.randomUUID().toString()).when(lrRuntimeParameters).getLocalClusterId();
+        doReturn(java.util.UUID.randomUUID()).when(lrRuntimeParameters).getClientId();
+        doReturn(java.time.Duration.ofMillis(10)).when(lrRuntimeParameters).getConnectionTimeout();
+        IClientChannelAdapter adapter =
+                mock(IClientChannelAdapter.class);
+        lrClient = spy(new LogReplicationClientRouter(lrRuntimeParameters, lrFsm, adapter));
+        lrClient.addClient(lrClientHandler);
+        lrClient.setTimeoutResponse(10);
+        return adapter;
+    }
+
+    @Test
+    public void realRouterTimeoutCompletesExceptionallyAndRemovesRequest() throws Exception {
+        timedTransport();
+        java.util.concurrent.CompletableFuture<Object> reply = lrClient.sendRequestAndGetCompletable(
+                CorfuMessage.RequestPayloadMsg.newBuilder().setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build(), "sink");
+        Assertions.assertThatThrownBy(() -> reply.get(2, java.util.concurrent.TimeUnit.SECONDS))
+                .hasCauseInstanceOf(java.util.concurrent.TimeoutException.class);
+        long limit = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+        while (!lrClient.outstandingRequests.isEmpty() && System.nanoTime() < limit) { Thread.yield(); }
+        Assertions.assertThat(lrClient.outstandingRequests).isEmpty();
+    }
+
+    @Test
+    public void networkFailureAndLeaderConnectionTimeoutDoNotLeakOutstandingRequests() throws Exception {
+        var adapter = timedTransport();
+        org.corfudb.runtime.exceptions.NetworkException disconnected = new org.corfudb.runtime.exceptions.NetworkException("offline", "sink");
+        org.mockito.Mockito.doThrow(disconnected).when(adapter).send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        var payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build();
+        Assertions.assertThatThrownBy(() -> lrClient.sendRequestAndGetCompletable(payload, "sink").join())
+                .hasCause(disconnected);
+        Assertions.assertThat(lrClient.outstandingRequests).isEmpty();
+        Assertions.assertThatThrownBy(() -> lrClient.sendRequestAndGetCompletable(payload, LogReplicationClientRouter.REMOTE_LEADER).join())
+                .hasCauseInstanceOf(java.util.concurrent.TimeoutException.class);
+        Assertions.assertThat(lrClient.outstandingRequests).isEmpty();
+    }
+
+    @Test
+    public void interruptedConnectionWaitPreservesInterruptAndRemovesOutstandingRequest() throws Exception {
+        timedTransport();
+        Thread.currentThread().interrupt();
+        try {
+            var payload = CorfuMessage.RequestPayloadMsg.newBuilder().setLrEntry(LogReplicationEntryMsg.getDefaultInstance()).build();
+            Assertions.assertThatThrownBy(() -> lrClient.sendRequestAndGetCompletable(payload, LogReplicationClientRouter.REMOTE_LEADER).join())
+                    .hasCauseInstanceOf(InterruptedException.class);
+            Assertions.assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            Assertions.assertThat(lrClient.outstandingRequests).isEmpty();
+        } finally { Thread.interrupted(); }
+    }
+
+    @Test
+    public void busyCompletesOnlyItsOutstandingFutureExceptionally() {
+        java.util.concurrent.CompletableFuture<Object> rejected = new java.util.concurrent.CompletableFuture<>();
+        java.util.concurrent.CompletableFuture<Object> other = new java.util.concurrent.CompletableFuture<>();
+        lrClient.outstandingRequests.put(10L, rejected);
+        lrClient.outstandingRequests.put(11L, other);
+        org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg busy =
+                org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.newBuilder()
+                        .setReason(org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED)
+                        .setRetryAfterMs(2000).build();
+        lrClient.receive(ResponseMsg.newBuilder().setHeader(CorfuMessage.HeaderMsg.newBuilder().setRequestId(10))
+                .setPayload(CorfuMessage.ResponsePayloadMsg.newBuilder().setLrBusyResponse(busy)).build());
+        Assertions.assertThatThrownBy(rejected::join).hasCauseInstanceOf(org.corfudb.runtime.exceptions.LogReplicationBusyException.class);
+        Assertions.assertThat(other.isDone()).isFalse();
+        Assertions.assertThat(lrClient.outstandingRequests).containsOnlyKeys(11L);
+    }
 
     @Before
     public void setup() {

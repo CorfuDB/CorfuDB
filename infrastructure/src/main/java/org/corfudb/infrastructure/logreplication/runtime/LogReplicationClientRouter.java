@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -134,12 +135,20 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
                                       CorfuLogReplicationRuntime runtimeFSM) {
+        this(parameters, runtimeFSM, null);
+    }
+
+    /** Construct with a supplied transport so router tests exercise real request handling without reflection. */
+    @VisibleForTesting
+    public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
+                                      CorfuLogReplicationRuntime runtimeFSM, IClientChannelAdapter channelAdapter) {
         this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.timeoutConnect = parameters.getConnectionTimeout().toMillis();
         this.runtimeFSM = runtimeFSM;
+        this.channelAdapter = channelAdapter;
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
@@ -212,8 +221,12 @@ public class LogReplicationClientRouter implements IClientRouter {
                         remoteLeaderConnectionFuture
                                 .get(getParameters().getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
-                        throw new UnrecoverableCorfuInterruptedError(e);
+                        outstandingRequests.remove(requestId);
+                        Thread.currentThread().interrupt();
+                        cf.completeExceptionally(e);
+                        return cf;
                     } catch (TimeoutException | ExecutionException te) {
+                        outstandingRequests.remove(requestId);
                         cf.completeExceptionally(te);
                         return cf;
                     }
@@ -237,7 +250,9 @@ public class LogReplicationClientRouter implements IClientRouter {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
                 runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                         nodeId));
-                throw ne;
+                outstandingRequests.remove(requestId);
+                cf.completeExceptionally(ne);
+                return cf;
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",

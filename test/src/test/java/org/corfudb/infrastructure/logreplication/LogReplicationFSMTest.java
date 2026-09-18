@@ -30,6 +30,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfi
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
@@ -65,6 +66,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,7 +105,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     // can be delivered with a delay, validating based on non-terminal states can cause intermittent failures(FSM may
     // have moved to the next state by the time the update callback is received).  So tests can set this flag to
     // avoid observing such non-terminal transitions.
-    private boolean observeTransitions = true;
+    private volatile boolean observeTransitions = true;
 
     // Flag indicating if we should observer a snapshot sync, this is to interrupt it at any given stage
     private boolean observeSnapshotSync = false;
@@ -126,7 +128,10 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
     @After
     public void stopAckReader() {
-        ackReader.shutdown();
+        observeTransitions = false;
+        if (transitionObservable != null) { transitionObservable.deleteObserver(this); }
+        if (fsm != null) { fsm.shutdown(); }
+        if (ackReader != null) { ackReader.shutdown(); }
     }
 
     /**
@@ -146,6 +151,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void testLogReplicationFSMTransitions() throws Exception {
 
         initLogReplicationFSM(ReaderImplementation.STREAMS, false);
+        // This test supplies APPLY_COMPLETE explicitly. A fabricated completed metadata response
+        // must not race those manual state assertions on the asynchronous verification worker.
+        ((TestDataSender) dataSender).setWaitInSnapshotApply(true);
 
         // Initial state: Initialized
         LogReplicationState initState = fsm.getState();
@@ -161,6 +169,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Transition #3: Snapshot Sync Request
         UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
+
+        // The transfer this test declares complete below is the one the snapshot sender gets admitted
+        // for. The state that then follows the apply is handed that attempt, so it must exist first:
+        // handed anything else, it would rightly conclude that the sink runs another attempt and cancel.
+        SnapshotSender snapshotSender = ((InSnapshotSyncState) fsm.getStates()
+                .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender();
+        for (int i = 0; snapshotSender.getWireAttemptGeneration() == 0; i++) {
+            assertThat(i).as("the snapshot sync was never admitted").isLessThan(PARAMETERS.NUM_ITERATIONS_LARGE);
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
 
         // Transition #4: Snapshot Sync Continue
         transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSyncId, true);
@@ -337,9 +355,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #1: SNAPSHOT Sync Start
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
-        // Await for update to status table from entry of InSnapshotSyncState, an update stemming
-        // from the SYNC_CANCEL request (since we are unable to send the snapshot data in a UT),
-        // and an additional update from the TsPollingTask
+        // Await for update to status table from entry of InSnapshotSyncState, and further updates
+        // from the TsPollingTask. The data sender of this test never answers a status poll, so the
+        // snapshot sender keeps polling and nothing is cancelled or sent.
         statusTableLatch.await();
         corfuStore.unsubscribeListener(streamListener);
 
@@ -1069,7 +1087,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Wait until the expected state
         while (waitUntilExpected) {
             if (fsm.getState().getType() == expectedState) {
-                return event.getEventId();
+                return event.getMetadata().getSyncId();
             } else {
                 transitionAvailable.acquire();
             }
@@ -1111,8 +1129,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             return;
         }
         if (obs.equals(transitionObservable)) {
-            while (!transitionAvailable.hasQueuedThreads()) {
+            while (observeTransitions && !transitionAvailable.hasQueuedThreads()) {
                 // Wait until some thread is waiting to acquire...
+                Thread.onSpinWait();
             }
             transitionAvailable.release();
             // log.debug("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());

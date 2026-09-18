@@ -211,6 +211,9 @@ public class CompactorService implements ManagementService {
                 return;
             }
             if (isLeader) {
+                // A freeze prevents a cycle from starting, so it is watched on every pass, and before
+                // the trigger policy below, which fails when the freeze state cannot be evaluated.
+                compactorLeaderServices.checkForProlongedFreeze(System.currentTimeMillis());
                 if (managerStatus != null && managerStatus.getStatus() == StatusType.STARTED) {
                     if (getDistributedCheckpointerHelper().isCompactionDisabled()) {
                         log.info("Compaction has been disabled. Force finish compaction cycle as it already started");
@@ -224,6 +227,9 @@ public class CompactorService implements ManagementService {
                     compactionTriggerPolicy.markCompactionCycleStart();
                     compactorLeaderServices.initCompactionCycle();
                 }
+            } else {
+                // Whatever this node reported while it led is the new leader's to report now.
+                compactorLeaderServices.resolveLeaderIssues();
             }
             if (managerStatus != null) {
                 if (managerStatus.getStatus() == StatusType.FAILED || managerStatus.getStatus() == StatusType.COMPLETED) {

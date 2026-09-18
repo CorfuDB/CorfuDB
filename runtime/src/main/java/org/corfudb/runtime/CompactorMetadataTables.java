@@ -38,6 +38,7 @@ public class CompactorMetadataTables {
     public static final int TABLE_UPDATE_RETRY_SLEEP_SECONDS = 2;
 
     public CompactorMetadataTables(CorfuStore corfuStore) throws Exception {
+        SnapshotSyncLeaseStore.open(corfuStore);
         for (int retry = 0; ; retry++) {
             try {
                 this.compactionManagerTable = corfuStore.openTable(CORFU_SYSTEM_NAMESPACE,
