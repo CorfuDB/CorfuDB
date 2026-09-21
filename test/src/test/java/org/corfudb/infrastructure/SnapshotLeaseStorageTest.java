@@ -217,6 +217,34 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         } finally { sink.shutdown(); }
     }
 
+    /**
+     * A source cancels what it has not seen finished. When its end marker made it to the sink and only
+     * the acknowledgement did not, the transfer is complete and durable there, and the apply does not
+     * need the source any more: the cancellation is refused, and the source's next run follows the
+     * apply instead of transferring everything again.
+     */
+    @Test
+    public void aCancellationThatCrossesTheEndMarkerDoesNotStopTheApply() throws Exception {
+        LogReplicationSinkManager sink = ownedSink();
+        try {
+            SnapshotSyncLeaseRecord captured = start(sink);
+            sink.receive(data(captured));
+            LogReplicationEntryMsg end = data(captured).toBuilder().clearData().setMetadata(data(captured).getMetadata().toBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_END).setSnapshotSyncSeqNum(1)).build();
+            assertEquals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE, sink.receive(end).getMetadata().getEntryType());
+
+            LogReplicationEntryMsg cancel = data(captured).toBuilder().clearData().setMetadata(data(captured).getMetadata().toBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)).build();
+            org.corfudb.runtime.exceptions.LogReplicationBusyException refused = assertThrows(
+                    org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(cancel));
+            assertEquals(LogReplicationBusyResponseMsg.Reason.STALE_ATTEMPT, refused.getResponse().getReason());
+
+            await(() -> sink.getSnapshotLease().getOutcome() == SnapshotSyncLeaseRecord.Outcome.COMPLETED);
+            assertEquals(captured.getGeneration(), sink.getSnapshotLease().getGeneration());
+            assertEquals(0, sink.getSnapshotLease().getConsecutiveAborts());
+        } finally { sink.shutdown(); }
+    }
+
     @Test
     public void sinkTransferFailureAbandonsAndReleasesWithoutWaitingForSource() throws Exception {
         compactorIsConfigured();

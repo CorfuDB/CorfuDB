@@ -464,7 +464,12 @@ public class LogReplicationSinkManager implements DataReceiver {
             throw lifecycle.rejected(Reason.STALE_ATTEMPT);
         }
         if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_CANCEL) {
-            abandonQuietly("Source cancelled its snapshot cut");
+            if (state.getPhase() == Phase.PREPARING || state.getPhase() == Phase.TRANSFERRING) {
+                abandonQuietly("Source cancelled its snapshot cut");
+            }
+            // Otherwise the transfer is complete and durable here, and the apply does not need the
+            // source any more. A source only cancels what it has not seen finished: the end marker
+            // made it, its acknowledgement did not. The source's next run follows this apply.
             throw lifecycle.rejected(Reason.STALE_ATTEMPT);
         }
         if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_END
@@ -575,7 +580,15 @@ public class LogReplicationSinkManager implements DataReceiver {
             abandonQuietly("Topology changed");
         }
         this.topologyConfigId = topologyConfigId;
-        // The status this sink serves carries the persisted topology, which has just changed.
+        // The status this sink serves is a cache, and it carries the persisted topology, which has
+        // just changed. It is refreshed here and not only by the reconciliation asked for below:
+        // after a role switch the new source negotiates the moment this node answers as the sink's
+        // leader, and would be shown the previous topology, refuse it, and come back a second later.
+        try {
+            logReplicationMetadataManager.refreshSnapshotStatus();
+        } catch (RuntimeException e) {
+            log.warn("Could not refresh the served snapshot status; the next reconciliation does", e);
+        }
         lifecycle.reconcileNow();
     }
 

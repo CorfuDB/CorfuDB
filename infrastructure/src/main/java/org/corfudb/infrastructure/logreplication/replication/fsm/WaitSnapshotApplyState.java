@@ -48,11 +48,12 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private static final int SCHEDULE_APPLY_MONITOR_DELAY = 2000;
 
     /**
-     * The first checks come sooner, each twice as late as the one before, up to the delay above. The
-     * apply of a small snapshot takes a fraction of a second: asked only every two seconds, every
-     * such snapshot sync would take two seconds longer than it does.
+     * The first checks, for about two seconds, come sooner. The apply of a small snapshot takes a
+     * fraction of a second: asked only every two seconds, every such snapshot sync would take two
+     * seconds longer than it does. The sink answers these from a cache, so they cost it nothing.
      */
     private static final int FIRST_APPLY_MONITOR_DELAY = 250;
+    private static final int FIRST_APPLY_MONITOR_CHECKS = 8;
 
     /**
      * Log Replication Finite State Machine Instance
@@ -325,9 +326,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @VisibleForTesting
     long nextVerificationDelayMs() {
-        // 250, 500, 1000, then every 2000.
-        int doublings = Math.min(scheduledVerifications++, 3);
-        return Math.min(SCHEDULE_APPLY_MONITOR_DELAY, (long) FIRST_APPLY_MONITOR_DELAY << doublings);
+        if (scheduledVerifications < FIRST_APPLY_MONITOR_CHECKS) {
+            scheduledVerifications++;
+            return FIRST_APPLY_MONITOR_DELAY;
+        }
+        return SCHEDULE_APPLY_MONITOR_DELAY;
     }
 
     @Override

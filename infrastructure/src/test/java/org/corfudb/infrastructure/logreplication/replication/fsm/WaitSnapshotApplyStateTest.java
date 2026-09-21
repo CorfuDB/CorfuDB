@@ -118,10 +118,11 @@ public class WaitSnapshotApplyStateTest {
     @Test
     public void theFirstChecksComeSoonerAndTheLaterOnesSettle() {
         setup();
-        long[] expected = {250, 500, 1000, 2000, 2000, 2000};
-        for (long delay : expected) {
-            Assert.assertEquals(delay, state.nextVerificationDelayMs());
+        for (int check = 0; check < 8; check++) {
+            Assert.assertEquals(250, state.nextVerificationDelayMs());
         }
+        Assert.assertEquals(2000, state.nextVerificationDelayMs());
+        Assert.assertEquals(2000, state.nextVerificationDelayMs());
         // Entering the state for another attempt starts over.
         state.onExit(inSnapshotSyncState);
         state.onEntry(inSnapshotSyncState);

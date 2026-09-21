@@ -70,7 +70,7 @@ the lease, never by dropping the message: `ADMISSION_CLOSED` (come back later), 
 Neither side waits for a timer when there is an event to act on. The source takes its next step
 when the sink's reply arrives (status, acceptance, a `BUSY` with its retry time, acknowledgements);
 its two second status poll is what notices a lost reply or a change nobody announced (while it
-waits for an apply it asks after 250 ms, 500 ms, 1 s and then every two seconds). The sink
+waits for an apply it asks every 250 ms for the first two seconds, then every two seconds). The sink
 reconciles the lease the moment it reserves an attempt, takes the end marker, abandons, or finishes
 a step; its one second reconciliation is what retries a step that failed and enforces the deadlines.
 A small snapshot sync therefore costs a few round trips plus the apply, not a period per step.
