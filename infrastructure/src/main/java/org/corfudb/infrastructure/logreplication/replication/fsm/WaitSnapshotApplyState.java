@@ -48,6 +48,13 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private static final int SCHEDULE_APPLY_MONITOR_DELAY = 2000;
 
     /**
+     * The first checks come sooner, each twice as late as the one before, up to the delay above. The
+     * apply of a small snapshot takes a fraction of a second: asked only every two seconds, every
+     * such snapshot sync would take two seconds longer than it does.
+     */
+    private static final int FIRST_APPLY_MONITOR_DELAY = 250;
+
+    /**
      * Log Replication Finite State Machine Instance
      */
     private final LogReplicationFSM fsm;
@@ -75,6 +82,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
     private volatile long verificationGeneration;
+    // Checks scheduled since this state was entered, which paces the next one. Only touched by the
+    // FSM worker, like the verification itself.
+    private int scheduledVerifications;
     private java.util.concurrent.ScheduledFuture<?> pendingVerification;
 
     private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
@@ -217,6 +227,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
         if (from != this) {
             verificationGeneration++;
+            scheduledVerifications = 0;
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
         }
         long generation = verificationGeneration;
@@ -309,7 +320,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
                         new LogReplicationEventMetadata(verifyingId)));
             }
-        }, SCHEDULE_APPLY_MONITOR_DELAY, TimeUnit.MILLISECONDS);
+        }, nextVerificationDelayMs(), TimeUnit.MILLISECONDS);
+    }
+
+    @VisibleForTesting
+    long nextVerificationDelayMs() {
+        // 250, 500, 1000, then every 2000.
+        int doublings = Math.min(scheduledVerifications++, 3);
+        return Math.min(SCHEDULE_APPLY_MONITOR_DELAY, (long) FIRST_APPLY_MONITOR_DELAY << doublings);
     }
 
     @Override

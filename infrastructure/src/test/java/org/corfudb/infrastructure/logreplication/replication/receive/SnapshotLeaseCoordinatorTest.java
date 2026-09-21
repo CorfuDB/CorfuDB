@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -566,6 +567,45 @@ class SnapshotLeaseCoordinatorTest {
                     () -> coordinator.start(proposal()));
             assertEquals(LogReplicationBusyResponseMsg.Reason.ADMISSION_CLOSED, busy.getResponse().getReason());
             assertEquals(SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS, busy.getResponse().getRetryAfterMs());
+        } finally {
+            release.countDown();
+            drain(effects);
+            effects.shutdownNow();
+        }
+    }
+
+    /**
+     * A START is answered when the preparation it started is done, which normally takes a moment,
+     * so that the source is not sent away to come back. A preparation that takes longer than the
+     * sink is willing to hold the reply is answered "come back" after all.
+     */
+    @Test
+    void aStartCanWaitForItsPreparationButNotForLong() throws Exception {
+        ExecutorService effects = Executors.newSingleThreadExecutor();
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            create(effects, 0, 0);
+            doAnswer(invocation -> {
+                running.countDown();
+                release.await(10, TimeUnit.SECONDS);
+                return null;
+            }).when(worker).prepare(any());
+            SnapshotSyncLeaseRecord reserved = coordinator.start(proposal());
+            coordinator.tick(); // Preparation starts, and is held.
+            assertTrue(running.await(10, TimeUnit.SECONDS));
+
+            assertEquals(Phase.PREPARING, coordinator.awaitPrepared(reserved, 50).getPhase(), "not for long");
+
+            CompletableFuture.runAsync(release::countDown, CompletableFuture.delayedExecutor(100, TimeUnit.MILLISECONDS));
+            long begin = System.nanoTime();
+            assertEquals(Phase.TRANSFERRING, coordinator.awaitPrepared(reserved, 10_000).getPhase());
+            assertTrue(System.nanoTime() - begin < TimeUnit.SECONDS.toNanos(9), "it returns when preparation is done");
+
+            // Nothing to wait for: an attempt that is past preparation, or another one altogether.
+            assertEquals(Phase.TRANSFERRING, coordinator.awaitPrepared(reserved, 10_000).getPhase());
+            assertEquals(Phase.TRANSFERRING, coordinator.awaitPrepared(
+                    reserved.toBuilder().setGeneration(reserved.getGeneration() + 1).build(), 10_000).getPhase());
         } finally {
             release.countDown();
             drain(effects);

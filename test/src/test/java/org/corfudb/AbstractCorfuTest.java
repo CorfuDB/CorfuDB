@@ -66,6 +66,14 @@ public class AbstractCorfuTest {
         TestThreadGroups.shutdownThreadGroups();
     }
 
+    /**
+     * Called when a test failed or timed out, right after its report is printed. Whatever a test
+     * needs to explain a failure on a build server, which keeps no files, is printed from here.
+     */
+    protected void onTestFailure() {
+        // Nothing by default.
+    }
+
     /** A watcher which prints whether tests have failed or not, for a useful
      * report which can be read on Travis.
      */
@@ -202,6 +210,7 @@ public class AbstractCorfuTest {
                     .a(lineOut)
                     .a("]").newline());
             printThreads();
+            reportFailureDiagnostics();
             System.out.flush();
         }
 
@@ -213,7 +222,17 @@ public class AbstractCorfuTest {
                 .a("TIMED OUT").reset()
                 .a("]").newline());
             printThreads();
+            reportFailureDiagnostics();
             System.out.flush();
+        }
+
+        /** Diagnostics are a courtesy: whatever goes wrong with them must not replace the failure. */
+        private void reportFailureDiagnostics() {
+            try {
+                onTestFailure();
+            } catch (Throwable t) {
+                System.out.println("Could not print failure diagnostics: " + t);
+            }
         }
 
         /** Gets whether or not the given class inherits from the class

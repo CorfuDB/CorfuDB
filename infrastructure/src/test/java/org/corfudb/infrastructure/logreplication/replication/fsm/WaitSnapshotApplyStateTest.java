@@ -87,6 +87,15 @@ public class WaitSnapshotApplyStateTest {
                 .setSourceSnapshot(100).setPhase(Phase.APPLYING).build();
     }
 
+    /**
+     * Neither completion nor cancellation was reported. The next check, which the state schedules
+     * for itself and which may already have come round, is not a conclusion.
+     */
+    private void nothingWasConcluded() {
+        verify(fsm, never()).input(argThat(event ->
+                event.getType() != LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS));
+    }
+
     private void sinkReports(SnapshotSyncLeaseRecord lease) {
         when(dataSender.sendMetadataRequest()).thenReturn(CompletableFuture.completedFuture(
                 LogReplicationMetadataResponseMsg.newBuilder().setSnapshotLease(lease).build()));
@@ -102,7 +111,21 @@ public class WaitSnapshotApplyStateTest {
             state.verifyStatusOfSnapshotSyncApply();
         }
         // No source-side bound exists: only the sink's deadline can end this attempt.
-        verify(fsm, never()).input(any());
+        nothingWasConcluded();
+    }
+
+    /** The first checks of an apply come sooner than the later ones: a small snapshot is applied in no time. */
+    @Test
+    public void theFirstChecksComeSoonerAndTheLaterOnesSettle() {
+        setup();
+        long[] expected = {250, 500, 1000, 2000, 2000, 2000};
+        for (long delay : expected) {
+            Assert.assertEquals(delay, state.nextVerificationDelayMs());
+        }
+        // Entering the state for another attempt starts over.
+        state.onExit(inSnapshotSyncState);
+        state.onEntry(inSnapshotSyncState);
+        Assert.assertEquals(250, state.nextVerificationDelayMs());
     }
 
     @Test
@@ -143,7 +166,7 @@ public class WaitSnapshotApplyStateTest {
         // A sink whose new leader has not initialized its lease yet publishes a placeholder.
         sinkReports(SnapshotSyncLeaseRecord.getDefaultInstance());
         state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm, never()).input(any());
+        nothingWasConcluded();
     }
 
     @Test
@@ -156,7 +179,7 @@ public class WaitSnapshotApplyStateTest {
                         .setSnapshotApplied(100).setLastLogEntryTimestamp(100).build()));
         state.verifyStatusOfSnapshotSyncApply();
         state.verifyStatusOfSnapshotSyncApply();
-        verify(fsm, never()).input(any());
+        nothingWasConcluded();
     }
 
     @Test

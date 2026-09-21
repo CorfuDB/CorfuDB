@@ -54,6 +54,10 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private static final int DEFAULT_ACK_CNT = 1;
 
+    // How long a SNAPSHOT_START is held back for the preparation it started. Well within the time
+    // the source waits for a reply; a preparation that takes longer is answered "come back".
+    private static final long PREPARATION_WAIT_MS = 1500;
+
     // Duration in milliseconds after which an ACK is sent back to the sender
     // if the message count is not reached before
     private int ackCycleTime = DEFAULT_ACK_CNT;
@@ -439,7 +443,10 @@ public class LogReplicationSinkManager implements DataReceiver {
             throw lifecycle.rejected(Reason.UNSUPPORTED_PROTOCOL);
         }
         if (entry.getEntryType() == LogReplicationEntryType.SNAPSHOT_START) {
-            state = lifecycle.start(entry);
+            // Preparation has been started by the reservation and normally takes a moment. Answering
+            // when it is done, instead of at once with "come back", saves the source a round trip and
+            // the wait that goes with it, at the start of every snapshot sync.
+            state = lifecycle.awaitPrepared(lifecycle.start(entry), PREPARATION_WAIT_MS);
             if (state.getPhase() != Phase.TRANSFERRING && state.getPhase() != Phase.APPLYING) {
                 // Reserved, but preparation has not finished. The source retries the same proposal,
                 // and soon: preparation has already been started and only takes a moment.
@@ -568,6 +575,8 @@ public class LogReplicationSinkManager implements DataReceiver {
             abandonQuietly("Topology changed");
         }
         this.topologyConfigId = topologyConfigId;
+        // The status this sink serves carries the persisted topology, which has just changed.
+        lifecycle.reconcileNow();
     }
 
     /**

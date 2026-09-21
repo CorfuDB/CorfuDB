@@ -231,15 +231,23 @@ public class LogReplicationSinkManagerTest extends AbstractViewTest {
     public void aSourceThatGivesUpBeforeItSawItsAdmissionStillReleasesTheCheckpointer() throws Exception {
         lead();
         LogReplicationEntryMsg start = startMessage();
-        // The sink may still be installing its incremental writer, and refuses without reserving
-        // while it is. The reply that carries this attempt is the one that reserved it.
+        // Whatever the sink answers, the source of this test never sees it. The sink may still be
+        // installing its incremental writer, and refuses without reserving while it is: the answer
+        // that carries this attempt, accepted or "come back", is the one that reserved it.
         long limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
         while (true) {
-            LogReplicationBusyException refused = assertThrows(LogReplicationBusyException.class, () -> sink.receive(start));
-            assertEquals(Reason.ADMISSION_CLOSED, refused.getResponse().getReason());
-            assertEquals("what is in the way only takes a moment, and the source is told so",
-                    SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS, refused.getResponse().getRetryAfterMs());
-            if (refused.getResponse().getSnapshotLease().getAttemptId().equals(start.getMetadata().getSyncRequestId())) {
+            SnapshotSyncLeaseRecord answered;
+            try {
+                LogReplicationEntryMsg accepted = sink.receive(start);
+                assertEquals(LogReplicationEntryType.SNAPSHOT_START_ACCEPTED, accepted.getMetadata().getEntryType());
+                answered = sink.getSnapshotLease();
+            } catch (LogReplicationBusyException refused) {
+                assertEquals(Reason.ADMISSION_CLOSED, refused.getResponse().getReason());
+                assertEquals("what is in the way only takes a moment, and the source is told so",
+                        SnapshotLeaseCoordinator.MOMENTARY_RETRY_AFTER_MS, refused.getResponse().getRetryAfterMs());
+                answered = refused.getResponse().getSnapshotLease();
+            }
+            if (answered.getAttemptId().equals(start.getMetadata().getSyncRequestId())) {
                 break;
             }
             assertTrue("the proposal was never reserved: " + sink.getSnapshotLease(), System.nanoTime() < limit);

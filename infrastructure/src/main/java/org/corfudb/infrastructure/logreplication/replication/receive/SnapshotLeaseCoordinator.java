@@ -88,6 +88,8 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
 
     static final long RECONCILE_PERIOD_MS = 1000;
 
+    private static final long PREPARATION_POLL_MS = 5;
+
     private static final int MAX_TABLES_IN_DETAIL = 10;
     private static final long RETRY_AFTER_MS = 2000;
 
@@ -277,6 +279,17 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
 
     public void sinkRole(boolean sink) {
         sinkRole = sink;
+        kick();
+    }
+
+    /**
+     * What this node persisted outside the lease has changed (the topology, after a role switch).
+     * The status served to sources is a cache that a reconciliation refreshes: left to the period, a
+     * source would be shown the previous topology for up to a second, refuse it, and come back
+     * later.
+     */
+    public void reconcileNow() {
+        kick();
     }
 
     public void leadership(boolean value) {
@@ -312,7 +325,8 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     }
 
     private void publish(SnapshotSyncLeaseRecord state) {
-        view.updateAndGet(old -> {
+        SnapshotSyncLeaseRecord before = view.get();
+        SnapshotSyncLeaseRecord after = view.updateAndGet(old -> {
             if (state.getRevision() < old.getRevision()) { return old; }
             if (SnapshotSyncLease.active(state)) {
                 long candidate = ticker.getAsLong() + TimeUnit.MILLISECONDS.toNanos(
@@ -322,6 +336,13 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             }
             return state;
         });
+        if (before.getPhase() != after.getPhase() || before.getOutcome() != after.getOutcome()
+                || before.getGeneration() != after.getGeneration()) {
+            // The few lines that tell, afterwards, what a snapshot sync did on this side and when.
+            log.info("Snapshot lease generation {}: {} -> {}, outcome={}, protected={}{}", after.getGeneration(),
+                    before.getPhase(), after.getPhase(), after.getOutcome(), after.getProtectionHeld(),
+                    after.getFailure().isEmpty() ? "" : ", failure=" + after.getFailure());
+        }
     }
 
     /** Traffic of the admitted attempt was accepted: the source is alive. */
@@ -368,6 +389,28 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             log.debug("Snapshot reservation lost a commit race; the source will retry", e);
             throw rejected(LogReplicationBusyResponseMsg.Reason.OVERLOADED);
         }
+    }
+
+    /**
+     * Waits, for a bounded time, until the attempt has left preparation (it is ready for the transfer,
+     * or it was abandoned). Real time, not the injected clock: this is a wait of the calling thread.
+     *
+     * @return the lease as it is when the wait ends
+     */
+    public SnapshotSyncLeaseRecord awaitPrepared(SnapshotSyncLeaseRecord attempt, long waitMs) {
+        long waitUntilNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMs);
+        SnapshotSyncLeaseRecord current = status();
+        while (current.getGeneration() == attempt.getGeneration() && current.getPhase() == Phase.PREPARING
+                && System.nanoTime() - waitUntilNanos < 0) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(PREPARATION_POLL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            current = status();
+        }
+        return current;
     }
 
     public SnapshotSyncLeaseRecord enterTransfer(LogReplicationEntryMetadataMsg entry) {
