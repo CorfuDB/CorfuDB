@@ -28,6 +28,9 @@ public class CompactorMetadataTables {
 
     public static final StringKey COMPACTION_MANAGER_KEY = StringKey.newBuilder().setKey("CompactionManagerKey").build();
     public static final StringKey MIN_CHECKPOINT = StringKey.newBuilder().setKey("MinCheckpointToken").build();
+    // Monotonic successful cycle cutoff; unlike MIN_CHECKPOINT, survives later failed cycles.
+    public static final StringKey LAST_SUCCESSFUL_CHECKPOINT =
+            StringKey.newBuilder().setKey("LastSuccessfulCheckpointToken").build();
     public static final StringKey FREEZE_TOKEN = StringKey.newBuilder().setKey("freezeCheckpointNS").build();
     public static final StringKey INSTANT_TIGGER = StringKey.newBuilder().setKey("InstantTrigger").build();
     public static final StringKey DISABLE_COMPACTION = StringKey.newBuilder().setKey("DisableCompaction").build();

@@ -155,6 +155,12 @@ public class CompactorLeaderServices {
             }
             SnapshotSyncLeaseStore.write(txn, lease);
 
+            if (managerStatus != null && managerStatus.getStatus() == StatusType.COMPLETED) {
+                // Preserve a success written before this watermark was introduced, before replacing
+                // its status and cutoff with those of the next cycle.
+                recordSuccessfulCheckpoint(txn);
+            }
+
             long newCycleCount = managerStatus == null ? 0 : managerStatus.getCycleCount() + 1;
             List<TableName> tableNames = new ArrayList<>(corfuStore.listTables(null));
             CheckpointingStatus idleStatus = buildCheckpointStatus(StatusType.IDLE, nodeEndpoint, newCycleCount);
@@ -486,6 +492,10 @@ public class CompactorLeaderServices {
             txn.putRecord(compactorMetadataTables.getCompactionManagerTable(), CompactorMetadataTables.COMPACTION_MANAGER_KEY,
                     buildCheckpointStatus(finalStatus, tableNames.size(), totalTimeElapsed, managerStatus.getCycleCount()),
                     null);
+            if (finalStatus == StatusType.COMPLETED) {
+                // Commit the evidence with completion, even if no LR leader is available to see it.
+                recordSuccessfulCheckpoint(txn);
+            }
             txn.commit();
             log.info("Total time taken for the compaction cycle: {}ms for {} tables with status {}", totalTimeElapsed,
                     tableNames.size(), finalStatus);
@@ -508,6 +518,21 @@ public class CompactorLeaderServices {
                 HealthMonitor.reportIssue(compactionCycleIssue);
             }
             deleteInstantKeyIfPresent();
+        }
+    }
+
+    private void recordSuccessfulCheckpoint(TxnContext txn) {
+        RpcCommon.TokenMsg cut = (RpcCommon.TokenMsg) txn.getRecord(
+                CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
+        if (cut == null || cut.getSequence() < 0) {
+            return; // Missing metadata cannot establish a successful recovery cutoff.
+        }
+        RpcCommon.TokenMsg previous = (RpcCommon.TokenMsg) txn.getRecord(
+                CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                CompactorMetadataTables.LAST_SUCCESSFUL_CHECKPOINT).getPayload();
+        if (previous == null || previous.getSequence() < cut.getSequence()) {
+            txn.putRecord(compactorMetadataTables.getCompactionControlsTable(),
+                    CompactorMetadataTables.LAST_SUCCESSFUL_CHECKPOINT, cut, null);
         }
     }
 

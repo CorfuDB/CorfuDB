@@ -67,6 +67,8 @@ public class CompactorLeaderServicesUnitTest {
         when(corfuStore.txn(CORFU_SYSTEM_NAMESPACE)).thenReturn(txn);
         when(txn.getRecord(anyString(), any(Message.class))).thenReturn(corfuStoreEntry);
         when(txn.getRecord(SnapshotSyncLeaseStore.TABLE_NAME, SnapshotSyncLeaseStore.DOMAIN)).thenReturn(null);
+        when(txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT))
+                .thenReturn(new CorfuStoreEntry<>(CompactorMetadataTables.MIN_CHECKPOINT, null, null));
         doNothing().when(txn).putRecord(any(), any(), any(), any());
         doNothing().when(txn).delete(anyString(), any(Message.class));
         when(txn.commit()).thenReturn(CorfuStoreMetadata.Timestamp.getDefaultInstance());

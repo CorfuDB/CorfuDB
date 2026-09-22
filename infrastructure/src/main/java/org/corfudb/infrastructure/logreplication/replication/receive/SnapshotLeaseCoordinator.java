@@ -796,11 +796,14 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
     private void recover(long now) {
         CheckpointingStatus cycle;
         RpcCommon.TokenMsg cut;
+        RpcCommon.TokenMsg successfulCut;
         try (TxnContext txn = metadata.getTxnContext()) {
             cycle = (CheckpointingStatus) txn.getRecord(CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
                     CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
             cut = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
                     CompactorMetadataTables.MIN_CHECKPOINT).getPayload();
+            successfulCut = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                    CompactorMetadataTables.LAST_SUCCESSFUL_CHECKPOINT).getPayload();
             txn.commit();
         }
         String bypass = !sinkRole ? "this cluster is not a sink"
@@ -833,13 +836,18 @@ public final class SnapshotLeaseCoordinator implements AutoCloseable {
             checkpointRequested = false;
             checkpointRequestBackoffMs = 0;
         }
-        if (cycle.getStatus() == StatusType.COMPLETED && cut != null && cut.getSequence() >= current.getRecoveryCut()
-                && satisfiedCut < cut.getSequence()) {
-            // Remembered: a later cycle that fails does not take back what this one reclaimed.
+        long completedCheckpoint = successfulCut == null ? -1 : successfulCut.getSequence();
+        if (cycle.getStatus() == StatusType.COMPLETED && cut != null) {
+            // Also recognize a completed cycle from before the durable watermark was introduced.
+            completedCheckpoint = Math.max(completedCheckpoint, cut.getSequence());
+        }
+        if (completedCheckpoint >= current.getRecoveryCut() && satisfiedCut < completedCheckpoint) {
+            // The compactor persists success independently of LR: a restart or a later failed
+            // cycle cannot erase it. The local state only tracks how long to wait for its trim.
             if (satisfiedCut < 0) {
                 satisfiedSinceNanos = ticker.getAsLong();
             }
-            satisfiedCut = cut.getSequence();
+            satisfiedCut = completedCheckpoint;
         }
         boolean trimmed = false;
         if (satisfiedCut >= 0) {

@@ -327,6 +327,99 @@ public class SnapshotLeaseStorageTest extends AbstractViewTest {
         } finally { sink.shutdown(); }
     }
 
+    @Test
+    public void checkpointSuccessSurvivesAnAbsentSinkLeaderAndASubsequentFailedCycle() throws Exception {
+        compactorIsConfigured();
+        LogReplicationSinkManager sink = ownedSink();
+        LogReplicationSinkManager successor = null;
+        try {
+            SnapshotSyncLeaseRecord attempt = start(sink);
+            sink.receive(data(attempt));
+            LogReplicationEntryMsg cancel = data(attempt).toBuilder().clearData().setMetadata(data(attempt).getMetadata().toBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_CANCEL)).build();
+            assertThrows(org.corfudb.runtime.exceptions.LogReplicationBusyException.class, () -> sink.receive(cancel));
+            await(() -> sink.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.RECOVERING);
+            long recoveryCut = sink.getSnapshotLease().getRecoveryCut();
+            sink.setLeadership(false);
+
+            CompactorLeaderServices compactor = new CompactorLeaderServices(rt, "test", metadata.getCorfuStore(), mock(LivenessValidator.class));
+            checkpointAndTrim(compactor);
+            long successfulCut = successfulCheckpointCut();
+            assertTrue(successfulCut >= recoveryCut);
+            assertTrue(rt.getAddressSpaceView().getTrimMark().getSequence() > recoveryCut);
+            // A new compactor leader starts another cycle, but none of its tables is checkpointed.
+            compactor = new CompactorLeaderServices(rt, "successor", metadata.getCorfuStore(), mock(LivenessValidator.class));
+            assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+            compactor.finishCompactionCycle();
+            assertEquals(successfulCut, successfulCheckpointCut());
+            try (TxnContext txn = metadata.getTxnContext()) {
+                CheckpointingStatus status = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME, CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload();
+                assertEquals(CheckpointingStatus.StatusType.FAILED, status.getStatus());
+                txn.commit();
+            }
+
+            // This new coordinator has never seen the successful cycle's manager status.
+            successor = new LogReplicationSinkManager(rt, config, metadata, new DefaultSnapshotSyncPlugin(rt));
+            successor.configureSnapshotLifecycle(new SnapshotLeaseCoordinator.Timing(60000, 0, 5000, 0, 3));
+            successor.updateTopologyConfigId(1);
+            successor.setLeadership(true);
+            LogReplicationSinkManager restarted = successor;
+            await(() -> restarted.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.READY);
+            assertEquals(attempt.getGeneration(), successor.getSnapshotLease().getGeneration());
+            assertEquals(SnapshotSyncLeaseRecord.Outcome.ABORTED, successor.getSnapshotLease().getOutcome());
+        } finally {
+            if (successor != null) { successor.shutdown(); }
+            sink.shutdown();
+        }
+    }
+
+    @Test
+    public void startingACyclePreservesACompletedCutFromBeforeTheWatermarkExisted() throws Exception {
+        cycle(CheckpointingStatus.StatusType.COMPLETED, 100);
+        assertEquals(-1, successfulCheckpointCut());
+        CompactorLeaderServices compactor = new CompactorLeaderServices(rt, "test", metadata.getCorfuStore(), mock(LivenessValidator.class));
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        assertEquals(100, successfulCheckpointCut());
+        compactor.finishCompactionCycle(); // Failed; the successful cut remains intact.
+        assertEquals(100, successfulCheckpointCut());
+
+        cycle(CheckpointingStatus.StatusType.COMPLETED, 50);
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        assertEquals("A lower cutoff must not erase earlier success", 100, successfulCheckpointCut());
+
+        cycle(CheckpointingStatus.StatusType.COMPLETED, 150);
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        assertEquals("A newer success must advance the watermark", 150, successfulCheckpointCut());
+    }
+
+    @Test
+    public void aFailedCycleOrMissingCutCannotCreateSuccessfulCheckpointEvidence() throws Exception {
+        CompactorLeaderServices compactor = new CompactorLeaderServices(rt, "test", metadata.getCorfuStore(), mock(LivenessValidator.class));
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        compactor.finishCompactionCycle(); // The IDLE tables make this fail.
+        assertEquals(-1, successfulCheckpointCut());
+        cycle(CheckpointingStatus.StatusType.COMPLETED, -1);
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        assertEquals(-1, successfulCheckpointCut());
+        cycle(CheckpointingStatus.StatusType.COMPLETED, 100);
+        try (TxnContext txn = metadata.getTxnContext()) {
+            txn.delete(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT);
+            txn.commit();
+        }
+        assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());
+        assertEquals(-1, successfulCheckpointCut());
+    }
+
+    private long successfulCheckpointCut() {
+        try (TxnContext txn = metadata.getTxnContext()) {
+            RpcCommon.TokenMsg cut = (RpcCommon.TokenMsg) txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE,
+                    CompactorMetadataTables.LAST_SUCCESSFUL_CHECKPOINT).getPayload();
+            txn.commit();
+            return cut == null ? -1 : cut.getSequence();
+        }
+    }
+
     /** One real, successful compaction cycle followed by the trim it allows. */
     private void checkpointAndTrim(CompactorLeaderServices compactor) throws Exception {
         assertEquals(CompactorLeaderServices.LeaderInitStatus.SUCCESS, compactor.initCompactionCycle());

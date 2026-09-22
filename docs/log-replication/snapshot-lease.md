@@ -116,6 +116,19 @@ each further request waits twice as long as the previous one (one minute, up to 
 cycle that keeps failing is not run over and over. It does not ask at all while a satisfying cycle
 has completed and only its trim or the minimum interval is pending.
 
+The compactor records the greatest successful cycle cutoff as `LastSuccessfulCheckpointToken` in
+`CorfuSystem$CompactionControlsTable`, in the same transaction that marks the cycle `COMPLETED`.
+Starting another cycle or failing one does not erase this evidence. A new LR leader can therefore
+recognize a qualifying checkpoint even if no LR leader observed its completion, or a later failed
+cycle replaced the current manager status. The watermark must cover the current recovery cut;
+the minimum recovery interval and a trim strictly past that cut are still required.
+
+When upgrading a store without this watermark, a currently completed cycle remains usable. The
+compactor preserves its cutoff before replacing it with a new cycle. This uses a new key in the
+existing controls table; no replication message or lease-schema change is needed. Historical
+successes already overwritten before this metadata was recorded cannot be reconstructed and may
+require another successful cycle.
+
 The gate is skipped when no checkpointer can run at all, because waiting would then keep replication
 closed forever without protecting anything: when the compaction manager record does not exist (no
 compaction service is configured; a configured one creates the record within seconds of starting,
@@ -193,6 +206,12 @@ are told which attempt they belong to.
 hooks `onSnapshotSyncStart` and `onSnapshotSyncEnd` are deprecated and never called; an
 implementation that wrote the freeze token there no longer has any effect and should be deleted.
 
+For a plugin whose only responsibility was adding and removing that token, the lease replaces its
+work; no replacement hook or interface removal is required. A custom plugin with other required
+effects must move those effects into the new hooks. Do not forward the new hooks to a legacy
+token-writing implementation: the checkpointer still honors tokens, so this would add a second
+freeze that could delay recovery after the lease is released.
+
 ## The freeze token
 
 Log replication no longer writes the freeze token, but the checkpointer still honors it for
@@ -200,6 +219,21 @@ operators and tools. One thing changed: **a repeated freeze no longer restarts t
 patience.** The patience is counted from when the freeze began, so a caller that keeps asking can no
 longer keep checkpointing frozen for as long as it keeps asking. To freeze for longer on purpose,
 unfreeze and freeze again.
+
+## Checkpoint workers launched by cron
+
+A cron job that requests a managed compaction cycle uses the same lease-aware admission and trim
+checks as an automatic request. A cron job that only launches `CompactorCheckpointer` must join a
+`STARTED` cycle: it checks five times, ten seconds apart, and exits if no eligible cycle appears.
+If automatic worker launch is disabled, coordinate the cron schedule and retries with the
+compactor's no-progress timeout (five minutes by default). A durable request for checkpointing does
+not itself launch a missing external worker. Without a qualifying checkpoint and trim, failed
+cycles leave snapshot admission closed.
+
+The upgrade requirement below applies to components that admit cycles and perform trims, including
+independently packaged cron tools. An older managed worker that only joins cycles admitted by an
+upgraded manager is a separate compatibility case; it does not independently choose a trim cutoff.
+These guarantees assume the managed checkpoint/trim path, not a custom call to raw prefix trim.
 
 ## Role changes
 
@@ -214,6 +248,19 @@ checkpoints; its record simply returns to `READY`.
 The lease is always on: there is no flag and no fallback protocol. The order is the usual one: **the
 sink (standby) cluster first, then the source**.
 
+> **Upgrade compatibility note:** This changes legacy behavior and may be considered a regression:
+> replication can pause during mixed-version upgrades. Completing the sink upgrade before upgrading
+> any source node prevents new lease-protected snapshots from overlapping legacy compaction. This
+> simplifies admission, failover and cleanup by avoiding a second snapshot protocol and a bridge
+> between freeze-token and lease protection. Reviewers should explicitly consider this trade-off
+> between upgrade availability and lifecycle simplicity.
+
+Before any source node uses the new protocol, all eligible sink LR leaders and all components that
+can admit checkpoint cycles or perform trims must understand the lease. This includes independently
+deployed compactor/trim tools, not just the LR server process. The protocol does not verify all of
+their versions: safety depends on enforcing this rollout order. Retain enough source log and disk
+headroom for the pause; catching up may require a new snapshot if the backlog has been trimmed.
+
 While the sink cluster is rolling:
 
 * The first upgraded node that becomes LR leader creates the lease record. If the last snapshot sync
@@ -225,11 +272,11 @@ While the sink cluster is rolling:
   superseded: the leftover freeze token is deleted, which unfreezes the checkpointer at once, and the
   record is created `RECOVERING`, so the garbage of the old attempt is checkpointed and trimmed
   before a new snapshot is admitted. The source starts a fresh snapshot sync afterwards.
-* A source that is not upgraded yet does not know the lease. An upgraded sink leader refuses it
-  (`UNSUPPORTED_PROTOCOL`); the old source logs an unknown message, times out and retries its
-  negotiation. **Replication is paused from the moment an upgraded node leads the sink until the
-  source cluster is upgraded**, and the source accumulates the backlog. Plan the two upgrades close
-  together. No data is lost: the source resumes from the sink's persisted positions, with incremental
+* A source that is not upgraded yet does not know the lease. An upgraded sink leader refuses its
+  negotiation (`UNSUPPORTED_PROTOCOL`); the old source logs an unknown message, times out and retries its
+  negotiation. **Replication may pause until the source is upgraded**; an existing incremental
+  transfer may continue, but cannot rely on successful renegotiation or a new snapshot. The source
+  accumulates the backlog during a pause. Plan the two upgrades close together. No data is lost: the source resumes from the sink's persisted positions, with incremental
   sync if its log still holds the backlog and with a snapshot sync otherwise.
 * LR leadership can move back to a node that is not upgraded yet. That node ignores the record and
   speaks the old protocol with the old source, freeze token included. When an upgraded node leads

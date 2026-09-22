@@ -57,6 +57,7 @@ class SnapshotLeaseCoordinatorTest {
     private final AtomicLong nanos = new AtomicLong(1000000000);
     private final AtomicLong trim = new AtomicLong(0);
     private final AtomicLong safeCut = new AtomicLong(-1);
+    private final AtomicLong successfulCheckpointCut = new AtomicLong(-1);
     // Null emulates a cluster on which the compactor never ran: it never wrote its manager record.
     private final AtomicReference<CheckpointingStatus.StatusType> cycle = new AtomicReference<>(CheckpointingStatus.StatusType.IDLE);
     private final AtomicReference<SnapshotSyncLeaseRecord> persisted = new AtomicReference<>(SnapshotSyncLeaseRecord.getDefaultInstance());
@@ -92,6 +93,9 @@ class SnapshotLeaseCoordinatorTest {
             Object payload;
             if (key.equals(CompactorMetadataTables.COMPACTION_MANAGER_KEY)) {
                 payload = cycle.get() == null ? null : CheckpointingStatus.newBuilder().setStatus(cycle.get()).setCycleCount(7).build();
+            } else if (key.equals(CompactorMetadataTables.LAST_SUCCESSFUL_CHECKPOINT)) {
+                payload = successfulCheckpointCut.get() < 0 ? null
+                        : RpcCommon.TokenMsg.newBuilder().setSequence(successfulCheckpointCut.get()).build();
             } else if (key instanceof TableName) {
                 payload = CheckpointingStatus.newBuilder().setStatus(CheckpointingStatus.StatusType.FAILED).build();
             } else {
@@ -998,6 +1002,138 @@ class SnapshotLeaseCoordinatorTest {
         coordinator.tick();
         assertEquals(Phase.READY, coordinator.status().getPhase());
         verify(txn, never()).putRecord(any(), eq(CompactorMetadataTables.INSTANT_TIGGER_WITH_TRIM), any(), any());
+    }
+
+    @Test
+    void aSatisfyingCheckpointSurvivesALeaderRestartAndALaterFailedCycle() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        cycle.set(CheckpointingStatus.StatusType.COMPLETED);
+        safeCut.set(100);
+        successfulCheckpointCut.set(100); // Recorded by the compactor with successful completion.
+        trim.set(101);
+        coordinator.tick();
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        // The minimum recovery interval is the only remaining requirement. A later
+        // checkpoint cycle fails and overwrites the singleton manager status.
+        cycle.set(CheckpointingStatus.StatusType.FAILED);
+        safeCut.set(200);
+        clock.addAndGet(RECOVERY_MS);
+        // Simulate another LR leader using the same durable lease and compactor data.
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase(),
+                "A completed checkpoint and trim must remain satisfied across a leader restart");
+    }
+
+    @Test
+    void aCheckpointCompletedWhileNoLeaderWasObservingStillSatisfiesRecovery() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        coordinator.leadership(false);
+        // The compactor completed and trimmed, then a later cycle failed, without any LR tick.
+        successfulCheckpointCut.set(100);
+        cycle.set(CheckpointingStatus.StatusType.FAILED);
+        safeCut.set(200);
+        trim.set(101);
+        clock.addAndGet(RECOVERY_MS);
+
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        assertEquals(Phase.READY, coordinator.status().getPhase());
+    }
+
+    @Test
+    void aRestartedRecoveryStillRequiresTheMinimumInterval() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        successfulCheckpointCut.set(100);
+        cycle.set(CheckpointingStatus.StatusType.FAILED);
+        safeCut.set(200);
+        trim.set(101);
+
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        clock.addAndGet(RECOVERY_MS);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase());
+    }
+
+    @Test
+    void aSuccessfulCheckpointStillRequiresATrimStrictlyPastTheRecoveryCut() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        successfulCheckpointCut.set(100);
+        cycle.set(CheckpointingStatus.StatusType.FAILED);
+        safeCut.set(200);
+        trim.set(100);
+        clock.addAndGet(RECOVERY_MS);
+
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        trim.set(101);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase());
+    }
+
+    @Test
+    void aCheckpointBeforeTheRecoveryCutCannotBeReplacedByAFailedCycleOrATrim() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        successfulCheckpointCut.set(99);
+        cycle.set(CheckpointingStatus.StatusType.FAILED);
+        safeCut.set(200);
+        trim.set(201);
+        clock.addAndGet(RECOVERY_MS);
+
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        successfulCheckpointCut.set(100);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase());
+    }
+
+    @Test
+    void aCompletedStatusWithoutACutNeedsDurableCheckpointEvidence() {
+        transfer();
+        coordinator.abandon("failure");
+        coordinator.tick();
+        cycle.set(CheckpointingStatus.StatusType.COMPLETED);
+        when(txn.getRecord(CompactorMetadataTables.COMPACTION_CONTROLS_TABLE, CompactorMetadataTables.MIN_CHECKPOINT))
+                .thenReturn(new CorfuStoreEntry<>(CompactorMetadataTables.MIN_CHECKPOINT, null, null));
+        trim.set(101);
+        clock.addAndGet(RECOVERY_MS);
+
+        create(MoreExecutors.newDirectExecutorService(), 0, 0);
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        successfulCheckpointCut.set(100);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase());
+    }
+
+    @Test
+    void aPriorGenerationsCheckpointDoesNotSatisfyALaterRecoveryCut() {
+        transfer();
+        coordinator.abandon("first attempt failed");
+        successfulCheckpointCut.set(100);
+        recover();
+
+        when(txn.getTxnSequence()).thenReturn(200L);
+        transfer();
+        coordinator.abandon("second attempt failed");
+        coordinator.tick();
+        clock.addAndGet(RECOVERY_MS);
+        trim.set(201);
+        coordinator.tick();
+        assertEquals(200, coordinator.status().getRecoveryCut());
+        assertEquals(Phase.RECOVERING, coordinator.status().getPhase());
+        successfulCheckpointCut.set(200);
+        coordinator.tick();
+        assertEquals(Phase.READY, coordinator.status().getPhase());
     }
 
     @Test
