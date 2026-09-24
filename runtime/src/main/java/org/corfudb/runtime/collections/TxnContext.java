@@ -289,33 +289,30 @@ public class TxnContext implements AutoCloseable {
     /**
      * Controls whether a {@link #touch} is visible to stream tag subscribers.
      * <p>
-     * touch() creates the conflict by re-writing the record with its own unchanged payload and
-     * metadata, which is indistinguishable from a real mutation to the streaming layer. This
-     * option lets a caller keep the conflict without waking up the table's tag subscribers.
      */
     public enum TouchOption {
         /**
-         * Default, and the historical behavior of touch(). The touch is written to the touched
+         * Default, reads the record and writes it back adding the
          * table's stream tags, so subscribers of those tags observe it as an update.
          */
         GENERATE_STREAM_NOTIFICATION,
 
         /**
-         * The touch registers a write-write conflict on the key without writing anything: no
-         * payload is serialized or logged, the in-memory object is left untouched, and none of the
-         * table's stream tags are contributed, so tag subscribers do not observe it. On a
+         * The touch registers a write-write conflict on the key without writing anything:
+	 * so no stream notifications are sent. On a
          * federated table this also drops the Log Replication tag; since nothing about the record
          * changes, no data is lost by not replicating it.
          * <p>
-         * Because the touch produces no update, the touched key does not appear in any
-         * notification even when the same transaction performs a real write on a tagged table.
          * That real write still notifies its own subscribers, as it should.
          */
         SUPPRESS_STREAM_NOTIFICATION
     }
 
     /**
-     * touch() is a call to create a conflict on a read in a write-only transaction
+     * touch() is a call to help conflict with other possible write txns when only reading a record.
+     * It force generates a conflict key for global transaction conflict and relies on TouchOption
+     * to determine whether stream notifications will fire. Since touch() is treated as a write
+     * to this record, it will abort other conflicting transactions or get aborted on conflict.
      *
      * @param table Table object to perform the create/update on.
      * @param key   Key of the record to touch.

@@ -33,9 +33,11 @@ public class WriteSetInfo extends ConflictSetInfo {
      * write a payload or generate a stream tag notification.
      * <p>
      * The stream is registered with an empty update list rather than skipped entirely, for two
-     * reasons: the commit path treats an empty write set as a read-only transaction and never
-     * reaches the sequencer, and the stream's tail must still advance so that other transactions
-     * performing coarse, whole-stream conflict checks against it are still resolved correctly.
+     * reasons:
+     * If it isn't added to the writeSet, it is treated as a read-only transction and short circuits
+     * before reaching the Sequencer (where global conflicts are detected).
+     * Passing an empty list ensures that the actual chain replication for this transaction remains
+     * cheap.
      *
      * @param proxy           the SMR object the conflict is registered on.
      * @param conflictObjects the fine-grained conflict information, which must be present.
