@@ -117,6 +117,19 @@ public class ManagedTxnContext implements AutoCloseable {
     }
 
     /**
+     * touch() is a call to create a conflict on a read in a write-only transaction
+     *
+     * @param table       Table object to perform the create/update on.
+     * @param key         Key of the record to touch.
+     * @param touchOption Whether this touch should generate a stream tag notification.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull Table<K, V, M> table, @Nonnull K key,
+               @Nonnull TxnContext.TouchOption touchOption) {
+        this.txnContext.touch(table, key, touchOption);
+    }
+
+    /**
      * touch() a key to generate a conflict on it given tableName.
      *
      * @param tableName Table object to perform the touch() in.
@@ -126,6 +139,20 @@ public class ManagedTxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull String tableName, @Nonnull K key) {
         this.txnContext.touch(tableName, key);
+    }
+
+    /**
+     * touch() a key to generate a conflict on it given tableName.
+     *
+     * @param tableName   Table object to perform the touch() in.
+     * @param key         Key of the record.
+     * @param touchOption Whether this touch should generate a stream tag notification.
+     * @throws UnsupportedOperationException if attempted on a non-existing object.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull String tableName, @Nonnull K key,
+               @Nonnull TxnContext.TouchOption touchOption) {
+        this.txnContext.touch(tableName, key, touchOption);
     }
 
     /**

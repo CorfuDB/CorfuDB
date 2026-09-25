@@ -55,6 +55,12 @@ public class PersistedCorfuTable<K, V> implements
     }
 
     @Override
+    public void addConflictOnly(@Nonnull K key) {
+        Object[] conflictField = new Object[]{key};
+        proxy.addConflictOnly(conflictField);
+    }
+
+    @Override
     public void insert(@Nonnull K key, @Nonnull V value) {
         Object[] conflictField = new Object[]{key};
         proxy.logUpdate("put", conflictField, key, value);

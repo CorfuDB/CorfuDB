@@ -93,4 +93,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addPreCommitListener(TransactionalContext.PreCommitListener preCommitListener) {
         throw new UnsupportedOperationException("Can't register precommit hooks in readonly txn");
     }
+
+    @Override
+    public void addConflictOnly(MVOCorfuCompileProxy<?> proxy, Object[] conflictObjects) {
+        throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
+    }
 }

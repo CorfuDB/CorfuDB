@@ -179,6 +179,27 @@ public class Table<K extends Message, V extends Message, M extends Message> impl
     }
 
     /**
+     * Test whether a record exists without materializing it.
+     *
+     * @param key Key.
+     * @return true if a record is mapped to the given key.
+     */
+    boolean containsKey(@Nonnull final K key) {
+        return corfuTable.containsKey(key);
+    }
+
+    /**
+     * Register a conflict on the given key without modifying the record, so that the enclosing
+     * transaction is resolved against concurrent updates to it. Nothing is written, so this
+     * generates no stream tag notification.
+     *
+     * @param key Key.
+     */
+    protected void touchKey(@Nonnull final K key) {
+        corfuTable.addConflictOnly(key);
+    }
+
+    /**
      * Update an existing key with the provided value. Create if it does not exist.
      *
      * @param key      Key.
