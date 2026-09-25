@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
@@ -8,8 +9,13 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal.SyncType;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 
 import java.util.Optional;
@@ -28,6 +34,10 @@ import java.util.concurrent.TimeUnit;
  * This state is an optimization such that snapshot sync is separated into transfer and apply phases.
  * If data has been completely transferred and some failure occurs immediately after, the receiver can still
  * recover and data does not need to be transferred all over again.
+ *
+ * The source has no timer of its own here. It follows the sink's snapshot lease: the attempt either
+ * completes, or the sink abandons it (its deadline, a failed apply, a change of owner or topology)
+ * and reports that, at which point the source cancels and asks for a new attempt.
  */
 @Slf4j
 public class WaitSnapshotApplyState implements LogReplicationState {
@@ -36,6 +46,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
      * Delay in milliseconds to monitor replication status on receiver, when snapshot sync apply is in progress.
      */
     private static final int SCHEDULE_APPLY_MONITOR_DELAY = 2000;
+
+    /**
+     * The first checks, for about two seconds, come sooner. The apply of a small snapshot takes a
+     * fraction of a second: asked only every two seconds, every such snapshot sync would take two
+     * seconds longer than it does. The sink answers these from a cache, so they cost it nothing.
+     */
+    private static final int FIRST_APPLY_MONITOR_DELAY = 250;
+    private static final int FIRST_APPLY_MONITOR_CHECKS = 8;
 
     /**
      * Log Replication Finite State Machine Instance
@@ -64,11 +82,18 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private long baseSnapshotTimestamp;
 
     private final ScheduledExecutorService snapshotSyncApplyMonitorExecutor;
+    private volatile long verificationGeneration;
+    // Checks scheduled since this state was entered, which paces the next one. Only touched by the
+    // FSM worker, like the verification itself.
+    private int scheduledVerifications;
+    private java.util.concurrent.ScheduledFuture<?> pendingVerification;
 
     private Optional<Timer.Sample> snapshotSyncApplyTimerSample = Optional.empty();
 
     @Setter
     private boolean forcedSnapshotSync;
+
+    private boolean unsupportedSinkReported;
 
     /**
      * Constructor
@@ -88,13 +113,23 @@ public class WaitSnapshotApplyState implements LogReplicationState {
 
     @Override
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
+        InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        if (snapshotState != null && !event.getMetadata().matchesSnapshotAttempt(snapshotState.getSnapshotSender())) {
+            return this;
+        }
         switch (event.getType()) {
+            case SNAPSHOT_SYNC_CONTINUE:
+                // A transfer continuation already queued when transfer completed is harmless.
+                return this;
             case SNAPSHOT_SYNC_REQUEST:
                 log.info("Snapshot Sync requested {} while waiting for {} to complete.",
                         event.getMetadata().getSyncId(), getTransitionSyncId());
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionSyncId(event.getMetadata().getSyncId());
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                // A deliberate new request starts a new run of attempts. It cannot cause a restart
+                // storm on the sink: the new attempt is only admitted once the sink allows it.
+                ((InSnapshotSyncState) snapshotSyncState).resetCancellations();
                 return snapshotSyncState;
             case SYNC_CANCEL:
                 if(fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -104,6 +139,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                    ((InSnapshotSyncState) inSnapshotSyncState).registerCancellation();
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
@@ -151,6 +187,8 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     }
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
                             event.getMetadata().getSyncId(), event.getMetadata().getLastTransferredBaseSnapshot());
+                    // Full end-to-end completion ends the current run of attempts.
+                    ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetCancellations();
                     return logEntrySyncState;
                 }
 
@@ -161,9 +199,12 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                 // No need to validate transitionId as REPLICATION_STOP comes either from enforceSnapshotSync or when
                 // the runtime FSM transitions back to VERIFYING_REMOTE_LEADER from REPLICATING state
                 log.debug("Stop Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                // A stop is a clean boundary; a later, unrelated session must not inherit this count.
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetCancellations();
                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 log.debug("Shutdown Log Replication while waiting for snapshot sync apply to complete id={}", transitionSyncId);
+                ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetCancellations();
                 return fsm.getStates().get(LogReplicationStateType.ERROR);
             default: {
                 if (!fsm.isValidTransition(transitionSyncId, event.getMetadata().getSyncId())) {
@@ -186,13 +227,22 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             fsm.getAckReader().markSnapshotSyncInfoOngoing();
         }
         if (from != this) {
+            verificationGeneration++;
+            scheduledVerifications = 0;
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
         }
-        this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
+        long generation = verificationGeneration;
+        this.fsm.getLogReplicationFSMWorkers().submit(() -> {
+            if (generation == verificationGeneration) { verifyStatusOfSnapshotSyncApply(); }
+        });
     }
 
     @Override
     public void onExit(LogReplicationState to) {
+        if (to != this) {
+            verificationGeneration++;
+            if (pendingVerification != null) { pendingVerification.cancel(false); }
+        }
         if (to.getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
             snapshotSyncApplyTimerSample
                     .flatMap(sample -> MeterRegistryProvider.getInstance()
@@ -203,7 +253,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
     }
 
-    private void verifyStatusOfSnapshotSyncApply() {
+    @VisibleForTesting
+    void verifyStatusOfSnapshotSyncApply() {
+        long generation = verificationGeneration;
+        UUID verifyingId = transitionSyncId;
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -212,32 +265,72 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     metadataResponseCompletableFuture = dataSender.sendMetadataRequest();
             LogReplicationMetadataResponseMsg metadataResponse = metadataResponseCompletableFuture
                     .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-
-            // If snapshot sync apply phase has been completed on remote cluster, transition to Log Entry Sync
-            // (incremental update replication), otherwise, schedule new query.
-            if (metadataResponse.getLastLogEntryTimestamp() == metadataResponse.getSnapshotApplied() &&
-                    metadataResponse.getSnapshotApplied() == baseSnapshotTimestamp) {
-                log.info("Snapshot sync apply is complete appliedTs={}, baseTs={}", metadataResponse.getSnapshotApplied(),
-                        baseSnapshotTimestamp);
-                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
-                        new LogReplicationEventMetadata(transitionSyncId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)));
+            if (generation != verificationGeneration) { return; }
+            if (!metadataResponse.hasSnapshotLease()) {
+                // Negotiation refuses a sink without the snapshot lease, so this is only reachable
+                // when replication is driven without it. Nothing can be concluded: keep asking.
+                if (!unsupportedSinkReported) {
+                    log.error("The sink does not report a snapshot lease; cannot follow the apply of {}", transitionSyncId);
+                    unsupportedSinkReported = true;
+                }
+                scheduleVerification(generation, verifyingId);
                 return;
-            } else {
-                log.debug("Snapshot sync apply is still in progress, appliedTs={}, baseTs={}, sync_id={}", metadataResponse.getSnapshotApplied(),
-                        baseSnapshotTimestamp, transitionSyncId);
             }
+            unsupportedSinkReported = false;
+            SnapshotSyncLeaseRecord lease = metadataResponse.getSnapshotLease();
+            InSnapshotSyncState snapshotState = (InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+            SnapshotSender source = snapshotState.getSnapshotSender();
+            boolean matching = source.getWireAttemptId() != null
+                    && lease.getAttemptId().equals(CorfuProtocolCommon.getUuidMsg(source.getWireAttemptId()))
+                    && lease.getGeneration() == source.getWireAttemptGeneration()
+                    && lease.getTopologyConfigId() == fsm.getTopologyConfigId()
+                    && lease.getSourceSnapshot() == baseSnapshotTimestamp;
+            if (matching && lease.getOutcome() == Outcome.COMPLETED) {
+                // Completion survives the sink's cleanup and recovery phases: the outcome stays
+                // COMPLETED until the next attempt is admitted.
+                log.info("Snapshot sync apply is complete, generation={}, baseTs={}", lease.getGeneration(), baseSnapshotTimestamp);
+                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE,
+                        new LogReplicationEventMetadata(verifyingId, baseSnapshotTimestamp, baseSnapshotTimestamp, forcedSnapshotSync)
+                                .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));
+                return;
+            }
+            if (lease.getPhase() != Phase.NOT_READY && (!matching || lease.getOutcome() == Outcome.ABORTED)) {
+                // The sink abandoned this attempt, or has moved on to another one. It will not
+                // complete: cancel and ask for a new attempt, which the sink admits when it is ready.
+                log.warn("The sink no longer runs snapshot sync {}: phase={}, outcome={}, failure={}. Restarting.",
+                        transitionSyncId, lease.getPhase(), lease.getOutcome(), lease.getFailure());
+                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                        new LogReplicationEventMetadata(verifyingId, forcedSnapshotSync)
+                                .setSnapshotAttempt(source.getWireAttemptId(), source.getWireAttemptGeneration())));
+                return;
+            }
+            log.debug("Snapshot sync apply is still in progress, phase={}, baseTs={}, sync_id={}", lease.getPhase(),
+                    baseSnapshotTimestamp, transitionSyncId);
         } catch (Exception e) {
+            // A lost or late reply says nothing about the apply. The sink's own deadline bounds it.
             log.error("Snapshot sync apply verification failed.", e);
         }
+
         // Schedule a one time action which will verify the snapshot apply status after a given delay
-        this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
-                TimeUnit.MILLISECONDS);
+        scheduleVerification(generation, verifyingId);
     }
 
-    private void scheduleSnapshotApplyVerification() {
-        log.debug("Schedule verification of snapshot sync apply id={}", transitionSyncId);
-        fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
-                new LogReplicationEventMetadata(transitionSyncId)));
+    private void scheduleVerification(long generation, UUID verifyingId) {
+        pendingVerification = snapshotSyncApplyMonitorExecutor.schedule(() -> {
+            if (generation == verificationGeneration) {
+                fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS,
+                        new LogReplicationEventMetadata(verifyingId)));
+            }
+        }, nextVerificationDelayMs(), TimeUnit.MILLISECONDS);
+    }
+
+    @VisibleForTesting
+    long nextVerificationDelayMs() {
+        if (scheduledVerifications < FIRST_APPLY_MONITOR_CHECKS) {
+            scheduledVerifications++;
+            return FIRST_APPLY_MONITOR_DELAY;
+        }
+        return SCHEDULE_APPLY_MONITOR_DELAY;
     }
 
     @Override

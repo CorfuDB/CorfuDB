@@ -12,6 +12,9 @@ public enum Component {
     @SerializedName("Compactor")
     COMPACTOR("Compactor"),
 
+    @SerializedName("Log Replication")
+    LOG_REPLICATION("Log Replication"),
+
     @SerializedName("Clustering Orchestrator")
     ORCHESTRATOR("Clustering Orchestrator"),
 

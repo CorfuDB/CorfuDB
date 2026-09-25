@@ -407,13 +407,24 @@ public class LogReplicationAckReader {
     }
 
     public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
+        markSnapshotSyncInfoOngoing(forced, eventId, 0);
+    }
+
+    /**
+     * @param consecutiveFailures number of consecutive cancellations/restarts of this snapshot
+     *                             sync session with no fresh externally-requested attempt or full
+     *                             completion in between (InSnapshotSyncState.
+     *                             consecutiveCancellations) -- see updateSnapshotSyncStatusOngoing()'s
+     *                             Javadoc for why this is surfaced separately from status.
+     */
+    public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId, int consecutiveFailures) {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     lock.lock();
                     long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
                     metadataManager.updateSnapshotSyncStatusOngoing(remoteClusterId, forced, eventId,
-                            baseSnapshotTimestamp, remainingEntriesToSend);
+                            baseSnapshotTimestamp, remainingEntriesToSend, consecutiveFailures);
                 } catch (TransactionAbortedException tae) {
                     log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
                     throw new RetryNeededException();
