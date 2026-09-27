@@ -21,8 +21,11 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.health.Component.COMPACTOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.CHECKPOINT_STALLED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -44,6 +47,23 @@ public class CompactorLeaderServices {
     private final CompactorMetadataTables compactorMetadataTables;
 
     public static final int MAX_RETRIES = 5;
+
+    /**
+     * Time a table is allowed to sit queued (IDLE, never picked up by a checkpointer) within an
+     * active compaction cycle before it is reported as a stalled-checkpoint health issue.
+     *
+     * This complements the existing liveness checks in {@link #validateLiveness()}, which only
+     * monitor checkpoints that have already started (i.e. present in ActiveCheckpointsTable). A
+     * table that never gets a chance to start -- e.g. because an external freeze (such as an
+     * in-progress log replication snapshot sync being repeatedly canceled and restarted) keeps
+     * getting reasserted before the compactor reaches it -- never shows up as "active" and is
+     * otherwise invisible until an operator notices the cycle itself is taking unexpectedly long.
+     */
+    private static final Duration STALLED_CHECKPOINT_THRESHOLD = Duration.ofMinutes(5);
+
+    private static final int MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION = 10;
+
+    private static final String NO_STALLED_CHECKPOINTS_DESC = "No stalled checkpoints";
 
     /**
      * This enum contains the leader's initCompactionCycle status
@@ -160,6 +180,65 @@ public class CompactorLeaderServices {
                 break;
             }
         }
+
+        checkForStalledCheckpoints(currentTime);
+    }
+
+    private void checkForStalledCheckpoints(long currentTimeMillis) {
+        Optional<CheckpointingStatus> managerStatus;
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            managerStatus = Optional.ofNullable((CheckpointingStatus) txn.getRecord(
+                    CompactorMetadataTables.COMPACTION_MANAGER_TABLE_NAME,
+                    CompactorMetadataTables.COMPACTION_MANAGER_KEY).getPayload());
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to acquire Manager Status while checking for stalled checkpoints, ", e);
+            return;
+        }
+
+        if (!managerStatus.isPresent() || managerStatus.get().getStatus() != StatusType.STARTED) {
+            // No cycle in progress right now, so nothing can be "stalled".
+            HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC));
+            return;
+        }
+
+        long cycleStartTime = managerStatus.get().getTimeTaken();
+        if (currentTimeMillis - cycleStartTime < STALLED_CHECKPOINT_THRESHOLD.toMillis()) {
+            return;
+        }
+
+        List<TableName> stalledTables = new ArrayList<>();
+        try (TxnContext txn = corfuStore.txn(CORFU_SYSTEM_NAMESPACE)) {
+            List<TableName> tableNames = new ArrayList<>(txn.keySet(compactorMetadataTables.getCheckpointingStatusTable()));
+            for (TableName table : tableNames) {
+                CheckpointingStatus tableStatus = (CheckpointingStatus) txn.getRecord(
+                        CompactorMetadataTables.CHECKPOINT_STATUS_TABLE_NAME, table).getPayload();
+                if (tableStatus != null && tableStatus.getStatus() == StatusType.IDLE) {
+                    stalledTables.add(table);
+                }
+            }
+            txn.commit();
+        } catch (Exception e) {
+            log.warn("Unable to acquire checkpoint status while checking for stalled checkpoints, ", e);
+            return;
+        }
+
+        if (stalledTables.isEmpty()) {
+            HealthMonitor.resolveIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, NO_STALLED_CHECKPOINTS_DESC));
+            return;
+        }
+
+        String tableList = stalledTables.stream()
+                .limit(MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION)
+                .map(t -> t.getNamespace() + "$" + t.getTableName())
+                .collect(Collectors.joining(", "));
+        String description = String.format(
+                "%d table(s) requested for checkpointing but not yet started, %d minutes into the current " +
+                        "compaction cycle (cycle started at epoch millis %d): %s%s",
+                stalledTables.size(), STALLED_CHECKPOINT_THRESHOLD.toMinutes(), cycleStartTime, tableList,
+                stalledTables.size() > MAX_STALLED_TABLES_IN_ISSUE_DESCRIPTION ? ", ..." : "");
+        log.warn(description);
+        HealthMonitor.reportIssue(Issue.createIssue(COMPACTOR, CHECKPOINT_STALLED, description));
     }
 
     private boolean checkFailureAndFinishCompactionCycle(TableName table) {

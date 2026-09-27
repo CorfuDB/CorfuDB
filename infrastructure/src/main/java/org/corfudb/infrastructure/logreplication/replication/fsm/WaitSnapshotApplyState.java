@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.Timer;
 import lombok.Setter;
@@ -71,6 +72,27 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     private boolean forcedSnapshotSync;
 
     /**
+     * Maximum time to wait for the sink to confirm snapshot apply has completed before giving up
+     * and self-canceling (retried with backoff, same as any other SYNC_CANCEL). Without this, a
+     * stuck apply (e.g. a bug on the sink's apply path) would poll here forever: nothing in this
+     * class -- or, as far as we've found, anywhere in this repo -- generates a SYNC_CANCEL for a
+     * stalled apply on its own; the only paths out are an external cancel/stop or an operator
+     * forcing a new snapshot sync. This makes recovery from a stuck apply automatic instead of
+     * depending on an operator noticing.
+     * Package-private (not final) so tests can shrink it to keep tests fast.
+     */
+    @VisibleForTesting
+    long maxApplyWaitMs = TimeUnit.MINUTES.toMillis(30);
+
+    /**
+     * Wall-clock time (epoch millis) the current apply-wait began, i.e. since we first entered
+     * this state for this attempt -- not re-stamped on every polling self-loop (SNAPSHOT_APPLY_IN_PROGRESS).
+     * Package-private so tests can seed/inspect it directly.
+     */
+    @VisibleForTesting
+    volatile long applyWaitStartTimeMs = 0;
+
+    /**
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
@@ -104,6 +126,18 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     UUID newSnapshotSyncId = event.getMetadata().isForcedSnapshotSync() ? event.getMetadata().getSyncId() : UUID.randomUUID();
                     inSnapshotSyncState.setTransitionSyncId(newSnapshotSyncId);
                     ((InSnapshotSyncState) inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+
+                    // A cancellation reaching us here means transfer already completed and we were
+                    // only waiting on the sink to finish applying it, but the overall snapshot sync
+                    // still did not succeed and is about to restart from scratch. Route it through the
+                    // same backoff accounting InSnapshotSyncState applies to its own SYNC_CANCEL;
+                    // otherwise a sink that keeps failing during apply verification would restart
+                    // immediately every time, reproducing the cancel-and-immediately-retry livelock
+                    // via this path instead.
+                    long backoff = ((InSnapshotSyncState) inSnapshotSyncState).registerCancellationAndComputeBackoff();
+                    log.warn("Snapshot sync canceled while waiting for apply to complete, remote={}; backing off {}ms before retrying with ID={}",
+                            fsm.getAckReader().getRemoteClusterId(), backoff, newSnapshotSyncId);
+
                     return inSnapshotSyncState;
                 }
                 log.info("Ignoring Sync cancel event for snapshot sync {}, as ongoing snapshot sync is {}",
@@ -135,6 +169,10 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                     // We need to set a new transition event Id, so anything happening on this new state
                     // is marked with this unique Id and correlated to cancel or trimmed events.
                     logEntrySyncState.setTransitionSyncId(transitionSyncId);
+                    // Snapshot sync has now fully succeeded (transfer AND apply); reset any
+                    // backoff/cancellation history InSnapshotSyncState accumulated from prior
+                    // retries, so a future, unrelated failure starts counting from a clean slate.
+                    ((InSnapshotSyncState) fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).resetBackoff();
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     if (tableManagerPlugin.isUpgraded()) {
@@ -187,6 +225,7 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
         if (from != this) {
             snapshotSyncApplyTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+            applyWaitStartTimeMs = System.currentTimeMillis();
         }
         this.fsm.getLogReplicationFSMWorkers().submit(this::verifyStatusOfSnapshotSyncApply);
     }
@@ -203,7 +242,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         }
     }
 
-    private void verifyStatusOfSnapshotSyncApply() {
+    // Package-private so tests can invoke it directly instead of via reflection.
+    @VisibleForTesting
+    void verifyStatusOfSnapshotSyncApply() {
         try {
             log.info("Verify snapshot sync apply status, sync={}", transitionSyncId);
 
@@ -229,6 +270,20 @@ public class WaitSnapshotApplyState implements LogReplicationState {
         } catch (Exception e) {
             log.error("Snapshot sync apply verification failed.", e);
         }
+
+        long applyElapsedMs = System.currentTimeMillis() - applyWaitStartTimeMs;
+        if (applyElapsedMs >= maxApplyWaitMs) {
+            // Apply has not completed after a generous wait. Nothing here (or, as far as we've
+            // found, anywhere in this repo) will otherwise cancel a stuck apply on its own, so
+            // self-cancel instead of polling forever -- this goes through the SYNC_CANCEL handling
+            // above, which backs off before retrying.
+            log.warn("Snapshot sync apply for {} has not completed after {}ms (limit {}ms); giving up and retrying.",
+                    transitionSyncId, applyElapsedMs, maxApplyWaitMs);
+            fsm.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
+                    new LogReplicationEventMetadata(transitionSyncId, forcedSnapshotSync)));
+            return;
+        }
+
         // Schedule a one time action which will verify the snapshot apply status after a given delay
         this.snapshotSyncApplyMonitorExecutor.schedule(this::scheduleSnapshotApplyVerification, SCHEDULE_APPLY_MONITOR_DELAY,
                 TimeUnit.MILLISECONDS);
