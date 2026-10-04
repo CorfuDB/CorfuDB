@@ -6,6 +6,8 @@ import org.assertj.core.data.MapEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -17,8 +19,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -361,5 +365,307 @@ public class CorfuTableTest extends AbstractViewTest {
 
         assertThat(corfuTable.entryStream().map(Map.Entry::getValue))
                 .containsExactlyInAnyOrder("aa", "aa", "bb", "cc");
+    }
+
+    /**
+     * Transaction A: getRecord(k1), putRecord(k2) -- reads k1 (fixing its snapshot before
+     * B's update, and registering a fine-grained conflict on k1) and then writes a
+     * different key k2 (making A's write-set non-empty, which forces A's read-set to be
+     * validated against the sequencer at commit time).
+     *
+     * Transaction B: putRecord(k1), committed in full before A attempts to commit. Since
+     * B's update to k1 lands at an address newer than A's snapshot, and A actually read
+     * k1, A's commit must be rejected with a conflict.
+     */
+    @Test
+    public void getRecordConflictsWithConcurrentUpdateOfSameKey() throws Exception {
+        PersistentCorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        //corfuTable.insert("k1", "v0");
+
+        // Transaction A begins and reads k1. This lazily fixes A's snapshot timestamp
+        // to a point before transaction B's update below, and registers a fine-grained
+        // read-conflict on k1.
+        getDefaultRuntime().getObjectsView().TXBegin();
+        corfuTable.get("k1");
+        //assertThat(corfuTable.get("k1")).isEqualTo("v0");
+
+        // Transaction B runs to completion on a separate thread -- transactional context
+        // is thread-local, so this is a transaction fully concurrent with (and committed
+        // strictly after the snapshot of) transaction A above.
+        Thread txB = new Thread(() -> {
+            getDefaultRuntime().getObjectsView().TXBegin();
+            corfuTable.insert("k1", "v1");
+            getDefaultRuntime().getObjectsView().TXEnd();
+        });
+        txB.start();
+        txB.join();
+
+        // Back in transaction A: write a different key. This makes A's write-set
+        // non-empty, which forces A's read-set (containing k1) to be validated against
+        // the sequencer when A commits.
+        corfuTable.insert("k2", "v2");
+
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> getDefaultRuntime().getObjectsView().TXEnd())
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
+    }
+
+    //@Test
+    public void putRecordConflictsWithConcurrentGetOfSameKey() throws Exception {
+        PersistentCorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+        corfuTable.insert("k1", "v1");
+
+        // Transaction B runs to completion on a separate thread -- transactional context
+        // is thread-local, so this is a transaction fully concurrent with (and committed
+        // strictly after the snapshot of) transaction A above.
+        Thread txB = new Thread(() -> {
+            getDefaultRuntime().getObjectsView().TXBegin();
+            corfuTable.get("k1");
+            corfuTable.insert("k2", "v2");
+            getDefaultRuntime().getObjectsView().TXEnd();
+        });
+        txB.start();
+        txB.join();
+
+        corfuTable.insert("k3", "v3");
+
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> getDefaultRuntime().getObjectsView().TXEnd())
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
+    }
+
+    /**
+     * Transaction A scans table T (entryStream, the equivalent of executeQuery), deletes every
+     * key the scan returned, and puts k1 into table T2. The scan fixes A's snapshot before B runs.
+     * Transaction B, on another thread, reads k1 from T2, then writes one new key to T (or to T2
+     * when bWritesToScannedTable is false), and commits in full before A tries to commit.
+     * Returns normally if A commits; A's TXEnd() throws if A aborts.
+     */
+    private void runScanDeleteVsConcurrentWriter(boolean bWritesToScannedTable) throws Exception {
+        PersistentCorfuTable<String, String> tableT = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T")
+                .open();
+        PersistentCorfuTable<String, String> tableT2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T2")
+                .open();
+
+        tableT.insert("r1", "v");
+        tableT.insert("r2", "v");
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+        // A whole-table scan: a wildcard (empty conflict set) read of T's stream.
+        List<String> scanned = tableT.entryStream()
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        assertThat(scanned).containsExactlyInAnyOrder("r1", "r2");
+        scanned.forEach(tableT::delete);
+        tableT2.insert("k1", "v1");
+
+        AtomicReference<Throwable> bFailure = new AtomicReference<>();
+        Thread txB = new Thread(() -> {
+            try {
+                getDefaultRuntime().getObjectsView().TXBegin();
+                tableT2.get("k1");
+                if (bWritesToScannedTable) {
+                    tableT.insert("new", "v");
+                } else {
+                    tableT2.insert("k2", "v");
+                }
+                getDefaultRuntime().getObjectsView().TXEnd();
+            } catch (Throwable t) {
+                bFailure.set(t);
+            }
+        });
+        txB.start();
+        txB.join();
+        assertThat(bFailure.get()).isNull();
+
+        getDefaultRuntime().getObjectsView().TXEnd();
+    }
+
+    /**
+     * B commits a new key into the table A scanned. The scan is a whole-stream read, so A's commit
+     * is resolved against T's stream tail, which B advanced past A's snapshot. A aborts with a
+     * conflict even though B never touched a key A deleted, and even though B's read of k1 (which
+     * A writes blindly) passed validation when B committed.
+     */
+    @Test
+    public void scanDeleteAbortsWhenConcurrentTxnWritesScannedTable() {
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> runScanDeleteVsConcurrentWriter(true))
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
+    }
+
+    /**
+     * Control: B only writes to T2, which A never read. A's blind put of k1 into T2 is not checked
+     * against B's read of k1, so A commits.
+     */
+    @Test
+    public void scanDeleteCommitsWhenConcurrentTxnOnlyWritesOtherTable() {
+        Assertions.assertThatCode(() -> runScanDeleteVsConcurrentWriter(false))
+                .doesNotThrowAnyException();
+    }
+
+    /**
+     * Transaction A scans T with a predicate (value equals "F1", the equivalent of executeQuery
+     * with a field filter), deletes only the matches, and puts k1 into T2. The predicate runs in
+     * client memory after entryStream() has already registered a whole-stream read, so it cannot
+     * narrow the conflict. Transaction B commits a record into T whose value does not match the
+     * predicate; A still aborts with a conflict.
+     */
+    @Test
+    public void filteredScanAbortsWhenConcurrentTxnWritesNonMatchingRecord() throws Exception {
+        PersistentCorfuTable<String, String> tableT = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T")
+                .open();
+        PersistentCorfuTable<String, String> tableT2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T2")
+                .open();
+
+        tableT.insert("r1", "F1");
+        tableT.insert("r2", "F2");
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+        List<String> matches = tableT.entryStream()
+                .filter(entry -> entry.getValue().equals("F1"))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        assertThat(matches).containsExactly("r1");
+        matches.forEach(tableT::delete);
+        tableT2.insert("k1", "v1");
+
+        AtomicReference<Throwable> bFailure = new AtomicReference<>();
+        Thread txB = new Thread(() -> {
+            try {
+                getDefaultRuntime().getObjectsView().TXBegin();
+                tableT2.get("k1");
+                tableT.insert("r3", "F2");
+                getDefaultRuntime().getObjectsView().TXEnd();
+            } catch (Throwable t) {
+                bFailure.set(t);
+            }
+        });
+        txB.start();
+        txB.join();
+        assertThat(bFailure.get()).isNull();
+
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> getDefaultRuntime().getObjectsView().TXEnd())
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
+    }
+
+    private void beginWriteAfterWrite() {
+        getDefaultRuntime().getObjectsView().TXBuild()
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
+                .begin();
+    }
+
+    /**
+     * Same scenario as getRecordConflictsWithConcurrentUpdateOfSameKey, but in a
+     * WRITE_AFTER_WRITE transaction, the type TxnContext uses. Reads are not tracked there, so the
+     * get() of k1 alone would not conflict; the put of k1 registers a write conflict on it.
+     * A (get k1, put k1, put k2) begins before B (put k1) commits, so A aborts when it commits.
+     */
+    @Test
+    public void putRecordConflictsWithConcurrentUpdateOfSameKeyWriteAfterWrite()
+            throws Exception {
+        PersistentCorfuTable<String, String> corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        //corfuTable.insert("k1", "v0");
+
+        beginWriteAfterWrite();
+        //assertThat(corfuTable.get("k1")).isEqualTo("v0");
+        corfuTable.get("k1");
+        corfuTable.insert("k1", "vA");
+
+        AtomicReference<Throwable> bFailure = new AtomicReference<>();
+        Thread txB = new Thread(() -> {
+            try {
+                beginWriteAfterWrite();
+                corfuTable.insert("k1", "v1");
+                getDefaultRuntime().getObjectsView().TXEnd();
+            } catch (Throwable t) {
+                bFailure.set(t);
+            }
+        });
+        txB.start();
+        txB.join();
+        assertThat(bFailure.get()).isNull();
+
+        corfuTable.insert("k2", "v2");
+
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> getDefaultRuntime().getObjectsView().TXEnd())
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
+    }
+
+    /**
+     * Same scenario as filteredScanAbortsWhenConcurrentTxnWritesNonMatchingRecord, but in
+     * WRITE_AFTER_WRITE transactions. The filtered scan in A is untracked, so what makes A abort
+     * is B: it reads k1 from T2, puts k1 into T2, writes a record to T, and commits first. A later
+     * puts k1 into T2, so its write set overlaps B's.
+     */
+    @Test
+    public void filteredScanAbortsWhenConcurrentTxnPutsSameKeyWriteAfterWrite() throws Exception {
+        PersistentCorfuTable<String, String> tableT = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T")
+                .open();
+        PersistentCorfuTable<String, String> tableT2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<PersistentCorfuTable<String, String>>() {})
+                .setStreamName("T2")
+                .open();
+
+        tableT.insert("r1", "F1");
+        tableT.insert("r2", "F2");
+        //tableT2.insert("k1", "v0");
+
+        beginWriteAfterWrite();
+        List<String> matches = tableT.entryStream()
+                .filter(entry -> entry.getValue().equals("F1"))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        assertThat(matches).containsExactly("r1");
+        matches.forEach(tableT::delete);
+        tableT2.insert("k1", "v1");
+
+        AtomicReference<Throwable> bFailure = new AtomicReference<>();
+        Thread txB = new Thread(() -> {
+            try {
+                beginWriteAfterWrite();
+                tableT2.get("k1");
+                tableT2.insert("k1", "vB");
+                tableT.insert("r3", "F2");
+                getDefaultRuntime().getObjectsView().TXEnd();
+            } catch (Throwable t) {
+                bFailure.set(t);
+            }
+        });
+        txB.start();
+        txB.join();
+        assertThat(bFailure.get()).isNull();
+
+        Assertions.assertThatExceptionOfType(TransactionAbortedException.class)
+                .isThrownBy(() -> getDefaultRuntime().getObjectsView().TXEnd())
+                .satisfies(e -> assertThat(e.getAbortCause()).isEqualTo(AbortCause.CONFLICT));
     }
 }
