@@ -1,5 +1,6 @@
 # ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")
 
+
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Github Actions](https://github.com/CorfuDB/CorfuDB/actions/workflows/pull_request.yml/badge.svg)](https://github.com/CorfuDB/CorfuDB/actions)
 [![Codacy Badge](https://app.codacy.com/project/badge/Coverage/48cc2949fabb427fbee7bfca9b872561)](https://www.codacy.com/gh/CorfuDB/CorfuDB/dashboard?utm_source=github.com&utm_medium=referral&utm_content=CorfuDB/CorfuDB&utm_campaign=Badge_Coverage)
