@@ -88,13 +88,13 @@ public class LivenessUpdaterIT extends AbstractIT {
             Assert.fail("Transaction Failed due to " + e.getStackTrace());
         }
 
-        livenessUpdater.updateLiveness(tableNameBuilder);
+        livenessUpdater.setCurrentTable(tableNameBuilder);
         try {
             TimeUnit.SECONDS.sleep(interval.getSeconds());
         } catch (InterruptedException e) {
             System.out.println("Sleep interrupted: " + e);
         }
-        livenessUpdater.notifyOnSyncComplete();
+        livenessUpdater.unsetCurrentTable();
 
         try (TxnContext txn = store.txn(CORFU_SYSTEM_NAMESPACE)) {
             CorfuCompactorManagement.ActiveCPStreamMsg newStatus = (CorfuCompactorManagement.ActiveCPStreamMsg)

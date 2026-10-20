@@ -186,7 +186,9 @@ public class CheckpointWriter<T extends ICorfuTable<?, ?>> {
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
 
-            livenessUpdater.ifPresent(LivenessUpdater::notifyOnSyncComplete);
+            // After the table has been synced, stop updating heartbeat for it.
+            // The liveness will start to be checked via checkpoint stream tail.
+            livenessUpdater.ifPresent(LivenessUpdater::unsetCurrentTable);
 
             startCheckpoint(snapshotTimestamp);
             int entryCount = appendObjectState(entries);
