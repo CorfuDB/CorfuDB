@@ -146,23 +146,16 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
      */
     private void processUpdatesShadowStream(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid,
                                             UUID snapshotSyncId) {
-        CorfuStoreMetadata.Timestamp timestamp;
-
+        CorfuStoreMetadata.Timestamp ts = batchingData(smrEntries, shadowStreamUuid);
         try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-            updateLog(txn, smrEntries, shadowStreamUuid);
             logReplicationMetadataManager.appendUpdate(txn,
                     LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, currentSeqNum);
-            timestamp = txn.commit();
-        }
-
-        if (!snapshotSyncStartMarker.isPresent()) {
-            try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-                logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
-                txn.commit();
+            if (!snapshotSyncStartMarker.isPresent()) {
+                logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, ts);
+                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, ts.getSequence()));
             }
+            txn.commit();
         }
-
         log.debug("Process entries total={}, set sequence number {}", smrEntries.size(), currentSeqNum);
     }
 
@@ -328,48 +321,7 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (streamId.equals(REGISTRY_TABLE_ID)) {
             smrEntries = filterRegistryTableEntries(smrEntries);
         }
-
-        List<SMREntry> buffer = new ArrayList<>();
-        long bufferSize = 0;
-        int numBatches = 1;
-
-        for (SMREntry smrEntry : smrEntries) {
-            // Apply all SMR entries in a single transaction as long as it does not exceed the max write size(25MB).
-            // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
-            // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
-            // no de-duplication on these updates will occur.  As a result, the transaction size can be large.
-            // Although it is within the maxWriteSize limit, deserializing these entries to read the table can cause an
-            // OOM on applications running with a small memory footprint.  So for such tables, introduce an
-            // additional limit of max number of entries(50 by default) applied in a single transaction.  This
-            // algorithm is in line with the limits imposed in Compaction and Restore workflows.
-            if (bufferSize + smrEntry.getSerializedSize() >
-                    logReplicationMetadataManager.getRuntime().getParameters().getMaxWriteSize() ||
-                        maxEntriesLimitReached(streamId, buffer)) {
-                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                    updateLog(txnContext, buffer, streamId);
-                    CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.debug("Applied shadow stream partially for stream {} " +
-                        "on address :: {}.  {} SMR entries written", streamId,
-                        ts.getSequence(), buffer.size());
-                    buffer.clear();
-                    buffer.add(smrEntry);
-                    bufferSize = smrEntry.getSerializedSize();
-                    numBatches++;
-                }
-            } else {
-                buffer.add(smrEntry);
-                bufferSize += smrEntry.getSerializedSize();
-            }
-        }
-        if (!buffer.isEmpty()) {
-            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                updateLog(txnContext, buffer, streamId);
-                txnContext.commit();
-            }
-        }
-        log.debug("Completed applying updates to stream {}.  {} " +
-            "entries applied across {} transactions.  ", streamId,
-            smrEntries.size(), numBatches);
+        batchingData(smrEntries, streamId);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
@@ -481,6 +433,65 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
+
+    private CorfuStoreMetadata.Timestamp batchingData(List<SMREntry> smrEntries, UUID streamId) {
+        CorfuStoreMetadata.Timestamp ts = null;
+        List<SMREntry> buffer = new ArrayList<>();
+        long bufferSize = 0;
+        int numBatches = 1;
+
+        for (SMREntry smrEntry : smrEntries) {
+            // Apply all SMR entries in a single transaction as long as it does not exceed maxApplySize(a fraction of
+            // the runtime's max uncompressed write size(100 MB by default).  The fraction is added as a buffer to
+            // account for extra bytes added during LogData.serialize()).
+            // It was observed that special streams(ProtobufDescriptor table), can get a lot of updates, especially
+            // due to schema updates during an upgrade.  If the table was not checkpointed and trimmed on the Source,
+            // no de-duplication on these updates will occur.  As a result, the transaction size can be large.
+            // Although it is within the maxApplySize limit, deserializing these entries to read the table can cause an
+            // OOM on applications running with a small memory footprint.  So for such tables, introduce an
+            // additional limit of max number of entries(50 by default) applied in a single transaction.  This
+            // algorithm is in line with the limits imposed in Compaction and Restore workflows.
+            if (bufferSize + smrEntry.getSerializedSize() > logReplicationMetadataManager.getRuntime().getParameters().getMaxWriteSize()
+                    || maxEntriesLimitReached(streamId,
+                    buffer)) {
+                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                    updateLog(txnContext, buffer, streamId);
+                    if (ts == null) {
+                        ts = txnContext.commit();
+                    }
+                    else {
+                        txnContext.commit();
+                    }
+                    log.debug("Applied shadow stream partially for stream {} on address :: {}.  {} SMR entries written",
+                            streamId, ts.getSequence(), buffer.size());
+                    buffer.clear();
+                    buffer.add(smrEntry);
+                    bufferSize = smrEntry.getSerializedSize();
+                    numBatches++;
+                }
+            } else {
+                buffer.add(smrEntry);
+                bufferSize += smrEntry.getSerializedSize();
+            }
+        }
+        if (!buffer.isEmpty()) {
+            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                updateLog(txnContext, buffer, streamId);
+                if (ts == null) {
+                    ts = txnContext.commit();
+                }
+                else {
+                    txnContext.commit();
+                }
+            }
+        }
+
+        log.debug("Completed applying updates to stream {}.  {} entries applied across {} transactions.  ", streamId,
+                smrEntries.size(), numBatches);
+
+        return ts;
+    }
+
 
     enum Phase {
         TRANSFER_PHASE,
