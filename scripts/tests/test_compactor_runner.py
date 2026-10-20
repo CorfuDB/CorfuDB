@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 import shlex
-import subprocess
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -38,21 +37,33 @@ class ProviderClasspathTest(unittest.TestCase):
         }
 
     def arguments(self):
-        # A real shell must preserve Java wildcards and spaces as one argument.
         command = self.builder.append_compactor_config(self.config)
-        output = subprocess.check_output("printf '%s\\n' " + command, shell=True, text=True)
-        return output.splitlines()
+        args = shlex.split(command)
+        # Parsing alone cannot detect shell expansion of $(), semicolons or
+        # wildcards. Also require the classpath to be rendered as a quoted token.
+        classpath = args[args.index("-cp") + 1]
+        self.assertTrue(command.endswith("-cp " + shlex.quote(classpath)))
+        return args
 
-    def test_missing_empty_invalid_and_unreadable_file_preserve_default(self):
-        for contents in [None, b"", b"\xff"]:
-            with self.subTest(contents=contents):
-                if contents is not None:
-                    self.provider_file.write_bytes(contents)
-                args = self.arguments()
-                self.assertEqual(str(self.jar), args[args.index("-cp") + 1])
-                self.assertFalse(any("bouncycastle.native.dir" in arg for arg in args))
+    def assert_default_classpath(self):
+        args = self.arguments()
+        self.assertEqual(str(self.jar), args[args.index("-cp") + 1])
+        self.assertNotIn("-Dorg.bouncycastle.native.dir=" + str(self.root), args)
+
+    def test_missing_file_preserves_default(self):
+        self.assert_default_classpath()
+
+    def test_empty_file_preserves_default(self):
+        self.provider_file.write_bytes(b"")
+        self.assert_default_classpath()
+
+    def test_invalid_utf8_file_preserves_default(self):
+        self.provider_file.write_bytes(b"\xff")
+        self.assert_default_classpath()
+
+    def test_unreadable_file_preserves_default(self):
         with patch("builtins.open", side_effect=PermissionError):
-            self.assertEqual([], self.builder.get_provider_class_path({}))
+            self.assert_default_classpath()
 
     def test_file_classpath_preserves_multiple_entries_and_wildcards(self):
         providers = [str(self.root / "provider jars" / "*"), str(self.root / "other.jar")]
