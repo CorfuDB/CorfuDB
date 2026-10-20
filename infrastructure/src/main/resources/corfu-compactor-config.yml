@@ -8,6 +8,9 @@ GCParameters:
   NumberOfGCLogFiles: 10
 
 ConfigFiles:
+  # Optional provider jars (classpath string or list). Defaults to the contents of
+  # /usr/lib/jvm/BC_CLASSPATH when present. Use [] to disable that fallback.
+  # ProviderClassPath: /path/to/security/providers/*
   CompactorLogbackPath: /usr/share/corfu/conf/compactor-logback.prod.xml
   TempDir: /tmp
   ClassPath: /usr/share/corfu/lib/corfudb-tools*jar
