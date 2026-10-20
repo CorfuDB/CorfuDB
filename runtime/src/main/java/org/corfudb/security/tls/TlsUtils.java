@@ -4,9 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import javax.net.ssl.SSLException;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +13,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
-import java.util.function.Consumer;
 
 /**
  * Utilities for common options parsing and session configuration for
@@ -43,12 +40,9 @@ public class TlsUtils {
 
         String certStorePassword = getKeyStorePassword(certStoreCfg.getPasswordFile());
 
-        FileInputStream inputStream = null;
         try {
-            inputStream = new FileInputStream(certStore.toFile());
-            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            keyStore.load(inputStream, certStorePassword.toCharArray());
-            return keyStore;
+            // Probe each existing file independently of the JVM default keystore type.
+            return KeyStore.getInstance(certStore.toFile(), certStorePassword.toCharArray());
         } catch (IOException e) {
             String errorMessage = String.format("Unable to read key store file %s.", certStore);
             throw new SSLException(errorMessage, e);
@@ -56,17 +50,13 @@ public class TlsUtils {
             String errorMessage = String.format("Unable to read certificates in key store file %s.", certStore);
             throw new SSLException(errorMessage, e);
         } catch (NoSuchAlgorithmException e) {
-            String errorMessage = String.format("No support for algorithm [%s] in key store %s.",
-                    KeyStore.getDefaultType(), certStore);
+            String errorMessage = String.format("Unsupported algorithm in key store %s.", certStore);
             throw new SSLException(errorMessage, e);
         } catch (KeyStoreException e) {
-            String errorMessage = String.format("Error creating a key store object of algorithm [%s].",
-                    KeyStore.getDefaultType());
+            String errorMessage = String.format("Unable to detect key store format for %s.", certStore);
             throw new SSLException(errorMessage, e);
-        } finally {
-            Consumer<Exception> emptyExceptionHandler = ex -> {
-            };
-            IOUtils.closeQuietly(inputStream, emptyExceptionHandler);
+        } catch (IllegalArgumentException e) {
+            throw new SSLException("Unable to read key store file " + certStore + ".", e);
         }
     }
 
