@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import javax.net.ssl.SSLException;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +23,7 @@ import java.security.cert.CertificateException;
 @Slf4j
 public class TlsUtils {
     public static final String PASSWORD_FILE_NOT_FOUND_ERROR = "Password file not found";
+    private static final int JKS_MAGIC = 0xFEEDFEED;
 
     private TlsUtils() {
         // prevent instantiation of this class
@@ -40,9 +43,16 @@ public class TlsUtils {
 
         String certStorePassword = getKeyStorePassword(certStoreCfg.getPasswordFile());
 
-        try {
-            // Probe each existing file independently of the JVM default keystore type.
-            return KeyStore.getInstance(certStore.toFile(), certStorePassword.toCharArray());
+        try (DataInputStream input = new DataInputStream(
+                new BufferedInputStream(Files.newInputStream(certStore)))) {
+            // Detect the format ourselves so provider file probing cannot override provider order.
+            // Files without the JKS header are validated by the PKCS12 loader.
+            input.mark(Integer.BYTES);
+            String type = input.readInt() == JKS_MAGIC ? "JKS" : "PKCS12";
+            input.reset();
+            KeyStore keyStore = KeyStore.getInstance(type);
+            keyStore.load(input, certStorePassword.toCharArray());
+            return keyStore;
         } catch (IOException e) {
             String errorMessage = String.format("Unable to read key store file %s.", certStore);
             throw new SSLException(errorMessage, e);
@@ -53,7 +63,7 @@ public class TlsUtils {
             String errorMessage = String.format("Unsupported algorithm in key store %s.", certStore);
             throw new SSLException(errorMessage, e);
         } catch (KeyStoreException e) {
-            String errorMessage = String.format("Unable to detect key store format for %s.", certStore);
+            String errorMessage = String.format("Unable to create key store for %s.", certStore);
             throw new SSLException(errorMessage, e);
         } catch (IllegalArgumentException e) {
             throw new SSLException("Unable to read key store file " + certStore + ".", e);
