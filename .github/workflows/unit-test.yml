@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Run Python launcher tests
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
