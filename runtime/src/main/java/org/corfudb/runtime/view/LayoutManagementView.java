@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
@@ -34,11 +35,9 @@ import static org.corfudb.util.Utils.getLogTail;
 @Slf4j
 public class LayoutManagementView extends AbstractView {
 
-    public LayoutManagementView(@NonNull CorfuRuntime runtime) {
-        super(runtime);
-    }
-
-    private volatile long prepareRank = 1L;
+    private static final long CURRENT_RANK_NONE = 0L;
+    private static final long NEXT_RANK_INCLUSIVE_ORIGIN = 1;
+    private static final long NEXT_RANK_EXCLUSIVE_BOUND = 6;
 
     private final ReentrantLock recoverSequencerLock = new ReentrantLock();
 
@@ -49,7 +48,12 @@ public class LayoutManagementView extends AbstractView {
     private final AtomicReference<CompletableFuture<Boolean>> sequencerRecoveryFuture
             = new AtomicReference<>(CompletableFuture.completedFuture(true));
 
+    private volatile long prepareRank = nextRank(CURRENT_RANK_NONE);
     private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;
+
+    public LayoutManagementView(@NonNull CorfuRuntime runtime) {
+        super(runtime);
+    }
 
     /**
      * On restart, if MANAGEMENT_LAYOUT exists in the local datastore.
@@ -59,13 +63,12 @@ public class LayoutManagementView extends AbstractView {
      * @return True if the cluster was recovered, False otherwise
      */
     public boolean attemptClusterRecovery(Layout recoveryLayout) {
-
         try {
             Layout layout = new Layout(recoveryLayout);
             sealEpoch(layout);
             attemptConsensus(layout);
         } catch (Exception e) {
-            log.error("Error: recovery: {}.", e);
+            log.error("Error: recovery:", e);
             return false;
         }
         return true;
@@ -359,6 +362,24 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
+     * Choose the next rank, given the current rank.
+     *
+     * A rank e is any member of the set of ranks E.
+     * E is any infinite totally ordered set such that
+     * the operators <, > and = are always defined.
+     *
+     * See UCAM-CL-TR-935 ISSN 1476-2986 Definition 2.
+     * .
+     * @param currentRank current exclusive rank from which
+     *                    the next rank should be generated.
+     * @return the next rank
+     */
+    public static long nextRank(long currentRank) {
+        return currentRank + ThreadLocalRandom.current()
+                .nextLong(NEXT_RANK_INCLUSIVE_ORIGIN, NEXT_RANK_EXCLUSIVE_BOUND);
+    }
+
+    /**
      * Attempt consensus.
      *
      * @param layout Layout to propose.
@@ -370,12 +391,12 @@ public class LayoutManagementView extends AbstractView {
         try {
             Runnable consensusRunnable = () -> runtime.getLayoutView().updateLayout(layout, prepareRank);
             MicroMeterUtils.time(consensusRunnable, "layout-management-view.consensus");
-            prepareRank = 1L;
+            prepareRank = nextRank(CURRENT_RANK_NONE);;
         } catch (OutrankedException oe) {
             // Update rank since outranked.
             log.error("Conflict in updating layout by attemptConsensus:", oe);
             // Update rank to be able to outrank other competition and complete paxos.
-            prepareRank = oe.getNewRank() + 1;
+            prepareRank = nextRank(oe.getNewRank());;
             throw oe;
         }
 
