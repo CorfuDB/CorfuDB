@@ -23,6 +23,7 @@ import logging
 import netifaces
 import os
 import os.path
+import shlex
 from subprocess import check_call, check_output, STDOUT
 import time
 import yaml
@@ -38,6 +39,17 @@ POD_NAMESPACE = "POD_NAMESPACE"
 IN_MEM_MIN_XMX = 512
 DISK_BACKED_MIN_XMX = 150
 DISK_BACKED_MAX_XMX = 1500
+BC_CLASSPATH_FILE = "/usr/lib/jvm/BC_CLASSPATH"
+
+
+def read_security_provider_classpath():
+    """Read the optional appliance provider classpath without affecting other deployments."""
+    try:
+        with open(BC_CLASSPATH_FILE) as provider_file:
+            return provider_file.read().strip()
+    except (OSError, UnicodeDecodeError):
+        return ""
+
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -80,6 +92,19 @@ class CommandBuilder(object):
         except Exception as ex:
             return COMPACTOR_JVM_XMX
 
+    def get_provider_class_path(self, config_files):
+        """Use a YAML override or the appliance classpath, preserving Java wildcards.
+
+        An explicit empty override disables the appliance fallback. Strings may
+        contain multiple entries separated by os.pathsep; lists are also accepted.
+        """
+        configured = config_files.get("ProviderClassPath", None)
+        if configured is None:
+            configured = read_security_provider_classpath()
+        if isinstance(configured, str):
+            return [entry for entry in configured.split(os.pathsep) if entry]
+        return list(configured)
+
     def append_compactor_config(self, compactor_config):
         GCParameters = compactor_config["GCParameters"]
         cmd = []
@@ -109,8 +134,13 @@ class CommandBuilder(object):
             print("Can't find the corfudb-tools-shaded*jar")
             quit()
 
+        provider_class_path = self.get_provider_class_path(ConfigFiles)
+        if provider_class_path:
+            cmd.append(shlex.quote("-Dorg.bouncycastle.native.dir=" + ConfigFiles["TempDir"]))
+
+        # shell=True must pass wildcards and spaces intact to the Java launcher.
         cmd.append("-cp")
-        cmd.append(corfudb_tool_shaded_jar)
+        cmd.append(shlex.quote(os.pathsep.join([corfudb_tool_shaded_jar] + provider_class_path)))
 
         return " ".join(cmd)
 
