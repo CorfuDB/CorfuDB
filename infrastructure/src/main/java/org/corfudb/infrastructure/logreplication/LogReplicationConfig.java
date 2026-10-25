@@ -31,6 +31,29 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds
     public static final int DEFAULT_TIMEOUT_MS = 5000;
 
+    // Snapshot lease policy of the sink (see SnapshotLeaseCoordinator). These are starting values:
+    // size the budget for the largest snapshot the deployment must carry, using the
+    // logreplication.snapshot.lease.phase.duration and ...budget.remaining.ms metrics.
+
+    // Total budget of one snapshot attempt on the sink: preparation, transfer, apply and apply
+    // retries. It is absolute. Progress, retries, duplicate starts and leadership changes never
+    // renew it, which is what bounds how long one attempt can keep the checkpointer frozen.
+    public static final long DEFAULT_SNAPSHOT_LEASE_DURATION_MS = 90L * 60L * 1000L;
+
+    // Minimum time protection stays released before the sink may admit the next snapshot.
+    public static final long DEFAULT_SNAPSHOT_LEASE_MIN_RECOVERY_MS = 60L * 1000L;
+
+    // How long cleanup or recovery may take before SNAPSHOT_RECOVERY_BLOCKED is raised.
+    public static final long DEFAULT_SNAPSHOT_LEASE_ALARM_MS = 30L * 60L * 1000L;
+
+    // How long an admitted attempt may go without accepted snapshot traffic before the sink
+    // abandons it, so that a source which crashed or failed over does not cost the whole budget.
+    // It must comfortably exceed the source's resend cadence times its retry count.
+    public static final long DEFAULT_SNAPSHOT_LEASE_TRANSFER_IDLE_MS = 5L * 60L * 1000L;
+
+    // Retries of a transiently failing apply. They all run inside the same attempt budget.
+    public static final int DEFAULT_SNAPSHOT_LEASE_MAX_APPLY_RETRIES = 10;
+
     // Log Replication default max number of messages generated at the active cluster for each batch
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 5;
 

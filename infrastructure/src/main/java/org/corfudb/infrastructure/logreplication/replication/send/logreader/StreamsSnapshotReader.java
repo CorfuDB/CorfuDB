@@ -53,7 +53,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     /**
      * The max size of data for SMR entries in data message.
      */
-    private final int maxDataSizePerMsg;
+    private int maxDataSizePerMsg;
 
     /**
      * The max total size of the message.
@@ -311,6 +311,17 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    @Override
+    public void setSnapshotBatchSizeHint(int maxWriteSize) {
+        // Keep the existing envelope reserve and transport ceiling. Source
+        // transactions remain indivisible: this bounds their aggregation, not
+        // an individual transaction whose serialized/compressed size is too big.
+        maxDataSizePerMsg = maxWriteSize > 0
+                ? (int) Math.min(config.getMaxDataSizePerMsg(), Math.max(1L,
+                        maxWriteSize * LogReplicationConfig.DATA_FRACTION_PER_MSG / 100L))
+                : config.getMaxDataSizePerMsg();
     }
 
     private Optional<DistributionSummary> configureMessageSizeDistributionSummary() {

@@ -9,6 +9,9 @@ import org.corfudb.infrastructure.logreplication.replication.send.LogReplication
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationConfigManager;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Outcome;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord.Phase;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -29,6 +32,12 @@ import java.util.concurrent.TimeoutException;
  */
 @Slf4j
 public class NegotiatingState implements LogReplicationRuntimeState {
+
+    /**
+     * A failed negotiation is retried at once. When the sink is reachable but simply not ready to
+     * negotiate, that would poll it in a tight loop, so those rejections pause first.
+     */
+    private static final long SINK_NOT_READY_RETRY_DELAY_MS = 1000;
 
     private final CorfuLogReplicationRuntime fsm;
 
@@ -134,7 +143,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
                 CorfuMessage.RequestPayloadMsg payload =
                         CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
-                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
+                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder()
+                                        .setSupportsSnapshotLifecycle(true).build()).build();
                 CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
                         .sendRequestAndGetCompletable(payload, remoteLeader);
                 LogReplicationMetadataResponseMsg response =
@@ -162,6 +172,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         }
     }
 
+    private void pauseBeforeRetry() {
+        try {
+            TimeUnit.MILLISECONDS.sleep(SINK_NOT_READY_RETRY_DELAY_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     /**
      * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the standby site.
      *
@@ -175,12 +193,34 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
         /*
+         * Snapshot sync is governed by the sink's snapshot lease. The sink cluster is always upgraded
+         * before the source, so a sink that does not report a lease is a version this source cannot
+         * replicate to: there is no fallback protocol, and replication stays down until it is upgraded.
+         */
+        if (!negotiationResponse.hasSnapshotLease()) {
+            pauseBeforeRetry();
+            throw new LogReplicationNegotiationException("The sink does not support the snapshot lease protocol");
+        }
+
+        /*
+         * The sink publishes its lease once its leader has initialized it. Before that the status it
+         * serves is a placeholder, and deciding on it could force a snapshot sync that is not needed.
+         */
+        SnapshotSyncLeaseRecord lease = negotiationResponse.getSnapshotLease();
+        if (lease.getSchemaVersion() == 0 || lease.getPhase() == Phase.NOT_READY) {
+            pauseBeforeRetry();
+            throw new LogReplicationNegotiationException("The sink has not initialized its snapshot lease yet");
+        }
+
+        /*
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
          */
         if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+            // It resolves once discovery catches up on the other side: do not ask again at once.
+            pauseBeforeRetry();
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -191,7 +231,17 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
+            pauseBeforeRetry();
             throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        if (lease.getOutcome() != Outcome.COMPLETED) {
+            // An attempt is in flight or was abandoned. The snapshot sender negotiates admission with
+            // the sink, or follows an apply that is already durable there. The timestamp triple below
+            // cannot identify an abandoned attempt or the recovery the sink still owes.
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
+                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
+            return;
         }
 
         /*

@@ -153,6 +153,9 @@ public class CompactorServiceUnitTest {
         verify(leaderServices, timeout(TIMEOUT.toMillis())).validateLiveness();
         verify(leaderServices, timeout(TIMEOUT.toMillis())).initCompactionCycle();
         verify(invokeCheckpointingJvm, timeout(TIMEOUT.toMillis())).shutdown();
+        // A freeze keeps a cycle from starting, so the leader watches for one on every pass,
+        // whether or not it triggered a cycle.
+        verify(leaderServices, timeout(TIMEOUT.toMillis()).atLeast(2)).checkForProlongedFreeze(anyLong());
     }
 
     @Test

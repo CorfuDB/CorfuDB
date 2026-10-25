@@ -61,6 +61,14 @@ public class InLogEntrySyncState implements LogReplicationState {
                 ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SYNC_CANCEL:
+                if (event.getMetadata().getSnapshotAttemptId() != null) {
+                    // Bound to a snapshot attempt: it is about that attempt, and that phase is over.
+                    // Log entry sync inherits the sync id of the snapshot sync that preceded it, so
+                    // without this a late cancellation of that attempt would restart a full snapshot.
+                    log.debug("Ignoring the cancellation of snapshot attempt {} during log entry sync",
+                            event.getMetadata().getSnapshotAttemptId());
+                    return this;
+                }
                 // If cancel was intended for current log entry sync task, cancel and transition to new state
                 // In the case of log entry sync, cancel is caused by an encountered trimmed exception or any
                 // other exception while reading/sending.

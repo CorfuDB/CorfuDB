@@ -74,6 +74,13 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
         return response.getPayload().getLrMetadataResponse();
     }
 
+    @ResponseHandler(type = PayloadCase.LR_BUSY_RESPONSE)
+    // ClientResponseHandler discovers this method reflectively and requires the full Handler signature.
+    @SuppressWarnings({"PMD.UnusedPrivateMethod", "PMD.UnusedFormalParameter"})
+    private static Object handleBusy(ResponseMsg response, ChannelHandlerContext ctx, IClientRouter router) {
+        throw new org.corfudb.runtime.exceptions.LogReplicationBusyException(response.getPayload().getLrBusyResponse());
+    }
+
     @ResponseHandler(type = PayloadCase.LR_LEADERSHIP_RESPONSE)
     private static Object handleLogReplicationQueryLeadershipResponse(@Nonnull ResponseMsg response,
                                                                       @Nonnull ChannelHandlerContext ctx,

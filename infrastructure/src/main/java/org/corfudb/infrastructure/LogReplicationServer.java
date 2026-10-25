@@ -9,8 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.LogReplication.LogReplicationBusyResponseMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.exceptions.LogReplicationBusyException;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -20,7 +24,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLeadershipLoss;
@@ -54,6 +59,18 @@ public class LogReplicationServer extends AbstractServer {
      */
     private static final int MAX_EXECUTOR_QUEUE_SIZE = 5;
     private final ExecutorService executor;
+
+    /*
+     * Bounds the LR_ENTRY requests that are queued or running. A request beyond it is answered
+     * with a typed BUSY reply instead of being dropped, so the source never has to infer
+     * backpressure from a timeout.
+     */
+    private final Semaphore dataCapacity = new Semaphore(MAX_EXECUTOR_QUEUE_SIZE);
+
+    private static final long BUSY_RETRY_AFTER_MS = 2000;
+
+    // A source that predates the snapshot lease is told so once per episode, not on every poll.
+    private final AtomicBoolean unsupportedSourceReported = new AtomicBoolean(false);
 
     @Getter
     private final LogReplicationMetadataManager metadataManager;
@@ -93,14 +110,45 @@ public class LogReplicationServer extends AbstractServer {
 
     /* ************ Override Methods ************ */
 
+    /**
+     * Control-plane requests (leadership and status) are answered on the calling I/O thread: both
+     * handlers only read volatile state and a cached, already committed status, so they never block
+     * and can never queue behind a slow write. Only LR_ENTRY, whose handler runs down to the actual
+     * log write, is handed to the executor.
+     */
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        if (((ThreadPoolExecutor)executor).getQueue().size() < MAX_EXECUTOR_QUEUE_SIZE) {
-            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
-        } else {
-            log.warn("Server request queue at capacity ({}), dropping message {}",
-                    MAX_EXECUTOR_QUEUE_SIZE, req.getHeader().getRequestId());
+        if (req.getPayload().getPayloadCase() != PayloadCase.LR_ENTRY) {
+            getHandlerMethods().handle(req, ctx, r);
+            return;
         }
+        if (!dataCapacity.tryAcquire()) {
+            sendBusy(req, ctx, r, busy(LogReplicationBusyResponseMsg.Reason.OVERLOADED));
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    getHandlerMethods().handle(req, ctx, r);
+                } finally {
+                    dataCapacity.release();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            dataCapacity.release();
+            sendBusy(req, ctx, r, busy(LogReplicationBusyResponseMsg.Reason.OVERLOADED));
+        }
+    }
+
+    private LogReplicationBusyResponseMsg busy(LogReplicationBusyResponseMsg.Reason reason) {
+        return LogReplicationBusyResponseMsg.newBuilder().setReason(reason)
+                .setSnapshotLease(sinkManager.getSnapshotLease()).setRetryAfterMs(BUSY_RETRY_AFTER_MS).build();
+    }
+
+    private void sendBusy(RequestMsg request, ChannelHandlerContext ctx, IServerRouter router,
+                          LogReplicationBusyResponseMsg busy) {
+        router.sendResponse(getResponseMsg(getHeaderMsg(request.getHeader()),
+                ResponsePayloadMsg.newBuilder().setLrBusyResponse(busy).build()), ctx);
     }
 
     @Override
@@ -128,8 +176,13 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isStandby.get() && isLeader(request, ctx, router, true)) {
             // Forward the received message to the Sink Manager for apply
-            LogReplicationEntryMsg ack =
-                    sinkManager.receive(request.getPayload().getLrEntry());
+            LogReplicationEntryMsg ack;
+            try {
+                ack = sinkManager.receive(request.getPayload().getLrEntry());
+            } catch (LogReplicationBusyException e) {
+                sendBusy(request, ctx, router, e.getResponse());
+                return;
+            }
 
             if (ack != null) {
                 long ts = ack.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_REPLICATED) ?
@@ -163,21 +216,34 @@ public class LogReplicationServer extends AbstractServer {
     private void handleMetadataRequest(@Nonnull RequestMsg request,
                                        @Nonnull ChannelHandlerContext ctx,
                                        @Nonnull IServerRouter router) {
-        log.info("Log Replication Metadata Request received by Server.");
+        log.debug("Log Replication Metadata Request received by Server.");
 
-        if (isLeader(request, ctx, router, false)) {
-            LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
-            ResponseMsg response = metadataMgr.getMetadataResponse(getHeaderMsg(request.getHeader()));
-            log.info("Send Metadata response :: {}", TextFormat.shortDebugString(response.getPayload()));
-            router.sendResponse(response, ctx);
-
-            // If a snapshot apply is pending, start (if not started already)
-            if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
-                sinkManager.resumeSnapshotApply();
-            }
-        } else {
+        if (!isLeader(request, ctx, router, false)) {
             log.warn("Dropping metadata request as this node is not the leader.");
+            return;
         }
+        if (!request.getPayload().getLrMetadataRequest().getSupportsSnapshotLifecycle()) {
+            // The source predates the snapshot lease. It cannot decode this reply and will keep
+            // retrying its negotiation; replication resumes once the source cluster is upgraded.
+            if (unsupportedSourceReported.compareAndSet(false, true)) {
+                log.warn("Rejecting a source that does not support the snapshot lease protocol. Replication "
+                        + "stays paused until the source cluster is upgraded.");
+            }
+            sendBusy(request, ctx, router, busy(LogReplicationBusyResponseMsg.Reason.UNSUPPORTED_PROTOCOL));
+            return;
+        }
+        unsupportedSourceReported.set(false);
+        // The lease coordinator publishes this committed view once per second, independently of
+        // source polls, so this handler never reads the store.
+        LogReplicationMetadataResponseMsg status = metadataManager.getCachedSnapshotStatus();
+        if (sinkManager.getSnapshotLease().getPhase() == SnapshotSyncLeaseRecord.Phase.NOT_READY) {
+            // This node has not (re)acquired the lease yet. What it cached while it last led may be
+            // stale, because another node may have led in between: report the lease as not ready, so
+            // that the source asks again instead of deciding on it.
+            status = status.toBuilder().setSnapshotLease(SnapshotSyncLeaseRecord.getDefaultInstance()).build();
+        }
+        router.sendResponse(getResponseMsg(getHeaderMsg(request.getHeader()), ResponsePayloadMsg.newBuilder()
+                .setLrMetadataResponse(status).build()), ctx);
     }
 
     /**
@@ -203,11 +269,6 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     /* ************ Private / Utility Methods ************ */
-
-    private boolean isSnapshotApplyPending(LogReplicationMetadataManager metadataMgr) {
-        return (metadataMgr.getLastStartedSnapshotTimestamp() == metadataMgr.getLastTransferredSnapshotTimestamp()) &&
-                metadataMgr.getLastTransferredSnapshotTimestamp() > metadataMgr.getLastAppliedSnapshotTimestamp();
-    }
 
     /**
      * Verify if current node is still the lead receiving node.
@@ -246,6 +307,7 @@ public class LogReplicationServer extends AbstractServer {
     /* ************ Public Methods ************ */
 
     public synchronized void setLeadership(boolean leader) {
+        sinkManager.setLeadership(leader);
         isLeader.set(leader);
     }
 
@@ -255,9 +317,16 @@ public class LogReplicationServer extends AbstractServer {
 
     public synchronized void setActive(boolean active) {
         isActive.set(active);
+        updateSinkRole();
     }
 
     public synchronized void setStandby(boolean standby) {
         isStandby.set(standby);
+        updateSinkRole();
+    }
+
+    /** At startup only the role a cluster has is set, so the sink role follows from both flags. */
+    private void updateSinkRole() {
+        sinkManager.setSinkRole(isStandby.get() && !isActive.get());
     }
 }
