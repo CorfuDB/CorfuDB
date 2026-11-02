@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.health.Issue;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
@@ -31,10 +32,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_RECOVERY_TASK_FAILED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_TASK_FAILED;
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
@@ -400,5 +406,45 @@ public class OrchestratorTest {
 
         // Verify that run() was invoked with the newly created workflow.
         verify(orchestrator).run(eq(mockWorkflow), anyInt());
+    }
+
+    /**
+     * Test that the health issue that is reported for a failed workflow depends on the type of the
+     * workflow. A failure of a recovery workflow (HEAL_NODE, RESTORE_REDUNDANCY_MERGE_SEGMENTS) is
+     * also resolved by the failure detector once nothing is left to recover, whereas a failure of a
+     * workflow that was explicitly requested (ADD_NODE, REMOVE_NODE, FORCE_REMOVE_NODE) is resolved
+     * only by a later successful workflow, so that it stays visible to the operator.
+     */
+    @Test
+    public void testWorkflowFailedIssueDependsOnWorkflowType() {
+        final String description = "Failed to execute action SomeAction for workflow SOME_WORKFLOW";
+
+        List<IWorkflow> recoveryWorkflows = Arrays.asList(
+                new HealNodeWorkflow(new HealNodeRequest(ENDPOINT_1, true, false, true, 0)),
+                new RestoreRedundancyMergeSegmentsWorkflow(
+                        new RestoreRedundancyMergeSegmentsRequest(ENDPOINT_1)));
+
+        for (IWorkflow workflow : recoveryWorkflows) {
+            assertTrue(workflow.getName(), workflow.isRecoveryWorkflow());
+
+            Issue issue = Orchestrator.workflowFailedIssue(workflow, description);
+            assertEquals(ORCHESTRATOR, issue.getComponent());
+            assertEquals(ORCHESTRATOR_RECOVERY_TASK_FAILED, issue.getIssueId());
+            assertEquals(description, issue.getDescription());
+        }
+
+        List<IWorkflow> requestedWorkflows = Arrays.asList(
+                new AddNodeWorkflow(new AddNodeRequest(ENDPOINT_1)),
+                new RemoveNodeWorkflow(new RemoveNodeRequest(ENDPOINT_1)),
+                new ForceRemoveWorkflow(new ForceRemoveNodeRequest(ENDPOINT_1)));
+
+        for (IWorkflow workflow : requestedWorkflows) {
+            assertFalse(workflow.getName(), workflow.isRecoveryWorkflow());
+
+            Issue issue = Orchestrator.workflowFailedIssue(workflow, description);
+            assertEquals(ORCHESTRATOR, issue.getComponent());
+            assertEquals(ORCHESTRATOR_TASK_FAILED, issue.getIssueId());
+            assertEquals(description, issue.getDescription());
+        }
     }
 }

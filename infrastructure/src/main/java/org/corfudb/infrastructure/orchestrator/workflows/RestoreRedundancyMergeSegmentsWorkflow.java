@@ -50,4 +50,9 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
     public String getName() {
         return RESTORE_REDUNDANCY_MERGE_SEGMENTS.toString();
     }
+
+    @Override
+    public boolean isRecoveryWorkflow() {
+        return true;
+    }
 }
