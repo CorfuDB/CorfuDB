@@ -14,9 +14,31 @@ import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 public class ReloadableKeyManager implements X509KeyManager {
+
+    /**
+     * Netty's native OpenSSL engine asks the key manager for a server alias using the public key
+     * algorithm names listed in OpenSslKeyMaterialManager (RSA, EC, EC_EC, EC_RSA). The BCJSSE
+     * PKIX key manager only recognises the TLS 1.2 key exchange + authentication names, so for
+     * example an EC certificate is found with "ECDHE_ECDSA" but not with "EC". Maps the name
+     * Netty asks for to the names BCJSSE understands, in the order they are tried.
+     */
+    private static final Map<String, String[]> SERVER_KEY_TYPE_FALLBACKS;
+
+    static {
+        Map<String, String[]> fallbacks = new HashMap<>();
+        fallbacks.put("EC", new String[]{"ECDHE_ECDSA"});
+        fallbacks.put("EC_EC", new String[]{"ECDH_ECDSA"});
+        fallbacks.put("RSA", new String[]{"ECDHE_RSA", "DHE_RSA"});
+        fallbacks.put("EC_RSA", new String[]{"ECDH_RSA"});
+        fallbacks.put("DSA", new String[]{"DHE_DSA"});
+        SERVER_KEY_TYPE_FALLBACKS = Collections.unmodifiableMap(fallbacks);
+    }
 
     private final TlsUtils.CertStoreConfig.KeyStoreConfig keyStoreConfig;
 
@@ -54,7 +76,28 @@ public class ReloadableKeyManager implements X509KeyManager {
     @Override
     public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
         reloadKeyStoreWrapper();
-        return keyManager.chooseServerAlias(keyType, issuers, socket);
+        return chooseServerAlias(keyManager, keyType, issuers, socket);
+    }
+
+    /**
+     * Ask the delegate for the requested key type first so that providers which accept it keep
+     * their behavior, and only then try the spellings BCJSSE uses for the same key family.
+     * Names without a mapping (e.g. TLS 1.3 signature scheme names) are never rewritten.
+     */
+    static String chooseServerAlias(X509KeyManager delegate, String keyType, Principal[] issuers, Socket socket) {
+        String alias = delegate.chooseServerAlias(keyType, issuers, socket);
+        if (alias != null) {
+            return alias;
+        }
+
+        for (String fallback : SERVER_KEY_TYPE_FALLBACKS.getOrDefault(keyType, new String[0])) {
+            alias = delegate.chooseServerAlias(fallback, issuers, socket);
+            if (alias != null) {
+                log.debug("No server alias for key type {}, found one using {}.", keyType, fallback);
+                return alias;
+            }
+        }
+        return null;
     }
 
     @Override
