@@ -82,12 +82,19 @@ public class ReloadableKeyManager implements X509KeyManager {
         void log(String kind, String keyType, String outcome, String message, Object... args) {
             // The key store version is part of the value, so a new certificate is logged again
             // without any entry having to be removed.
-            String current = outcome + "@" + keyStoreVersion;
+            long version = keyStoreVersion;
+            String current = outcome + "@" + version;
             String previous = lastOutcomes.put(keyStore + "|" + kind + "|" + keyType, current);
+
+            // The version is the key store modification time, the same value that is printed when the
+            // key store is reloaded or skipped, so a line can be matched with the key store it used.
+            Object[] allArgs = Arrays.copyOf(args, args.length + 1);
+            allArgs[args.length] = version;
+            String fullMessage = message + " Key store version: {}.";
             if (current.equals(previous)) {
-                log.debug(message, args);
+                log.debug(fullMessage, allArgs);
             } else {
-                log.info(message, args);
+                log.info(fullMessage, allArgs);
             }
         }
     }
@@ -113,7 +120,7 @@ public class ReloadableKeyManager implements X509KeyManager {
         // so no fallback is needed here. Only log the outcome to trace which alias was picked.
         String alias = keyManager.chooseClientAlias(keyType, issuers, socket);
         outcomeLog.log("client", Arrays.toString(keyType), String.valueOf(alias),
-                "Client alias for key types {}: {}.", Arrays.toString(keyType), alias);
+                "outcome alias for key types {}: {}.", Arrays.toString(keyType), alias);
         return alias;
     }
 

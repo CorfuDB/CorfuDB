@@ -143,6 +143,7 @@ public class ReloadableKeyManagerTest {
 
             assertEquals(Arrays.asList(Level.INFO, Level.DEBUG, Level.DEBUG), capture.levels());
             assertTrue(capture.messages().get(0).contains("Chose server alias server for key type EC"));
+            assertTrue(capture.messages().get(0).endsWith("Key store version: 1."));
         }
     }
 
@@ -176,6 +177,8 @@ public class ReloadableKeyManagerTest {
             ReloadableKeyManager.chooseServerAlias(log, bcjse, "EC", null, null);
 
             assertEquals(Arrays.asList(Level.INFO, Level.DEBUG, Level.INFO, Level.DEBUG), capture.levels());
+            assertTrue(capture.messages().get(0).endsWith("Key store version: 1."));
+            assertTrue(capture.messages().get(2).endsWith("Key store version: 2."));
         }
     }
 
