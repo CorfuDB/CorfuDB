@@ -131,6 +131,20 @@ public class ReloadableKeyManagerTest {
     }
 
     @Test
+    public void testClientAliasIsLoggedWithKeyTypesAndAlias() {
+        StubKeyManager ec = new StubKeyManager("EC");
+        String[] keyTypes = {"RSA", "EC"};
+
+        try (LogCapture capture = new LogCapture()) {
+            assertEquals(ALIAS, ReloadableKeyManager.chooseClientAlias(newLog(), ec, keyTypes, null, null));
+
+            assertEquals(Arrays.asList(Level.INFO), capture.levels());
+            assertEquals("Client alias for key types [RSA, EC]: " + ALIAS + ". Key store version: 1.",
+                    capture.messages().get(0));
+        }
+    }
+
+    @Test
     public void testRepeatedOutcomeIsLoggedAtInfoOnceAcrossKeyManagerInstances() {
         // Corfu builds a new key manager per channel, so the memory must be shared between instances.
         Map<String, String> shared = new ConcurrentHashMap<>();
@@ -261,7 +275,7 @@ public class ReloadableKeyManagerTest {
 
         @Override
         public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
-            return null;
+            return Arrays.stream(keyType).anyMatch(accepted::contains) ? ALIAS : null;
         }
 
         @Override

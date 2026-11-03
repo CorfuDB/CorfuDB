@@ -116,11 +116,18 @@ public class ReloadableKeyManager implements X509KeyManager {
     @Override
     public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
         reloadKeyStoreWrapper();
-        // BCJSSE accepts the same key type names Netty uses on the client side (RSA, DSA, EC),
-        // so no fallback is needed here. Only log the outcome to trace which alias was picked.
-        String alias = keyManager.chooseClientAlias(keyType, issuers, socket);
-        outcomeLog.log("client", Arrays.toString(keyType), String.valueOf(alias),
-                "outcome alias for key types {}: {}.", Arrays.toString(keyType), alias);
+        return chooseClientAlias(outcomeLog, keyManager, keyType, issuers, socket);
+    }
+
+    /**
+     * BCJSSE accepts the same key type names Netty uses on the client side (RSA, DSA, EC), so no
+     * fallback is needed here. Only log the outcome to trace which alias was picked.
+     */
+    static String chooseClientAlias(OutcomeLog outcomes, X509KeyManager delegate, String[] keyType,
+                                    Principal[] issuers, Socket socket) {
+        String alias = delegate.chooseClientAlias(keyType, issuers, socket);
+        outcomes.log("client", Arrays.toString(keyType), String.valueOf(alias),
+                "Client alias for key types {}: {}.", Arrays.toString(keyType), alias);
         return alias;
     }
 
