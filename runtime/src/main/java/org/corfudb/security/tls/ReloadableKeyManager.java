@@ -14,6 +14,7 @@ import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -64,13 +65,17 @@ public class ReloadableKeyManager implements X509KeyManager {
     @Override
     public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
         reloadKeyStoreWrapper();
-        return keyManager.chooseClientAlias(keyType, issuers, socket);
+        // BCJSSE accepts the same key type names Netty uses on the client side (RSA, DSA, EC),
+        // so no fallback is needed here. Only log the outcome to trace which alias was picked.
+        String alias = keyManager.chooseClientAlias(keyType, issuers, socket);
+        log.info("Client alias for key types {}: {}.", Arrays.toString(keyType), alias);
+        return alias;
     }
 
     @Override
     public String[] getServerAliases(String keyType, Principal[] issuers) {
         reloadKeyStoreWrapper();
-        return keyManager.getServerAliases(keyType, issuers);
+        return getServerAliases(keyManager, keyType, issuers);
     }
 
     @Override
@@ -87,17 +92,53 @@ public class ReloadableKeyManager implements X509KeyManager {
     static String chooseServerAlias(X509KeyManager delegate, String keyType, Principal[] issuers, Socket socket) {
         String alias = delegate.chooseServerAlias(keyType, issuers, socket);
         if (alias != null) {
+            log.info("Chose server alias {} for key type {}.", alias, keyType);
             return alias;
         }
 
-        for (String fallback : SERVER_KEY_TYPE_FALLBACKS.getOrDefault(keyType, new String[0])) {
+        String[] fallbacks = fallbacksFor(keyType);
+        for (String fallback : fallbacks) {
             alias = delegate.chooseServerAlias(fallback, issuers, socket);
             if (alias != null) {
-                log.debug("No server alias for key type {}, found one using {}.", keyType, fallback);
+                log.info("Chose server alias {} for key type {} using fallback key type {}.",
+                        alias, keyType, fallback);
                 return alias;
             }
         }
+
+        log.info("No server alias for key type {}. Fallback key types tried: {}.",
+                keyType, Arrays.toString(fallbacks));
         return null;
+    }
+
+    /**
+     * Same lookup order as {@link #chooseServerAlias(X509KeyManager, String, Principal[], Socket)},
+     * so that listing aliases and choosing one agree on the key type names.
+     */
+    static String[] getServerAliases(X509KeyManager delegate, String keyType, Principal[] issuers) {
+        String[] aliases = delegate.getServerAliases(keyType, issuers);
+        if (aliases != null) {
+            log.info("Found server aliases {} for key type {}.", Arrays.toString(aliases), keyType);
+            return aliases;
+        }
+
+        String[] fallbacks = fallbacksFor(keyType);
+        for (String fallback : fallbacks) {
+            aliases = delegate.getServerAliases(fallback, issuers);
+            if (aliases != null) {
+                log.info("Found server aliases {} for key type {} using fallback key type {}.",
+                        Arrays.toString(aliases), keyType, fallback);
+                return aliases;
+            }
+        }
+
+        log.info("No server aliases for key type {}. Fallback key types tried: {}.",
+                keyType, Arrays.toString(fallbacks));
+        return null;
+    }
+
+    private static String[] fallbacksFor(String keyType) {
+        return SERVER_KEY_TYPE_FALLBACKS.getOrDefault(keyType, new String[0]);
     }
 
     @Override

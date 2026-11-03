@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -98,6 +99,28 @@ public class ReloadableKeyManagerTest {
         }
     }
 
+    @Test
+    public void testServerAliasesUseTheSameFallbacksAsChooseServerAlias() {
+        StubKeyManager bcjse = new StubKeyManager("ECDHE_ECDSA");
+        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(bcjse, "EC", null));
+        assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), bcjse.asked);
+
+        StubKeyManager sunJsse = new StubKeyManager("EC");
+        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(sunJsse, "EC", null));
+        assertEquals(Arrays.asList("EC"), sunJsse.asked);
+    }
+
+    @Test
+    public void testServerAliasesNullWhenNothingMatches() {
+        StubKeyManager rsaOnly = new StubKeyManager("RSA", "ECDHE_RSA", "DHE_RSA");
+        assertNull(ReloadableKeyManager.getServerAliases(rsaOnly, "EC", null));
+        assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), rsaOnly.asked);
+
+        StubKeyManager none = new StubKeyManager();
+        assertNull(ReloadableKeyManager.getServerAliases(none, "RSASSA-PSS", null));
+        assertEquals(Arrays.asList("RSASSA-PSS"), none.asked);
+    }
+
     /** Answers with {@link #ALIAS} only for the key types it was built with, like BCJSSE does. */
     private static final class StubKeyManager implements X509KeyManager {
         private final List<String> accepted;
@@ -129,7 +152,8 @@ public class ReloadableKeyManagerTest {
 
         @Override
         public String[] getServerAliases(String keyType, Principal[] issuers) {
-            return null;
+            asked.add(keyType);
+            return accepted.contains(keyType) ? new String[]{ALIAS} : null;
         }
 
         @Override
