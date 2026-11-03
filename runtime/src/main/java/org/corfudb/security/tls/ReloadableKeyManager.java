@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class ReloadableKeyManager implements X509KeyManager {
@@ -49,6 +50,14 @@ public class ReloadableKeyManager implements X509KeyManager {
 
     private boolean lastReloadSucceeded;
 
+    /**
+     * Last outcome of each alias lookup, keyed by lookup kind and key type. Alias lookups happen on
+     * every TLS handshake, so an outcome is logged at info only when it is new or has changed, and
+     * the map is cleared whenever the key store is reloaded so that the first lookup against a new
+     * certificate is always logged. Identical repeats are logged at debug.
+     */
+    private final Map<String, String> lastLoggedOutcomes = new ConcurrentHashMap<>();
+
     public ReloadableKeyManager(TlsUtils.CertStoreConfig.KeyStoreConfig keyStoreConfig) {
         this.keyStoreConfig = keyStoreConfig;
         this.keysLastModifiedTime = 0;
@@ -68,20 +77,21 @@ public class ReloadableKeyManager implements X509KeyManager {
         // BCJSSE accepts the same key type names Netty uses on the client side (RSA, DSA, EC),
         // so no fallback is needed here. Only log the outcome to trace which alias was picked.
         String alias = keyManager.chooseClientAlias(keyType, issuers, socket);
-        log.info("Client alias for key types {}: {}.", Arrays.toString(keyType), alias);
+        logOutcome(lastLoggedOutcomes, "client", Arrays.toString(keyType), String.valueOf(alias),
+                "Client alias for key types {}: {}.", Arrays.toString(keyType), alias);
         return alias;
     }
 
     @Override
     public String[] getServerAliases(String keyType, Principal[] issuers) {
         reloadKeyStoreWrapper();
-        return getServerAliases(keyManager, keyType, issuers);
+        return getServerAliases(lastLoggedOutcomes, keyManager, keyType, issuers);
     }
 
     @Override
     public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
         reloadKeyStoreWrapper();
-        return chooseServerAlias(keyManager, keyType, issuers, socket);
+        return chooseServerAlias(lastLoggedOutcomes, keyManager, keyType, issuers, socket);
     }
 
     /**
@@ -89,10 +99,11 @@ public class ReloadableKeyManager implements X509KeyManager {
      * their behavior, and only then try the spellings BCJSSE uses for the same key family.
      * Names without a mapping (e.g. TLS 1.3 signature scheme names) are never rewritten.
      */
-    static String chooseServerAlias(X509KeyManager delegate, String keyType, Principal[] issuers, Socket socket) {
+    static String chooseServerAlias(Map<String, String> outcomes, X509KeyManager delegate, String keyType, Principal[] issuers, Socket socket) {
         String alias = delegate.chooseServerAlias(keyType, issuers, socket);
         if (alias != null) {
-            log.info("Chose server alias {} for key type {}.", alias, keyType);
+            logOutcome(outcomes, "chooseServer", keyType, alias,
+                    "Chose server alias {} for key type {}.", alias, keyType);
             return alias;
         }
 
@@ -100,25 +111,28 @@ public class ReloadableKeyManager implements X509KeyManager {
         for (String fallback : fallbacks) {
             alias = delegate.chooseServerAlias(fallback, issuers, socket);
             if (alias != null) {
-                log.info("Chose server alias {} for key type {} using fallback key type {}.",
+                logOutcome(outcomes, "chooseServer", keyType, alias + " via " + fallback,
+                        "Chose server alias {} for key type {} using fallback key type {}.",
                         alias, keyType, fallback);
                 return alias;
             }
         }
 
-        log.info("No server alias for key type {}. Fallback key types tried: {}.",
+        logOutcome(outcomes, "chooseServer", keyType, null,
+                "No server alias for key type {}. Fallback key types tried: {}.",
                 keyType, Arrays.toString(fallbacks));
         return null;
     }
 
     /**
-     * Same lookup order as {@link #chooseServerAlias(X509KeyManager, String, Principal[], Socket)},
+     * Same lookup order as {@link #chooseServerAlias(Map, X509KeyManager, String, Principal[], Socket)},
      * so that listing aliases and choosing one agree on the key type names.
      */
-    static String[] getServerAliases(X509KeyManager delegate, String keyType, Principal[] issuers) {
+    static String[] getServerAliases(Map<String, String> outcomes, X509KeyManager delegate, String keyType, Principal[] issuers) {
         String[] aliases = delegate.getServerAliases(keyType, issuers);
         if (aliases != null) {
-            log.info("Found server aliases {} for key type {}.", Arrays.toString(aliases), keyType);
+            logOutcome(outcomes, "serverAliases", keyType, Arrays.toString(aliases),
+                    "Found server aliases {} for key type {}.", Arrays.toString(aliases), keyType);
             return aliases;
         }
 
@@ -126,15 +140,31 @@ public class ReloadableKeyManager implements X509KeyManager {
         for (String fallback : fallbacks) {
             aliases = delegate.getServerAliases(fallback, issuers);
             if (aliases != null) {
-                log.info("Found server aliases {} for key type {} using fallback key type {}.",
+                logOutcome(outcomes, "serverAliases", keyType, Arrays.toString(aliases) + " via " + fallback,
+                        "Found server aliases {} for key type {} using fallback key type {}.",
                         Arrays.toString(aliases), keyType, fallback);
                 return aliases;
             }
         }
 
-        log.info("No server aliases for key type {}. Fallback key types tried: {}.",
+        logOutcome(outcomes, "serverAliases", keyType, null,
+                "No server aliases for key type {}. Fallback key types tried: {}.",
                 keyType, Arrays.toString(fallbacks));
         return null;
+    }
+
+    /**
+     * Logs at info when the outcome of this lookup differs from the last one recorded for the same
+     * kind and key type (including the first one), otherwise at debug.
+     */
+    private static void logOutcome(Map<String, String> outcomes, String kind, String keyType, String outcome,
+                                   String message, Object... args) {
+        String previous = outcomes.put(kind + ":" + keyType, String.valueOf(outcome));
+        if (String.valueOf(outcome).equals(previous)) {
+            log.debug(message, args);
+        } else {
+            log.info(message, args);
+        }
     }
 
     private static String[] fallbacksFor(String keyType) {
@@ -204,6 +234,7 @@ public class ReloadableKeyManager implements X509KeyManager {
             if (km instanceof X509KeyManager) {
                 keyManager = (X509KeyManager) km;
                 lastReloadSucceeded = true;
+                lastLoggedOutcomes.clear();
                 log.info("Successfully reloaded keystore.");
                 return;
             }

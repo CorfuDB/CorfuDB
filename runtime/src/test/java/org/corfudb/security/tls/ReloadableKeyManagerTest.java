@@ -10,6 +10,8 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,33 +28,33 @@ public class ReloadableKeyManagerTest {
     @Test
     public void testEcFallsBackToEcdheEcdsa() {
         StubKeyManager bcjse = new StubKeyManager("ECDHE_ECDSA");
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(bcjse, "EC", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), bcjse, "EC", null, null));
         assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), bcjse.asked);
     }
 
     @Test
     public void testEcEcFallsBackToEcdhEcdsa() {
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new StubKeyManager("ECDH_ECDSA"), "EC_EC", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), new StubKeyManager("ECDH_ECDSA"), "EC_EC", null, null));
     }
 
     @Test
     public void testEcRsaFallsBackToEcdhRsa() {
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new StubKeyManager("ECDH_RSA"), "EC_RSA", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), new StubKeyManager("ECDH_RSA"), "EC_RSA", null, null));
     }
 
     @Test
     public void testDsaFallsBackToDheDsa() {
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new StubKeyManager("DHE_DSA"), "DSA", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), new StubKeyManager("DHE_DSA"), "DSA", null, null));
     }
 
     @Test
     public void testRsaFallbacksAreTriedInOrder() {
         StubKeyManager dheOnly = new StubKeyManager("DHE_RSA");
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(dheOnly, "RSA", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), dheOnly, "RSA", null, null));
         assertEquals(Arrays.asList("RSA", "ECDHE_RSA", "DHE_RSA"), dheOnly.asked);
 
         StubKeyManager ecdheAndDhe = new StubKeyManager("ECDHE_RSA", "DHE_RSA");
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(ecdheAndDhe, "RSA", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), ecdheAndDhe, "RSA", null, null));
         assertEquals(Arrays.asList("RSA", "ECDHE_RSA"), ecdheAndDhe.asked);
     }
 
@@ -60,7 +62,7 @@ public class ReloadableKeyManagerTest {
     public void testRequestedKeyTypeWinsWhenDelegateAcceptsIt() {
         // SunJSSE style delegate: knows "EC" and nothing else, so no fallback is attempted.
         StubKeyManager sunJsse = new StubKeyManager("EC");
-        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(sunJsse, "EC", null, null));
+        assertEquals(ALIAS, ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), sunJsse, "EC", null, null));
         assertEquals(Arrays.asList("EC"), sunJsse.asked);
     }
 
@@ -68,12 +70,12 @@ public class ReloadableKeyManagerTest {
     public void testNoAliasWhenKeyFamilyDoesNotMatch() {
         // An RSA only keystore must not be returned for an EC request.
         StubKeyManager rsaOnly = new StubKeyManager("RSA", "ECDHE_RSA", "DHE_RSA");
-        assertNull(ReloadableKeyManager.chooseServerAlias(rsaOnly, "EC", null, null));
+        assertNull(ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), rsaOnly, "EC", null, null));
         assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), rsaOnly.asked);
 
         // And an EC only keystore must not be returned for an RSA request.
         StubKeyManager ecOnly = new StubKeyManager("ECDHE_ECDSA");
-        assertNull(ReloadableKeyManager.chooseServerAlias(ecOnly, "RSA", null, null));
+        assertNull(ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), ecOnly, "RSA", null, null));
     }
 
     @Test
@@ -81,7 +83,7 @@ public class ReloadableKeyManagerTest {
         // TLS 1.3 signature scheme style names and unknown types are passed through once.
         for (String keyType : Arrays.asList("RSASSA-PSS", "EdDSA", "ECDHE_ECDSA", "UNKNOWN")) {
             StubKeyManager none = new StubKeyManager();
-            assertNull(ReloadableKeyManager.chooseServerAlias(none, keyType, null, null));
+            assertNull(ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), none, keyType, null, null));
             assertEquals(Arrays.asList(keyType), none.asked);
         }
     }
@@ -91,7 +93,7 @@ public class ReloadableKeyManagerTest {
         Principal[] issuers = new Principal[0];
         Socket socket = new Socket();
         StubKeyManager bcjse = new StubKeyManager("ECDHE_ECDSA");
-        ReloadableKeyManager.chooseServerAlias(bcjse, "EC", issuers, socket);
+        ReloadableKeyManager.chooseServerAlias(new ConcurrentHashMap<>(), bcjse, "EC", issuers, socket);
         assertEquals(2, bcjse.issuersSeen.size());
         for (int i = 0; i < 2; i++) {
             assertEquals(issuers, bcjse.issuersSeen.get(i));
@@ -102,23 +104,40 @@ public class ReloadableKeyManagerTest {
     @Test
     public void testServerAliasesUseTheSameFallbacksAsChooseServerAlias() {
         StubKeyManager bcjse = new StubKeyManager("ECDHE_ECDSA");
-        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(bcjse, "EC", null));
+        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(new ConcurrentHashMap<>(), bcjse, "EC", null));
         assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), bcjse.asked);
 
         StubKeyManager sunJsse = new StubKeyManager("EC");
-        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(sunJsse, "EC", null));
+        assertArrayEquals(new String[]{ALIAS}, ReloadableKeyManager.getServerAliases(new ConcurrentHashMap<>(), sunJsse, "EC", null));
         assertEquals(Arrays.asList("EC"), sunJsse.asked);
     }
 
     @Test
     public void testServerAliasesNullWhenNothingMatches() {
         StubKeyManager rsaOnly = new StubKeyManager("RSA", "ECDHE_RSA", "DHE_RSA");
-        assertNull(ReloadableKeyManager.getServerAliases(rsaOnly, "EC", null));
+        assertNull(ReloadableKeyManager.getServerAliases(new ConcurrentHashMap<>(), rsaOnly, "EC", null));
         assertEquals(Arrays.asList("EC", "ECDHE_ECDSA"), rsaOnly.asked);
 
         StubKeyManager none = new StubKeyManager();
-        assertNull(ReloadableKeyManager.getServerAliases(none, "RSASSA-PSS", null));
+        assertNull(ReloadableKeyManager.getServerAliases(new ConcurrentHashMap<>(), none, "RSASSA-PSS", null));
         assertEquals(Arrays.asList("RSASSA-PSS"), none.asked);
+    }
+
+    @Test
+    public void testOutcomesAreRecordedSoRepeatsAreNotLoggedAtInfo() {
+        Map<String, String> outcomes = new ConcurrentHashMap<>();
+        StubKeyManager bcjse = new StubKeyManager("ECDHE_ECDSA");
+
+        ReloadableKeyManager.chooseServerAlias(outcomes, bcjse, "EC", null, null);
+        assertEquals("server via ECDHE_ECDSA", outcomes.get("chooseServer:EC"));
+
+        // A different outcome for the same lookup replaces the recorded one, so it is logged again.
+        ReloadableKeyManager.chooseServerAlias(outcomes, new StubKeyManager(), "EC", null, null);
+        assertEquals("null", outcomes.get("chooseServer:EC"));
+
+        ReloadableKeyManager.getServerAliases(outcomes, bcjse, "EC", null);
+        assertEquals("[server] via ECDHE_ECDSA", outcomes.get("serverAliases:EC"));
+        assertEquals(2, outcomes.size());
     }
 
     /** Answers with {@link #ALIAS} only for the key types it was built with, like BCJSSE does. */
