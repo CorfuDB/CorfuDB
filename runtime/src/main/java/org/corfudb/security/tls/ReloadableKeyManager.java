@@ -15,8 +15,6 @@ import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -30,17 +28,13 @@ public class ReloadableKeyManager implements X509KeyManager {
      * example an EC certificate is found with "ECDHE_ECDSA" but not with "EC". Maps the name
      * Netty asks for to the names BCJSSE understands, in the order they are tried.
      */
-    private static final Map<String, String[]> SERVER_KEY_TYPE_FALLBACKS;
-
-    static {
-        Map<String, String[]> fallbacks = new HashMap<>();
-        fallbacks.put("EC", new String[]{"ECDHE_ECDSA"});
-        fallbacks.put("EC_EC", new String[]{"ECDH_ECDSA"});
-        fallbacks.put("RSA", new String[]{"ECDHE_RSA", "DHE_RSA"});
-        fallbacks.put("EC_RSA", new String[]{"ECDH_RSA"});
-        fallbacks.put("DSA", new String[]{"DHE_DSA"});
-        SERVER_KEY_TYPE_FALLBACKS = Collections.unmodifiableMap(fallbacks);
-    }
+    private static final Map<String, String[]> SERVER_KEY_TYPE_FALLBACKS = Map.of(
+            "EC", new String[]{"ECDHE_ECDSA"},
+            "EC_EC", new String[]{"ECDH_ECDSA"},
+            "RSA", new String[]{"ECDHE_RSA", "DHE_RSA"},
+            "EC_RSA", new String[]{"ECDH_RSA"},
+            "DSA", new String[]{"DHE_DSA"}
+    );
 
     private final TlsUtils.CertStoreConfig.KeyStoreConfig keyStoreConfig;
 
