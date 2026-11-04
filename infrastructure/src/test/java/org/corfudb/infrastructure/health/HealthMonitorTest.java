@@ -40,6 +40,8 @@ import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UNKN
 import static org.corfudb.infrastructure.health.HealthReport.OVERALL_STATUS_UP;
 import static org.corfudb.infrastructure.health.Issue.IssueId.COMPACTION_CYCLE_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.FAILURE_DETECTOR_TASK_FAILED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_RECOVERY_TASK_FAILED;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_TASK_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.SEQUENCER_REQUIRES_FULL_BOOTSTRAP;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -536,6 +538,45 @@ public class HealthMonitorTest {
                 scheduledExecutorService.shutdownNow();
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    /**
+     * The failure of a recovery workflow and the failure of a workflow that was explicitly requested
+     * are independent orchestrator issues: resolving the recovery failure must not hide a failure of
+     * a requested workflow that is still unresolved.
+     */
+    @Test
+    void testOrchestratorRecoveryAndRequestedWorkflowIssuesAreIndependent() {
+        final Issue requestedFailure = Issue.createIssue(ORCHESTRATOR, ORCHESTRATOR_TASK_FAILED,
+                "Failed to execute action AddNodeToLayout for workflow ADD_NODE");
+        final Issue recoveryFailure = Issue.createIssue(ORCHESTRATOR, ORCHESTRATOR_RECOVERY_TASK_FAILED,
+                "Failed to execute action HealNodeToLayout for workflow HEAL_NODE");
+
+        HealthMonitor.init();
+        try {
+            HealthMonitor.reportIssue(Issue.createInitIssue(ORCHESTRATOR));
+            HealthMonitor.resolveIssue(Issue.createInitIssue(ORCHESTRATOR));
+
+            HealthMonitor.reportIssue(requestedFailure);
+            HealthMonitor.reportIssue(recoveryFailure);
+
+            HealthStatus orchestrator = HealthMonitor.getHealthStatusSnapshot().get(ORCHESTRATOR);
+            assertThat(orchestrator.getRuntimeHealthIssues()).hasSize(2);
+            assertThat(orchestrator.getLatestRuntimeIssue().get().getDescription())
+                    .isEqualTo(recoveryFailure.getDescription());
+
+            HealthMonitor.resolveIssue(recoveryFailure);
+            assertThat(orchestrator.getRuntimeHealthIssues()).hasSize(1);
+            assertThat(orchestrator.getLatestRuntimeIssue().get().getDescription())
+                    .isEqualTo(requestedFailure.getDescription());
+            assertFalse(orchestrator.isRuntimeHealthy());
+
+            HealthMonitor.resolveIssue(requestedFailure);
+            assertThat(orchestrator.getLatestRuntimeIssue()).isEmpty();
+            assertTrue(orchestrator.isRuntimeHealthy());
+        } finally {
+            HealthMonitor.shutdown();
         }
     }
 }
