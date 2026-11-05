@@ -5,6 +5,7 @@ option java_package = "org.corfudb.runtime";
 
 import "corfu_options.proto";
 import "rpc_common.proto";
+import "corfu_compactor_management.proto";
 import "google/protobuf/timestamp.proto";
 
 message LogReplicationEntryMetadataMsg {
@@ -15,6 +16,15 @@ message LogReplicationEntryMetadataMsg {
   UuidMsg syncRequestId = 5;
   int64 snapshotTimestamp = 6;
   int64 snapshotSyncSeqNum = 7;
+  // Field 8 carried a receiver-directed retransmit hint in pre-release builds. The sink-owned
+  // snapshot lease made it unnecessary; the number must never be reused with another meaning.
+  reserved 8;
+  reserved "expectedSeqNum";
+  // Version 1 peers must obtain admission before sending snapshot data.
+  uint32 snapshotLifecycleVersion = 9;
+  uint64 admissionEpoch = 10;
+  uint64 attemptGeneration = 11;
+  UuidMsg externalRequestId = 12;
 }
 
 message LogReplicationEntryMsg {
@@ -23,6 +33,7 @@ message LogReplicationEntryMsg {
 }
 
 message LogReplicationMetadataRequestMsg {
+  bool supportsSnapshotLifecycle = 1;
 }
 
 message LogReplicationMetadataResponseMsg {
@@ -32,6 +43,27 @@ message LogReplicationMetadataResponseMsg {
   uint64 snapshotTransferred = 4;
   uint64 snapshotApplied = 5;
   uint64 lastLogEntryTimestamp = 6;
+  // Fields 7 to 10 carried source-side busy polling, apply-retry and grace-period hints in
+  // pre-release builds. The sink-owned snapshot lease replaced all of them; the numbers must never
+  // be reused with another meaning.
+  reserved 7 to 10;
+  reserved "isProcessing", "processingSnapshotTimestamp", "applyRetriesExhausted", "checkpointerGracePeriodMs";
+  SnapshotSyncLeaseRecord snapshotLease = 11;
+  // Sink-local write budget for snapshot transfer batching. Zero means an older
+  // sink has not advertised a budget; it never grants or extends admission.
+  int32 snapshotTransferWriteSize = 12;
+}
+
+message LogReplicationBusyResponseMsg {
+  enum Reason {
+    OVERLOADED = 0;
+    ADMISSION_CLOSED = 1;
+    STALE_ATTEMPT = 2;
+    UNSUPPORTED_PROTOCOL = 3;
+  }
+  Reason reason = 1;
+  SnapshotSyncLeaseRecord snapshotLease = 2;
+  int64 retryAfterMs = 3;
 }
 
 message LogReplicationLeadershipLossResponseMsg {
@@ -54,6 +86,8 @@ enum LogReplicationEntryType {
   SNAPSHOT_REPLICATED = 4;
   SNAPSHOT_END = 5;
   SNAPSHOT_TRANSFER_COMPLETE = 6;
+  SNAPSHOT_START_ACCEPTED = 7;
+  SNAPSHOT_CANCEL = 8;
 }
 
 enum ReplicationModel {

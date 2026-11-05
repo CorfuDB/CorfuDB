@@ -43,7 +43,7 @@ public class LogReplicationClient extends AbstractClient {
     public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
         CorfuMessage.RequestPayloadMsg payload =
                 CorfuMessage.RequestPayloadMsg.newBuilder()
-                        .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder().build())
+                        .setLrMetadataRequest(LogReplicationMetadataRequestMsg.newBuilder().setSupportsSnapshotLifecycle(true).build())
                         .build();
         return getRouter().sendRequestAndGetCompletable(payload, REMOTE_LEADER);
     }

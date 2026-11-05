@@ -13,12 +13,9 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 @Data
 @Slf4j
 public class LogReplicationPendingEntry {
-    /*
-     * For internal timer increasing for each message in milliseconds
-     */
-    private final static long TIME_INCREMENT = 100;
-
-    private long currentTime = 0;
+    // Retries measure monotonic elapsed time, so the resend cadence is independent of how often the
+    // source happens to look at the entry.
+    private final java.util.function.LongSupplier clock;
 
     @Getter
     private LogReplicationEntryMsg data;
@@ -30,9 +27,13 @@ public class LogReplicationPendingEntry {
     public int retry;
 
     public LogReplicationPendingEntry(LogReplicationEntryMsg data) {
+        this(data, () -> java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime()));
+    }
+
+    LogReplicationPendingEntry(LogReplicationEntryMsg data, java.util.function.LongSupplier clock) {
         this.data = data;
-        this.time = getCurrentTime();
-        this.retry = 0;
+        this.clock = clock;
+        this.time = clock.getAsLong();
     }
 
     public boolean timeout(long timer) {
@@ -50,7 +51,6 @@ public class LogReplicationPendingEntry {
     }
 
     private long getCurrentTime() {
-        currentTime += TIME_INCREMENT;
-        return currentTime;
+        return clock.getAsLong();
     }
 }

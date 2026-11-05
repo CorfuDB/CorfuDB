@@ -1,143 +1,128 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * GRPC Log Replication Service Stub Implementation.
- *
- * Note: GRPC is used to channel the plugin-based transport architecture for log replication.
- *
- * @author annym 05/15/20
- */
+/** Response correlation is registered before dispatch, including synchronous rejection/status. */
 @Slf4j
 public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.LogReplicationChannelImplBase {
+    @lombok.Value
+    private static class RequestKey {
+        UuidMsg client;
+        long requestId;
+        static RequestKey of(HeaderMsg header) {
+            return new RequestKey(header.getClientId(), header.getRequestId());
+        }
+    }
 
-    /*
-     * Corfu Message Router (internal to Corfu)
-     */
-    LogReplicationServerRouter router;
+    @lombok.Value
+    private static class Pending {
+        StreamObserver<ResponseMsg> observer;
+        UuidMsg attempt;
+    }
 
-    /*
-     * Map of Request ID to Stream Observer to send responses back to the client. Used for blocking calls.
-     */
-    Map<Long, StreamObserver<ResponseMsg>> streamObserverMap;
-
-    /*
-     * Map of Sync Request ID to Stream Observer to send responses back to the client. Used for async calls.
-     *
-     * Note: we cannot rely on the request ID, because for client streaming APIs this will change for each
-     * message, despite being part of the same stream.
-     */
-    Map<Long, StreamObserver<ResponseMsg>> replicationStreamObserverMap;
+    private final LogReplicationServerRouter router;
+    private final Map<RequestKey, StreamObserver<ResponseMsg>> unary = new ConcurrentHashMap<>();
+    private final Map<RequestKey, Pending> replication = new ConcurrentHashMap<>();
 
     public GRPCLogReplicationServerHandler(LogReplicationServerRouter router) {
         this.router = router;
-        this.streamObserverMap = new ConcurrentHashMap<>();
-        this.replicationStreamObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
-    public void negotiate(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
-        log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
-                request.getPayload().getPayloadCase().name());
-        router.receive(request);
-        streamObserverMap.put(request.getHeader().getRequestId(), responseObserver);
+    public void negotiate(RequestMsg request, StreamObserver<ResponseMsg> observer) {
+        dispatchUnary(request, observer);
     }
 
     @Override
-    public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> responseObserver) {
-        log.trace("Received[{}]: {}", request.getHeader().getRequestId(),
-                request.getPayload().getPayloadCase().name());
-        streamObserverMap.put(request.getHeader().getRequestId(), responseObserver);
-        router.receive(request);
+    public void queryLeadership(RequestMsg request, StreamObserver<ResponseMsg> observer) {
+        dispatchUnary(request, observer);
+    }
+
+    private void dispatchUnary(RequestMsg request, StreamObserver<ResponseMsg> observer) {
+        RequestKey key = RequestKey.of(request.getHeader());
+        unary.put(key, observer);
+        if (observer instanceof ServerCallStreamObserver<?>) {
+            ((ServerCallStreamObserver<?>) observer).setOnCancelHandler(() -> unary.remove(key, observer));
+        }
+        try {
+            router.receive(request);
+        } catch (RuntimeException e) {
+            unary.remove(key, observer);
+            observer.onError(e);
+        }
     }
 
     @Override
-    public StreamObserver<RequestMsg> replicate(StreamObserver<ResponseMsg> responseObserver) {
-
-        return new StreamObserver<RequestMsg>() {
+    public StreamObserver<RequestMsg> replicate(StreamObserver<ResponseMsg> observer) {
+        Runnable cleanup = () -> replication.entrySet().removeIf(entry -> entry.getValue().getObserver() == observer);
+        if (observer instanceof ServerCallStreamObserver<?>) {
+            ((ServerCallStreamObserver<?>) observer).setOnCancelHandler(cleanup);
+        }
+        return new StreamObserver<>() {
             @Override
-            public void onNext(RequestMsg replicationCorfuMessage) {
-                long requestId = replicationCorfuMessage.getHeader().getRequestId();
-                String name = replicationCorfuMessage.getPayload().getPayloadCase().name();
-                log.trace("Received[{}]: {}", requestId, name);
-
-                // Register at the observable first.
+            public void onNext(RequestMsg request) {
+                RequestKey key = RequestKey.of(request.getHeader());
+                replication.put(key, new Pending(observer, request.getPayload().getLrEntry().getMetadata().getSyncRequestId()));
                 try {
-                    replicationStreamObserverMap.putIfAbsent(requestId, responseObserver);
-                } catch (Exception e) {
-                    log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
-                            requestId, e);
+                    router.receive(request);
+                } catch (RuntimeException e) {
+                    cleanup.run();
+                    observer.onError(e);
                 }
-
-                // Forward the received message to the router
-                router.receive(replicationCorfuMessage);
             }
 
             @Override
-            public void onError(Throwable t) {
-                log.error("Encountered error while attempting replication.", t);
+            public void onError(Throwable error) {
+                cleanup.run();
             }
 
             @Override
             public void onCompleted() {
-                log.trace("Client has completed snapshot replication.");
+                // Client half-close does not cancel an outstanding response.
             }
         };
     }
 
-    public void send(ResponseMsg msg) {
-        // Case: message to send is an ACK (async observers)
-        if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK)) {
+    public void send(ResponseMsg response) {
+        RequestKey key = RequestKey.of(response.getHeader());
+        Pending pending = replication.remove(key);
+        if (pending != null) {
             try {
-                long requestId = msg.getHeader().getRequestId();
-
-                if (!replicationStreamObserverMap.containsKey(requestId)) {
-                    log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                            msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
-                    return;
+                pending.getObserver().onNext(response);
+                pending.getObserver().onCompleted();
+            } finally {
+                if (response.getPayload().getPayloadCase() == PayloadCase.LR_ENTRY_ACK) {
+                    // Cumulative ACK cleanup is scoped to this client and attempt. BUSY never
+                    // removes other requests: none of their data has been acknowledged.
+                    replication.forEach((otherKey, other) -> {
+                        if (otherKey.getClient().equals(key.getClient()) && otherKey.getRequestId() <= key.getRequestId()
+                                && other.getAttempt().equals(pending.getAttempt()) && replication.remove(otherKey, other)
+                                && other.getObserver() != pending.getObserver()) {
+                            other.getObserver().onCompleted();
+                        }
+                    });
                 }
-
-                StreamObserver<ResponseMsg> observer = replicationStreamObserverMap.get(requestId);
-                log.info("Sending[{}]: {}", requestId, msg.getPayload().getPayloadCase().name());
-                observer.onNext(msg);
-                observer.onCompleted();
-
-                // Remove observer as response was already sent
-                // Since we send summarized ACKs (to avoid memory leaks) remove all observers lower or equal than
-                // the one for which a response is being sent.
-                replicationStreamObserverMap.keySet().removeIf(id -> id <= requestId);
-            } catch (Exception e) {
-                log.error("Caught exception while trying to send message {}", msg.getHeader().getRequestId(), e);
             }
-
-        } else {
-
-            if (!streamObserverMap.containsKey(msg.getHeader().getRequestId())) {
-                log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.",
-                        msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-                log.info("Stream observers in map: {}", streamObserverMap.keySet());
-                return;
-            }
-
-            StreamObserver<ResponseMsg> observer = streamObserverMap.get(msg.getHeader().getRequestId());
-            log.info("Sending[{}]: {}", msg.getHeader().getRequestId(), msg.getPayload().getPayloadCase().name());
-            observer.onNext(msg);
+            return;
+        }
+        StreamObserver<ResponseMsg> observer = unary.remove(key);
+        if (observer != null) {
+            observer.onNext(response);
             observer.onCompleted();
-
-            // Remove observer as response was already sent
-            streamObserverMap.remove(msg.getHeader().getRequestId());
+        } else {
+            log.debug("Response has no pending observer: {}", key);
         }
     }
-
 }
