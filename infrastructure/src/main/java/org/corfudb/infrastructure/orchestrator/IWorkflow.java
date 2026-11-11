@@ -41,4 +41,17 @@ public interface IWorkflow {
         return getActions().stream()
                 .allMatch(a -> a.getStatus().equals(ActionStatus.COMPLETED));
     }
+
+    /**
+     * Returns whether this workflow recovers the cluster from a failure, as opposed to a workflow
+     * that was explicitly requested to reconfigure the cluster (adding or removing a node).
+     * The failure detector re-dispatches recovery workflows for as long as the layout needs
+     * recovery, so a failure of a recovery workflow is reported as a separate health issue that is
+     * also resolved once nothing is left to recover, and not only by a later successful workflow.
+     *
+     * @return true if this is a recovery workflow
+     */
+    default boolean isRecoveryWorkflow() {
+        return false;
+    }
 }

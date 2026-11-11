@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.orchestrator;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
@@ -42,6 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.health.Component.ORCHESTRATOR;
+import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_RECOVERY_TASK_FAILED;
 import static org.corfudb.infrastructure.health.Issue.IssueId.ORCHESTRATOR_TASK_FAILED;
 import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 import static org.corfudb.protocols.CorfuProtocolWorkflows.getAddNodeRequest;
@@ -223,6 +225,22 @@ public class Orchestrator {
     }
 
     /**
+     * Create the health issue that is reported when a workflow fails. A failed recovery workflow
+     * is reported as a different issue than a failed operator-requested workflow, because only
+     * the former is also resolved by the failure detector once nothing is left to recover.
+     *
+     * @param workflow    the workflow that failed
+     * @param description a readable description of the failure
+     * @return the issue to report to the health monitor
+     */
+    @VisibleForTesting
+    static Issue workflowFailedIssue(@Nonnull IWorkflow workflow, @Nonnull String description) {
+        Issue.IssueId issueId = workflow.isRecoveryWorkflow()
+                ? ORCHESTRATOR_RECOVERY_TASK_FAILED : ORCHESTRATOR_TASK_FAILED;
+        return Issue.createIssue(ORCHESTRATOR, issueId, description);
+    }
+
+    /**
      * Run a particular workflow, which entails executing all its defined
      * actions
      *
@@ -266,22 +284,23 @@ public class Orchestrator {
                             action.getStatus());
                     String reportMsg = String.format("Failed to execute action %s for workflow %s",
                             action.getName(), workflow.getName());
-                    HealthMonitor.reportIssue(Issue.createIssue(ORCHESTRATOR,
-                            ORCHESTRATOR_TASK_FAILED, reportMsg));
+                    HealthMonitor.reportIssue(workflowFailedIssue(workflow, reportMsg));
                     return;
                 }
             }
 
             long workflowEnd = System.currentTimeMillis();
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
+            // A successful workflow resolves the failures of both kinds of workflows.
             HealthMonitor.resolveIssue(Issue.createIssue(ORCHESTRATOR,
                     ORCHESTRATOR_TASK_FAILED, "Last workflow completed successfully"));
+            HealthMonitor.resolveIssue(Issue.createIssue(ORCHESTRATOR,
+                    ORCHESTRATOR_RECOVERY_TASK_FAILED, "Last workflow completed successfully"));
         } catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
             String reportMsg = String.format("Encountered an error while running a workflow %s:%n%s",
                     workflow.getName(), e.getLocalizedMessage());
-            HealthMonitor.reportIssue(Issue.createIssue(ORCHESTRATOR,
-                    ORCHESTRATOR_TASK_FAILED, reportMsg));
+            HealthMonitor.reportIssue(workflowFailedIssue(workflow, reportMsg));
         } finally {
             activeWorkflows.remove(workflow.getId());
             log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);
