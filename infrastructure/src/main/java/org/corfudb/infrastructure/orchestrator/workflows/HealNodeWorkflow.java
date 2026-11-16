@@ -42,6 +42,11 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         return HEAL_NODE.toString();
     }
 
+    @Override
+    public boolean isRecoveryWorkflow() {
+        return true;
+    }
+
     /**
      * This action adds a new node to the layout. If it is also
      * added as a logunit server, then in addition to adding

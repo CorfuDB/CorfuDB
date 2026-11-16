@@ -16,7 +16,20 @@ public class Issue {
     public static enum IssueId {
         INIT,
         SEQUENCER_REQUIRES_FULL_BOOTSTRAP,
+        /**
+         * A workflow that was explicitly requested (add, remove or force remove a node) has failed.
+         * Resolved by the next workflow that completes successfully.
+         */
         ORCHESTRATOR_TASK_FAILED,
+        /**
+         * A recovery workflow (heal node, restore redundancy and merge segments) has failed.
+         * Resolved by the next workflow that completes successfully, or by the failure detector
+         * once the cluster has recovered (all the nodes are responsive and the layout has a single
+         * segment). The failure detector re-dispatches recovery workflows while the layout still
+         * needs recovery, so there might be no later workflow to resolve the issue after the
+         * cluster has recovered on its own.
+         */
+        ORCHESTRATOR_RECOVERY_TASK_FAILED,
         FAILURE_DETECTOR_TASK_FAILED,
         COMPACTION_CYCLE_FAILED,
         QUOTA_EXCEEDED_ERROR

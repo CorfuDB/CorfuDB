@@ -6,6 +6,10 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask;
+import org.corfudb.infrastructure.health.Component;
+import org.corfudb.infrastructure.health.HealthMonitor;
+import org.corfudb.infrastructure.health.Issue;
+import org.corfudb.infrastructure.health.Issue.IssueId;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.FileSystemAdvisor;
 import org.corfudb.infrastructure.management.PollReport;
@@ -33,6 +37,16 @@ import static org.corfudb.infrastructure.RemoteMonitoringService.DetectorTask.SK
 @Slf4j
 @Builder
 public class HealingAgent {
+    /**
+     * Identifies a failure of a recovery workflow that was reported by the orchestrator, so that it
+     * can be resolved. The description is not a part of the issue's identity, it only documents why
+     * the issue is resolved.
+     */
+    private static final Issue RECOVERY_WORKFLOW_FAILURE_RESOLVED = Issue.createIssue(
+            Component.ORCHESTRATOR,
+            IssueId.ORCHESTRATOR_RECOVERY_TASK_FAILED,
+            "The cluster has recovered");
+
     /**
      * Duration in which the restore redundancy and merge segments workflow status is queried.
      */
@@ -132,6 +146,11 @@ public class HealingAgent {
      * Spawns a new asynchronous task to restore redundancy and merge segments.
      * A new task is not spawned if a task is already in progress.
      * This method does not wait on the completion of the restore redundancy and merge segments task.
+     *
+     * <p>If the cluster has recovered, a failure of a recovery workflow that was reported earlier
+     * by the orchestrator is stale and is resolved. Otherwise it would remain in the health report
+     * until some later workflow completes, which might never happen if the cluster recovered on
+     * its own.
      */
     public void restoreRedundancyAndMergeSegments(Layout layout, String localEndpoint) {
         // Check that the task is not currently running.
@@ -152,7 +171,25 @@ public class HealingAgent {
             return;
         }
 
+        if (isRecovered(layout)) {
+            HealthMonitor.resolveIssue(RECOVERY_WORKFLOW_FAILURE_RESOLVED);
+        }
+
         log.trace("No segments to merge. Skipping step.");
+    }
+
+    /**
+     * The cluster has recovered if all the nodes are responsive and the segments of the layout are
+     * merged into one, which is when a restore redundancy and merge segments request is complete.
+     * The check is not limited to the current node, because the orchestrator that runs a recovery
+     * workflow is not always the one that belongs to the node which is being recovered. For
+     * example, a restore redundancy and merge segments workflow runs on another node.
+     *
+     * @param layout the latest layout
+     * @return true if there is nothing left to heal, restore or merge in the cluster
+     */
+    private static boolean isRecovered(Layout layout) {
+        return layout.getUnresponsiveServers().isEmpty() && layout.getSegments().size() == 1;
     }
 
     @VisibleForTesting
