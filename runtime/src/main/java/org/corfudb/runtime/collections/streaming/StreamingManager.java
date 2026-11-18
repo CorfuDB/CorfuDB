@@ -98,15 +98,29 @@ public class StreamingManager {
         StreamAddressSpace streamAddressSpace = runtime.getSequencerView()
                 .getStreamAddressSpace(new StreamAddressRange(txnStreamId, Address.MAX, syncAddress));
 
-        if (streamAddressSpace.getTrimMark() == Address.NON_ADDRESS) {
-            // Fix this
-            return;
-        }
-        if (syncAddress <= streamAddressSpace.getTrimMark()) {
+        long trimMark = streamAddressSpace.getTrimMark();
+
+        if (Address.isAddress(trimMark) && syncAddress <= trimMark) {
             TrimmedException te = new TrimmedException(String.format("Subscription Stream[%s$tag:%s][%s] :: sync start address falls " +
                             "behind trim mark. This will incur in data loss for data in the space [%s, %s] (inclusive)",
-                    namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, streamAddressSpace.getTrimMark()));
+                    namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, trimMark));
             throw new StreamingException(te);
+        }
+
+        // When sequencer returns trim mark NON_ADDRESS, infer trim gap from bitmap: if the lowest address
+        // returned is above syncAddress, addresses in [syncAddress, firstAddress-1] were likely trimmed.
+        // Fail at subscribe time so the client gets a clear error and can trigger full re-sync.
+        // Only apply when syncAddress > 0: when the client subscribes from start (syncAddress == 0), the
+        // stream's first address may legitimately be > 0 (e.g. addresses 0..3 belong to other streams).
+        if (trimMark == Address.NON_ADDRESS && syncAddress > 0 && streamAddressSpace.size() > 0) {
+            long firstAddress = streamAddressSpace.getFirst();
+            if (firstAddress > syncAddress) {
+                TrimmedException te = new TrimmedException(String.format("Subscription Stream[%s$tag:%s][%s] :: sync start address %s " +
+                                "falls behind available data (first address %s). Addresses in [%s, %s] were likely trimmed. " +
+                                "Trigger full re-sync (e.g. full re-index) to recover.",
+                        namespace, streamTag, Utils.toReadableId(txnStreamId), syncAddress, firstAddress, syncAddress, firstAddress - 1));
+                throw new StreamingException(te);
+            }
         }
     }
 
