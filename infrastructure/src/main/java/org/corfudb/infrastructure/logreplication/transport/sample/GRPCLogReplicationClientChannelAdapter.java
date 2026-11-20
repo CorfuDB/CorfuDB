@@ -185,6 +185,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                         log.error("Caught exception while receiving ACK", e);
                         getRouter().completeExceptionally(response.getHeader().getRequestId(), e);
                         requestObserverMap.remove(requestId);
+                        responseObserverMap.remove(requestId);
                     }
                 }
 
@@ -193,12 +194,14 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     log.error("Error from response observer", t);
                     getRouter().completeExceptionally(requestId, t);
                     requestObserverMap.remove(requestId);
+                    responseObserverMap.remove(requestId);
                 }
 
                 @Override
                 public void onCompleted() {
                     log.info("Completed");
                     requestObserverMap.remove(requestId);
+                    responseObserverMap.remove(requestId);
                 }
             };
 
@@ -207,9 +210,16 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             log.info("Initiate stub for replication");
 
             if(asyncStubMap.containsKey(nodeId)) {
-                StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(nodeId).replicate(responseObserver);
+                // A timed-out router future must not leave a live stream/observer retained forever.
+                StreamObserver<RequestMsg> requestObserver = asyncStubMap.get(nodeId)
+                        .withDeadlineAfter(getRouter().getTimeoutResponse(), TimeUnit.MILLISECONDS).replicate(responseObserver);
                 requestObserverMap.put(requestId, requestObserver);
+                if (responseObserverMap.get(requestId) != responseObserver) {
+                    requestObserverMap.remove(requestId, requestObserver);
+                }
             } else {
+                responseObserverMap.remove(requestId, responseObserver);
+                getRouter().completeExceptionally(requestId, new IllegalStateException("No replication channel for " + nodeId));
                 log.error("No stub found for remote node {}@{}. Message dropped type={}",
                         nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
                         request.getPayload().getPayloadCase());
@@ -218,9 +228,10 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
         log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
                 nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
-        if (responseObserverMap.containsKey(requestId)) {
+        StreamObserver<RequestMsg> requestObserver = requestObserverMap.get(requestId);
+        if (requestObserver != null) {
             // Send log replication entries across channel
-            requestObserverMap.get(requestId).onNext(request);
+            requestObserver.onNext(request);
         }
     }
 

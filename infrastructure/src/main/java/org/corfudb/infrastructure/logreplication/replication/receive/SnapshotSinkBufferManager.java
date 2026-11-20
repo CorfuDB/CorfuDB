@@ -6,11 +6,26 @@ import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
+import java.util.Objects;
+import java.util.UUID;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+
 @Slf4j
 public class SnapshotSinkBufferManager extends SinkBufferManager {
 
      // It is used to remember the SNAPSHOT_END message sequence number.
     private long snapshotEndSeq = Long.MAX_VALUE;
+
+    // Identity of the snapshot-sync attempt this buffer manager instance belongs to. A fresh
+    // instance is constructed for every admitted attempt, but SNAPSHOT_MESSAGE/SNAPSHOT_END are
+    // otherwise matched purely by numeric snapshotSyncSeqNum below, and every attempt numbers its
+    // messages on the same scale. A straggler from a prior, already-cancelled attempt (cancellation
+    // cannot retract an in-flight RPC) could otherwise match this attempt's buffer purely by seqNum
+    // and get applied into its shadow streams as if it were current data. The sink manager and the
+    // writer already reject foreign attempts by identity and generation; this is the same check at
+    // the last point before buffering, so that a buffered message can never be a foreign one.
+    private final UUID activeSyncRequestId;
 
     /**
      *
@@ -19,11 +34,15 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @param size
      * @param lastProcessedSeq for a fresh snapshot transfer, the input should be Address.NO_ADDRESS.
      *                         If it restart the snapshot, it should be the value written in the metadata store.
+     * @param activeSyncRequestId the syncRequestId of the snapshot-sync attempt currently in progress;
+     *                            messages tagged with any other syncRequestId are dropped as stale.
      * @param sinkManager
      */
     public SnapshotSinkBufferManager(int ackCycleTime, int ackCycleCnt, int size,
-                                     long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
+                                     long lastProcessedSeq, UUID activeSyncRequestId,
+                                     LogReplicationSinkManager sinkManager) {
         super(LogReplicationEntryType.SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
+        this.activeSyncRequestId = activeSyncRequestId;
     }
 
     /**
@@ -78,15 +97,31 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     }
 
     /**
-     * Verify if the message is the SNAPSHOT replication message.
-     * SNAPSHOT_START will not processed by the buffer.
+     * Verify if the message is a SNAPSHOT replication message belonging to the currently active
+     * snapshot-sync attempt. SNAPSHOT_START is not processed by the buffer.
+     *
+     * The syncRequestId check rejects a straggler from a prior, already-cancelled attempt -- see
+     * activeSyncRequestId's Javadoc for why matching by seqNum alone isn't sufficient.
+     *
      * @param entry
      * @return
      */
     @Override
     public boolean verifyMessageType(LogReplicationEntryMsg entry) {
-        return entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_MESSAGE ||
-                entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END;
+        if (entry.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE &&
+                entry.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_END) {
+            return false;
+        }
+
+        UUID messageSyncRequestId = getUUID(entry.getMetadata().getSyncRequestId());
+        if (!Objects.equals(messageSyncRequestId, activeSyncRequestId)) {
+            log.warn("Dropping stale snapshot sync message: msg syncRequestId={}, active attempt " +
+                            "syncRequestId={}, seqNum={}", messageSyncRequestId, activeSyncRequestId,
+                    entry.getMetadata().getSnapshotSyncSeqNum());
+            return false;
+        }
+
+        return true;
     }
 
     /**

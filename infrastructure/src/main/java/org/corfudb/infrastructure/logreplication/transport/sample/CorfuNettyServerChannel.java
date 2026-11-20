@@ -93,6 +93,13 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
             contextMapLogEntries.keySet().removeIf(id -> id <= message.getHeader().getRequestId());
         } else {
             context = contextMap.remove(message.getHeader().getRequestId());
+            if (context == null) {
+                // A log replication entry is not always answered with an ACK: the sink may refuse it
+                // with a typed BUSY reply, or answer that it lost leadership. Such a reply used to be
+                // dropped here, and all the source ever saw of a refusal was its request timing out.
+                // Nothing else is released: a refusal acknowledges no data.
+                context = contextMapLogEntries.remove(message.getHeader().getRequestId());
+            }
         }
 
         return context;

@@ -10,6 +10,9 @@ import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.CorfuCompactorManagement.SnapshotSyncLeaseRecord;
+import org.corfudb.runtime.SnapshotSyncLease;
+import org.corfudb.runtime.SnapshotSyncLeaseStore;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.retry.IRetry;
@@ -32,6 +35,35 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.REG
 @NotThreadSafe
 @Slf4j
 public class LogEntryWriter extends SinkWriter {
+    private SnapshotSyncLeaseRecord leaseContext;
+
+    public void setLeaseContext(SnapshotSyncLeaseRecord completed) {
+        leaseContext = completed;
+    }
+
+    /**
+     * Rejects an incremental write once this writer's snapshot generation, or this node's ownership
+     * of the lease, has been superseded.
+     *
+     * <p>The lease is only read here, deliberately. It is a single record shared with the compactor,
+     * whose cycle start includes it in its write set. Rewriting it for every replicated transaction
+     * would make that cycle start abort under steady replication traffic and starve the
+     * checkpointer on the normal path. The write-write conflict that serializes this transaction
+     * with snapshot admission, ownership takeover and topology changes comes from
+     * TOPOLOGY_CONFIG_ID instead: every transaction of this writer touches it, and those
+     * transitions rewrite it (see LogReplicationMetadataManager#fenceIncrementalWriters).
+     */
+    private void fence(TxnContext txn) {
+        if (leaseContext == null) { return; }
+        SnapshotSyncLeaseRecord current = SnapshotSyncLeaseStore.read(txn);
+        if (!current.getOwnerId().equals(leaseContext.getOwnerId())
+                || current.getGeneration() != leaseContext.getGeneration()
+                || !current.getAttemptId().equals(leaseContext.getAttemptId())
+                || current.getOutcome() != SnapshotSyncLeaseRecord.Outcome.COMPLETED
+                || SnapshotSyncLease.active(current)) {
+            throw new SnapshotSyncLease.LeaseRejectedException("Incremental writer superseded by snapshot admission or ownership");
+        }
+    }
     // The source snapshot that the transaction logs are based
     private long srcGlobalSnapshot;
 
@@ -79,7 +111,7 @@ public class LogEntryWriter extends SinkWriter {
             try {
                 IRetry.build(IntervalRetry.class, () -> {
                     try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-
+                        fence(txnContext);
 
                         // NOTE: The topology config id should be queried and validated for every opaque entry because the
                         // Sink could have received concurrent topology config id changes.  Here we are leveraging a

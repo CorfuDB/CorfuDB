@@ -21,6 +21,35 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SnapshotSenderBufferManager extends SenderBufferManager {
     private LogReplicationAckReader ackReader;
+    // Identity of the attempt the sink admitted. Every message is stamped with it, and an
+    // acknowledgement of any other attempt is ignored.
+    private java.util.UUID leaseAttemptId;
+    private long leaseGeneration;
+
+    public void beginLease(java.util.UUID attemptId, long generation) {
+        leaseAttemptId = attemptId;
+        leaseGeneration = generation;
+        snapshotSyncSequenceNumber = 0; // START was explicitly accepted outside the data buffer.
+    }
+
+    private LogReplicationEntryMsg identify(LogReplicationEntryMsg message) {
+        if (leaseAttemptId == null) { return message; }
+        return message.toBuilder().setMetadata(message.getMetadata().toBuilder()
+                .setSyncRequestId(org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(leaseAttemptId))
+                .setSnapshotLifecycleVersion(org.corfudb.runtime.SnapshotSyncLease.VERSION)
+                .setAttemptGeneration(leaseGeneration)).build();
+    }
+
+    @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message) {
+        return super.sendWithBuffering(identify(message));
+    }
+
+    @Override
+    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message,
+            String metricName, Tag tag) {
+        return super.sendWithBuffering(identify(message), metricName, tag);
+    }
 
     public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
         super(dataSender, configureAcksCounter());
@@ -50,6 +79,12 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      */
     @Override
     public void updateAck(LogReplicationEntryMsg entry) {
+        if (leaseAttemptId != null && (!entry.getMetadata().getSyncRequestId().equals(
+                org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg(leaseAttemptId))
+                || entry.getMetadata().getAttemptGeneration() != leaseGeneration
+                || entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_START_ACCEPTED)) {
+            return;
+        }
         updateAck(entry.getMetadata().getSnapshotSyncSeqNum());
 
         // If only a given stream has been replicated, update with the sequence number
@@ -62,6 +97,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
             ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotTimestamp(),
                     ReplicationStatusVal.SyncType.SNAPSHOT);
         }
+
     }
 
     /**
@@ -73,6 +109,14 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
     @Override
     public void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf) {
         pendingCompletableFutureForAcks.put(message.getMetadata().getSnapshotSyncSeqNum(), cf);
+    }
+
+    /** In addition to the base reset, forgets the admitted attempt: the next one is admitted anew. */
+    @Override
+    public void reset(long lastAckedTimestamp) {
+        leaseAttemptId = null;
+        leaseGeneration = 0;
+        super.reset(lastAckedTimestamp);
     }
 
     private static Optional<AtomicLong> configureAcksCounter() {
