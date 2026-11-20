@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -57,6 +58,54 @@ public class InSnapshotSyncState implements LogReplicationState {
     private boolean forcedSnapshotSync = false;
 
     /**
+     * Number of consecutive times this snapshot sync has been canceled and immediately retried
+     * (e.g. due to repeated ack timeouts). Used to compute an increasing backoff so a struggling
+     * sink is not hammered with a fresh full snapshot sync attempt every few seconds, which leaves
+     * it no window to ever catch up (e.g. to complete local checkpointing that was paused for the
+     * duration of the snapshot sync).
+     * Package-private (not private) so tests can observe backoff growth directly.
+     */
+    @VisibleForTesting
+    int consecutiveCancellations = 0;
+
+    /**
+     * Backoff (in milliseconds) to wait before the next transmit() call, set when a cancellation
+     * triggers a retry. Zero means proceed immediately (e.g. a fresh, externally requested sync).
+     * Package-private (not private) so tests can inspect/seed it directly.
+     */
+    @VisibleForTesting
+    volatile long retryBackoffMs = 0;
+
+    @VisibleForTesting
+    static final long INITIAL_RETRY_BACKOFF_MS = 2_000;
+    @VisibleForTesting
+    static final long MAX_RETRY_BACKOFF_MS = 60_000;
+    private static final int MAX_BACKOFF_SHIFT = 6; // caps 2^6 * INITIAL_RETRY_BACKOFF_MS before MAX applies anyway
+
+    /**
+     * Wall-clock time (epoch millis) this state was last entered (including a self-loop re-entry
+     * after a cancellation). Used only to detect a SNAPSHOT_SYNC_REQUEST arriving suspiciously
+     * soon after entry -- see the SNAPSHOT_SYNC_REQUEST handling below.
+     * Package-private (not private) so tests can seed/inspect it directly.
+     */
+    @VisibleForTesting
+    volatile long lastEntryTimeMs = 0;
+
+    /**
+     * SNAPSHOT_SYNC_REQUEST does not flow through SYNC_CANCEL, so it normally resets the backoff
+     * unconditionally below (correct for a genuinely fresh, externally requested sync). But this
+     * state can also receive repeated SNAPSHOT_SYNC_REQUESTs while already active -- e.g. a caller
+     * invoking enforceSnapshotSync() repeatedly, or overlapping negotiation retriggers -- with no
+     * throttling of its own. If a request arrives less than this long after we last entered the
+     * state, it is treated as part of the same restart storm instead of resetting the backoff to
+     * zero. Note this does not cover a snapshot sync restarted after an actual disconnect/
+     * reconnect cycle, which re-enters via InitializedState rather than this state; throttling
+     * that path was judged out of scope for this fix.
+     */
+    @VisibleForTesting
+    static final long MIN_ATTEMPT_AGE_FOR_UNTHROTTLED_RESTART_MS = INITIAL_RETRY_BACKOFF_MS;
+
+    /**
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
@@ -78,6 +127,21 @@ public class InSnapshotSyncState implements LogReplicationState {
                 String cancelCause = forcedSnapshotSync ? "incoming forced snapshot sync." : "another snapshot sync request.";
                 cancelSnapshotSync(cancelCause);
 
+                long timeSinceLastEntry = System.currentTimeMillis() - lastEntryTimeMs;
+                if (lastEntryTimeMs == 0 || timeSinceLastEntry >= MIN_ATTEMPT_AGE_FOR_UNTHROTTLED_RESTART_MS) {
+                    // This is a freshly, externally requested snapshot sync (e.g. negotiation/reconnection),
+                    // not an internal retry after a transient failure, so it should not inherit any pending backoff.
+                    consecutiveCancellations = 0;
+                    retryBackoffMs = 0;
+                } else {
+                    // Arrived too soon after the current attempt started to be a distinct, deliberate
+                    // request; treat it the same as a SYNC_CANCEL-driven retry so a caller repeatedly
+                    // requesting a snapshot sync (e.g. enforceSnapshotSync()) cannot restart unthrottled.
+                    long backoff = registerCancellationAndComputeBackoff();
+                    log.warn("Snapshot sync requested only {}ms after the current attempt started, remote={}; " +
+                                    "treating as part of the same restart storm and backing off {}ms before retrying with ID={}",
+                            timeSinceLastEntry, fsm.getAckReader().getRemoteClusterId(), backoff, event.getMetadata().getSyncId());
+                }
 
                 // Set the id of the new snapshot sync request causing the transition.
                 // This will be taken onEntry of this state to initiate a snapshot send for this given request.
@@ -128,6 +192,15 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // If a force snapshot sync gets cancelled due to ACK timeout, a new snapshot sync is triggered.
                     // Retain the 'forced' information in the subsequent snapshot syncs
                     ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+
+                    // Back off before retrying: a cancel-and-immediate-retry loop gives a struggling
+                    // sink no window to catch up (e.g. to resume local checkpointing that is paused for
+                    // the duration of the snapshot sync), so increase the delay with each consecutive
+                    // cancellation instead of restarting at a fixed, rapid cadence.
+                    long backoff = registerCancellationAndComputeBackoff();
+                    log.warn("Snapshot sync canceled {} consecutive time(s), remote={}; backing off {}ms before retrying with ID={}",
+                            consecutiveCancellations, fsm.getAckReader().getRemoteClusterId(), backoff, newSnapshotSyncId);
+
                     snapshotSender.reset();
                     fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                     return inSnapshotSyncState;
@@ -159,6 +232,9 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
+        // Used by the SNAPSHOT_SYNC_REQUEST handling above to distinguish a genuinely fresh
+        // request from one arriving as part of an ongoing restart storm.
+        lastEntryTimeMs = System.currentTimeMillis();
         try {
             // If the transition is to itself, the snapshot sync is continuing, no need to reset the sender
             if (from != this) {
@@ -167,11 +243,74 @@ public class InSnapshotSyncState implements LogReplicationState {
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionSyncId);
                 snapshotSyncTransferTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
             }
+            // Consume any pending backoff (set by a preceding SYNC_CANCEL) before transmitting again.
+            final long backoffMs = retryBackoffMs;
+            retryBackoffMs = 0;
             transmitFuture = fsm.getLogReplicationFSMWorkers()
-                    .submit(() -> snapshotSender.transmit(transitionSyncId, forcedSnapshotSync));
+                    .submit(() -> {
+                        if (backoffMs > 0) {
+                            log.info("Backing off {}ms before retrying snapshot sync {} (consecutive cancellations={}, remote={})",
+                                    backoffMs, transitionSyncId, consecutiveCancellations, fsm.getAckReader().getRemoteClusterId());
+                            backoffBeforeRetry(backoffMs);
+                        }
+                        snapshotSender.transmit(transitionSyncId, forcedSnapshotSync);
+                    });
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
+    }
+
+    /**
+     * Sleep for up to delayMs, checking periodically whether the snapshot sync has since been
+     * stopped/canceled (e.g. by a newer request or a shutdown) so the backoff does not needlessly
+     * delay a legitimate subsequent cancellation.
+     */
+    private void backoffBeforeRetry(long delayMs) {
+        long deadline = System.currentTimeMillis() + delayMs;
+        long remaining;
+        while ((remaining = deadline - System.currentTimeMillis()) > 0 && !snapshotSender.getStopSnapshotSync().get()) {
+            try {
+                TimeUnit.MILLISECONDS.sleep(Math.min(200, remaining));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Record a cancellation and compute/store the backoff to apply before the next retry attempt,
+     * growing exponentially from {@link #INITIAL_RETRY_BACKOFF_MS} up to {@link #MAX_RETRY_BACKOFF_MS}.
+     * Package-private (not private) so {@link WaitSnapshotApplyState}, which can also route a
+     * cancellation back into this state (a cancel arriving while waiting for snapshot apply to
+     * complete), goes through the same accounting instead of restarting immediately and bypassing
+     * the backoff.
+     *
+     * @return the computed backoff, in milliseconds
+     */
+    long registerCancellationAndComputeBackoff() {
+        consecutiveCancellations++;
+        long backoff = Math.min(INITIAL_RETRY_BACKOFF_MS << Math.min(consecutiveCancellations - 1, MAX_BACKOFF_SHIFT),
+                MAX_RETRY_BACKOFF_MS);
+        retryBackoffMs = backoff;
+        return backoff;
+    }
+
+    /**
+     * Clear backoff/cancellation history after the snapshot sync fully completes (transfer AND
+     * apply), so a future, unrelated failure starts counting from a clean slate rather than an
+     * inflated backoff. Package-private so {@link WaitSnapshotApplyState} can call it once it
+     * confirms SNAPSHOT_APPLY_COMPLETE.
+     * <p>
+     * This must NOT be tied to transfer completing alone (i.e. reaching WAIT_SNAPSHOT_APPLY):
+     * a failure localized to the apply phase -- transfer keeps succeeding, only apply keeps
+     * failing/getting canceled -- would then zero the counter every single cycle right before the
+     * next apply-side cancellation could grow it, pinning the backoff at its initial value forever
+     * instead of escalating for what is, in fact, a persistently repeating failure.
+     */
+    void resetBackoff() {
+        consecutiveCancellations = 0;
+        retryBackoffMs = 0;
     }
 
     @Override

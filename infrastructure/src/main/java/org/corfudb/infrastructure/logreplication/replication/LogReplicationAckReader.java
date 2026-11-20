@@ -37,6 +37,7 @@ public class LogReplicationAckReader {
     private final LogReplicationMetadataManager metadataManager;
     private final LogReplicationConfig config;
     private final CorfuRuntime runtime;
+    @Getter
     private final String remoteClusterId;
 
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
