@@ -338,47 +338,56 @@ public class LogReplicationMetadataManager {
      *         false, otherwise
      */
     public boolean setBaseSnapshotStart(long topologyConfigId, long ts) {
-        try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
-            Map<LogReplicationMetadataType, Long> metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
-                    LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-            long persistedTopologyConfigID = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-            long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try (TxnContext txn = corfuStore.txn(NAMESPACE)) {
+                    Map<LogReplicationMetadataType, Long> metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                            LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+                    long persistedTopologyConfigID = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+                    long persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
-            log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
-                    topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
+                    log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
+                            topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
 
-            // It means the cluster config has changed, ignore the update operation.
-            if (topologyConfigId != persistedTopologyConfigID) {
-                log.warn("Config differs between sender and receiver, sender[topologyConfigId={}, ts={}]" +
-                                " receiver[persistedTopologyConfigId={}, persistedSnapshotStart={}]", topologyConfigId, ts,
-                        persistedTopologyConfigID, persistedSnapshotStart);
-                return false;
-            }
+                    // It means the cluster config has changed, ignore the update operation.
+                    if (topologyConfigId != persistedTopologyConfigID) {
+                        log.warn("Config differs between sender and receiver, sender[topologyConfigId={}, ts={}]" +
+                                        " receiver[persistedTopologyConfigId={}, persistedSnapshotStart={}]", topologyConfigId, ts,
+                                persistedTopologyConfigID, persistedSnapshotStart);
+                        return false;
+                    }
 
-            // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
-            appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+                    // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
+                    appendUpdate(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
-            // Setup the LAST_LAST_SNAPSHOT_STARTED
-            appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, ts);
+                    // Setup the LAST_LAST_SNAPSHOT_STARTED
+                    appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, ts);
 
-            // Reset other metadata
-            appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
-            appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, Address.NON_ADDRESS);
-            appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, Address.NON_ADDRESS);
-            appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, Address.NON_ADDRESS);
+                    // Reset other metadata
+                    appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
+                    appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, Address.NON_ADDRESS);
+                    appendUpdate(txn, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER, Address.NON_ADDRESS);
+                    appendUpdate(txn, LogReplicationMetadataType.LAST_LOG_ENTRY_BATCH_PROCESSED, Address.NON_ADDRESS);
 
-            txn.commit();
+                    txn.commit();
 
-            metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
-                    LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-            persistedTopologyConfigID = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-            persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+                    metadataMap = queryMetadata(txn, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID,
+                            LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+                    persistedTopologyConfigID = metadataMap.get(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+                    persistedSnapshotStart = metadataMap.get(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
-            log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
-                            "persistedSnapshotStart={}",
-                    topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
+                    log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
+                                    "persistedSnapshotStart={}",
+                            topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
+                } catch (TransactionAbortedException tae) {
+                    throw new RetryNeededException();
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Could not set the snapshot sync base timestamp {} for {}", ts, topologyConfigId);
+            return false;
         }
-
         return (ts == getLastStartedSnapshotTimestamp() && topologyConfigId == getTopologyConfigId());
     }
 

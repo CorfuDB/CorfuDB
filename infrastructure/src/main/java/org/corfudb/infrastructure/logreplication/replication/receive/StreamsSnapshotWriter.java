@@ -156,10 +156,19 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         }
 
         if (!snapshotSyncStartMarker.isPresent()) {
-            try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
-                logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
-                txn.commit();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txn = logReplicationMetadataManager.getTxnContext()) {
+                        logReplicationMetadataManager.setSnapshotSyncStartMarker(txn, snapshotSyncId, timestamp);
+                        snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
+                        txn.commit();
+                    } catch (TransactionAbortedException tae) {
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                log.error("fail to precess updates to shadow stream");
             }
         }
 
@@ -328,7 +337,6 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
         if (streamId.equals(REGISTRY_TABLE_ID)) {
             smrEntries = filterRegistryTableEntries(smrEntries);
         }
-
         List<SMREntry> buffer = new ArrayList<>();
         long bufferSize = 0;
         int numBatches = 1;
@@ -344,17 +352,26 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             // algorithm is in line with the limits imposed in Compaction and Restore workflows.
             if (bufferSize + smrEntry.getSerializedSize() >
                     logReplicationMetadataManager.getRuntime().getParameters().getMaxWriteSize() ||
-                        maxEntriesLimitReached(streamId, buffer)) {
-                try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                    updateLog(txnContext, buffer, streamId);
-                    CorfuStoreMetadata.Timestamp ts = txnContext.commit();
-                    log.debug("Applied shadow stream partially for stream {} " +
-                        "on address :: {}.  {} SMR entries written", streamId,
-                        ts.getSequence(), buffer.size());
-                    buffer.clear();
-                    buffer.add(smrEntry);
+                    maxEntriesLimitReached(streamId, buffer)) {
+                try {
+                    IRetry.build(IntervalRetry.class, () -> {
+                        try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                            updateLog(txnContext, buffer, streamId);
+                            CorfuStoreMetadata.Timestamp ts = txnContext.commit();
+                            log.debug("Applied shadow stream partially for stream {} " +
+                                            "on address :: {}.  {} SMR entries written", streamId,
+                                    ts.getSequence(), buffer.size());
+                            buffer.clear();
+                            buffer.add(smrEntry);
+                        } catch (TransactionAbortedException e) {
+                            throw new RetryNeededException();
+                        }
+                        return null;
+                    }).run();
                     bufferSize = smrEntry.getSerializedSize();
                     numBatches++;
+                } catch (InterruptedException e) {
+                    throw new UnrecoverableCorfuInterruptedError(e);
                 }
             } else {
                 buffer.add(smrEntry);
@@ -362,14 +379,23 @@ public class StreamsSnapshotWriter extends SinkWriter implements SnapshotWriter 
             }
         }
         if (!buffer.isEmpty()) {
-            try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
-                updateLog(txnContext, buffer, streamId);
-                txnContext.commit();
+            try {
+                IRetry.build(IntervalRetry.class, () -> {
+                    try (TxnContext txnContext = logReplicationMetadataManager.getTxnContext()) {
+                        updateLog(txnContext, buffer, streamId);
+                        txnContext.commit();
+                    } catch (TransactionAbortedException e) {
+                        throw new RetryNeededException();
+                    }
+                    return null;
+                }).run();
+            } catch (InterruptedException e) {
+                throw new UnrecoverableCorfuInterruptedError(e);
             }
         }
         log.debug("Completed applying updates to stream {}.  {} " +
-            "entries applied across {} transactions.  ", streamId,
-            smrEntries.size(), numBatches);
+                        "entries applied across {} transactions.  ", streamId,
+                smrEntries.size(), numBatches);
     }
 
     private boolean maxEntriesLimitReached(UUID streamId, List<SMREntry> buffer) {
