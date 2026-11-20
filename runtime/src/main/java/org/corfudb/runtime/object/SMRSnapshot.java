@@ -10,7 +10,6 @@ package org.corfudb.runtime.object;
  * @param <T> The type of the views produced by this snapshot.
  */
 public interface SMRSnapshot<T> {
-
     /**
      * Consume this snapshot and produce a new view. In some cases, the
      * implementation might want to transform or do additional processing
@@ -26,4 +25,6 @@ public interface SMRSnapshot<T> {
      * WARNING: This method needs to be idempotent.
      */
     void release();
+
+    VersionedObjectStats getMetrics();
 }
