@@ -595,6 +595,12 @@ public class TableRegistry {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
+        Table<K, V, M> existingTable = (Table<K, V, M>) tableMap.get(fullyQualifiedTableName);
+        if (existingTable != null &&
+                existingTable.matchesParams(kClass, vClass, mClass, tableOptions)) {
+            return existingTable;
+        }
 
         // Register the schemas to schema table.
         if (kClass == null) {
@@ -614,8 +620,6 @@ public class TableRegistry {
             defaultMetadataMessage = (M) mClass.getMethod("getDefaultInstance").invoke(null);
             addTypeToClassMap(defaultMetadataMessage);
         }
-
-        String fullyQualifiedTableName = getFullyQualifiedTableName(namespace, tableName);
 
         // persistentDataPath is deprecated and needs to be removed.
         CorfuOptions.PersistenceOptions persistenceOptions =
