@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+
+    <appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %15.15thread{15} | %50.50(%logger.%M:%L) | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${user.home}/corfudb.log</file>
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %15.15thread{15} | %50.50(%logger.%M:%L) | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
+    <logger name="io.netty" level="warn"/>
+    <logger name="org.corfudb.runtime.clients.NettyClientRouter" level="error"/>
+    <logger name="org.corfudb.protocols.wireprotocol.ClientHandshakeHandler" level="off"/>
+    <logger name="org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder" level="off"/>
+    <logger name="org.corfudb.runtime.view.workflows.WorkflowRequest" level="off"/>
+
+    <!-- Control logging levels for individual components here. -->
+    <root level="info">
+        <appender-ref ref="stdout"/>
+    </root>
+</configuration>
