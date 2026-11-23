@@ -3,6 +3,10 @@
 
     <property name="LOG_DIRECTORY" value="/var/log/corfu" />
 
+    <!-- Stop the logger context on JVM shutdown, as documented in
+         https://logback.qos.ch/manual/configuration.html#stopContext -->
+    <shutdownHook class="ch.qos.logback.core.hook.DefaultShutdownHook"/>
+
     <appender name="metrics_file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIRECTORY}/corfu-compactor-metrics.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
