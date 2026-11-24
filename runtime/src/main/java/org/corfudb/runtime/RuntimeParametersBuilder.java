@@ -28,7 +28,7 @@ public class RuntimeParametersBuilder {
     protected Duration connectionTimeout = Duration.ofMillis(500);
     protected Duration connectionRetryRate = Duration.ofSeconds(1);
     protected UUID clientId = UUID.randomUUID();
-    protected ChannelImplementation socketType = ChannelImplementation.NIO;
+    protected ChannelImplementation socketType = ChannelImplementation.AUTO;
     protected EventLoopGroup nettyEventLoop;
     protected String nettyEventLoopThreadFormat = "netty-%d";
     protected int nettyEventLoopThreads = 0;

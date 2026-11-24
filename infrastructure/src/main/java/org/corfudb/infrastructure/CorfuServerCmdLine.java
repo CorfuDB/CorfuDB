@@ -82,7 +82,7 @@ public class CorfuServerCmdLine {
                     + "              The version of the network interface, IPv4 or IPv6(default).\n"
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
                     + "              The type of channel to use (auto, nio, epoll, kqueue)"
-                    + "[default: nio].\n"
+                    + "[default: auto].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "              Data will be lost when the server exits!\n"
