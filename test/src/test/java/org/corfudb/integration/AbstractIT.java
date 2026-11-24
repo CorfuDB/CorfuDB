@@ -29,6 +29,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,6 +46,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.common.config.ConfigParamNames.DISABLE_CERT_EXPIRY_CHECK_FILE;
@@ -92,6 +96,12 @@ public class AbstractIT extends AbstractCorfuTest {
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
+    // What onTestFailure() prints of a replication server's console log.
+    private static final Pattern REPLICATION_LOG_LINES = Pattern.compile("SnapshotLease|SinkManager|SnapshotSender"
+            + "|SnapshotSync|InSnapshot|WaitSnapshot|Negotiating|LogEntrySender|LogReplicationServer|DiscoveryService"
+            + "|ReplicationManager|LogReplicationFSM|ClientRouter|\\| ERROR \\||\\| WARN ");
+    private static final int FAILURE_LOG_LINES = 150;
 
 
     public AbstractIT() {
@@ -159,6 +169,40 @@ public class AbstractIT extends AbstractCorfuTest {
             }
         } else {
             return "";
+        }
+    }
+
+    /**
+     * The two sides of a log replication run as separate processes, and what they did is only in
+     * their console logs, which a build server throws away. When a test fails, print what the
+     * replication servers logged about leadership, negotiation and snapshot sync, and every warning
+     * and error: the beginning and the end of it, which is where a stall shows.
+     */
+    @Override
+    protected void onTestFailure() {
+        File[] consoleLogs = new File(CORFU_LOG_PATH).listFiles((dir, name) -> name.endsWith("_consolelog"));
+        if (consoleLogs == null) {
+            return;
+        }
+        Arrays.sort(consoleLogs);
+        for (File consoleLog : consoleLogs) {
+            try (Stream<String> lines = Files.lines(consoleLog.toPath(), StandardCharsets.ISO_8859_1)) {
+                List<String> matching = lines.filter(line -> REPLICATION_LOG_LINES.matcher(line).find())
+                        .collect(Collectors.toList());
+                if (matching.stream().noneMatch(line -> line.contains("Replication"))) {
+                    continue; // Not a log replication server.
+                }
+                System.out.println("---- " + consoleLog.getName() + ": " + matching.size() + " lines about replication ----");
+                int head = Math.min(FAILURE_LOG_LINES, matching.size());
+                matching.subList(0, head).forEach(System.out::println);
+                if (matching.size() > 2 * FAILURE_LOG_LINES) {
+                    System.out.println("---- ... " + (matching.size() - 2 * FAILURE_LOG_LINES) + " lines left out ... ----");
+                }
+                matching.subList(Math.max(head, matching.size() - FAILURE_LOG_LINES), matching.size())
+                        .forEach(System.out::println);
+            } catch (IOException | RuntimeException e) {
+                System.out.println("Could not read " + consoleLog + ": " + e);
+            }
         }
     }
 

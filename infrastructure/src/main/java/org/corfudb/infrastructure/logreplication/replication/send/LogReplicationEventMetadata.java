@@ -32,6 +32,28 @@ public class LogReplicationEventMetadata {
 
     private boolean forceSnapshotSync = false;
 
+    /*
+     * Identity of the snapshot attempt an internal event belongs to (the id chosen by the source
+     * and the generation granted by the sink). Null for events that are not bound to an attempt.
+     * A state ignores an event of any attempt other than the sender's current one, so a delayed
+     * completion or cancellation can never act on a newer attempt.
+     */
+    @Getter
+    private UUID snapshotAttemptId;
+    @Getter
+    private long snapshotAttemptGeneration;
+
+    public LogReplicationEventMetadata setSnapshotAttempt(UUID id, long generation) {
+        snapshotAttemptId = id;
+        snapshotAttemptGeneration = generation;
+        return this;
+    }
+
+    public boolean matchesSnapshotAttempt(SnapshotSender source) {
+        return snapshotAttemptId == null || (snapshotAttemptId.equals(source.getWireAttemptId())
+                && snapshotAttemptGeneration == source.getWireAttemptGeneration());
+    }
+
     /**
      * Constructor
      *
@@ -89,4 +111,3 @@ public class LogReplicationEventMetadata {
 
     public boolean isForcedSnapshotSync() { return this.forceSnapshotSync; }
 }
-
