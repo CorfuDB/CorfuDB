@@ -1565,7 +1565,7 @@ public class ManagementViewTest extends AbstractViewTest {
             if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
                 break;
             }
-            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
 
         Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
@@ -1577,7 +1577,7 @@ public class ManagementViewTest extends AbstractViewTest {
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout.getEpoch()) {
                 break;
             }
-            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
 
         assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(layout);
