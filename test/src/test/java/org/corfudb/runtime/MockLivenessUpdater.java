@@ -57,7 +57,7 @@ public class MockLivenessUpdater implements LivenessUpdater {
     }
 
     @Override
-    public void updateLiveness(TableName tableName) {
+    public void setCurrentTable(TableName tableName) {
         this.tableName = tableName;
         // update validity counter every 250ms
         executorService = Executors.newSingleThreadScheduledExecutor();
@@ -100,7 +100,7 @@ public class MockLivenessUpdater implements LivenessUpdater {
     }
 
     @Override
-    public void notifyOnSyncComplete() {
+    public void unsetCurrentTable() {
         executorService.shutdownNow();
         changeStatus();
     }
