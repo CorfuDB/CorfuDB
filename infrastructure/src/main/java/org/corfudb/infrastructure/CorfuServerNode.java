@@ -19,6 +19,7 @@ import io.prometheus.client.exporter.HTTPServer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.config.ConfigParamsHelper;
 import org.corfudb.common.config.ConfigParamNames;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
@@ -440,7 +441,7 @@ public class CorfuServerNode implements AutoCloseable {
             boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class, "--enable-tls-mutual-auth");
 
             if (tlsEnabled) {
-                // Get the TLS cipher suites to enable
+                // Get the TLS cipher suites to enable (use secure defaults if not specified)
                 String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
                 if (ciphs != null) {
                     enabledTlsCipherSuites = Pattern.compile(",")
@@ -448,10 +449,13 @@ public class CorfuServerNode implements AutoCloseable {
                             .map(String::trim)
                             .toArray(String[]::new);
                 } else {
-                    enabledTlsCipherSuites = new String[]{};
+                    enabledTlsCipherSuites = Pattern.compile(",")
+                            .splitAsStream(ConfigParamsHelper.getTlsCiphersCSV())
+                            .map(String::trim)
+                            .toArray(String[]::new);
                 }
 
-                // Get the TLS protocols to enable
+                // Get the TLS protocols to enable (use secure defaults if not specified)
                 String protos = context.getServerConfig(String.class, "--tls-protocols");
                 if (protos != null) {
                     enabledTlsProtocols = Pattern.compile(",")
@@ -459,7 +463,10 @@ public class CorfuServerNode implements AutoCloseable {
                             .map(String::trim)
                             .toArray(String[]::new);
                 } else {
-                    enabledTlsProtocols = new String[]{};
+                    enabledTlsProtocols = Pattern.compile(",")
+                            .splitAsStream(ConfigParamsHelper.DEFAULT_TLS_PROTOCOLS_CSV)
+                            .map(String::trim)
+                            .toArray(String[]::new);
                 }
 
                 try {
